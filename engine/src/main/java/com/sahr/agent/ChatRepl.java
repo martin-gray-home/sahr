@@ -34,6 +34,11 @@ public final class ChatRepl {
             if (trimmed.equalsIgnoreCase("exit") || trimmed.equalsIgnoreCase("quit")) {
                 break;
             }
+            if (trimmed.equalsIgnoreCase(":reset")) {
+                agent.resetWorkingMemory();
+                out.println("Working memory reset.");
+                continue;
+            }
             if (trimmed.isEmpty()) {
                 continue;
             }

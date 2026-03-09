@@ -7,6 +7,7 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolicAttentionHead;
+import com.sahr.core.WorkingMemory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,6 +40,7 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
     public List<ReasoningCandidate> evaluate(HeadContext context) {
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
+        WorkingMemory memory = context.workingMemory();
         List<ReasoningCandidate> candidates = new ArrayList<>();
         Set<String> expandedCoLocation = expandCoLocationPredicates(ontology);
 
@@ -59,7 +61,7 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
                 if (exists(graph, inferred)) {
                     continue;
                 }
-                candidates.add(buildCandidate(inferred, List.of(left.toString(), right.toString()), 1));
+                candidates.add(buildCandidate(inferred, List.of(left.toString(), right.toString()), 1, memory));
             }
         }
 
@@ -77,7 +79,7 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
                 if (exists(graph, inferred)) {
                     continue;
                 }
-                candidates.add(buildCandidate(inferred, List.of(left.toString(), right.toString()), 2));
+                candidates.add(buildCandidate(inferred, List.of(left.toString(), right.toString()), 2, memory));
             }
         }
 
@@ -98,7 +100,7 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
                 if (exists(graph, inferred)) {
                     continue;
                 }
-                candidates.add(buildCandidate(inferred, List.of(relation.toString(), location.toString()), 1));
+                candidates.add(buildCandidate(inferred, List.of(relation.toString(), location.toString()), 1, memory));
             }
         }
 
@@ -119,7 +121,7 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
                 if (exists(graph, inferred)) {
                     continue;
                 }
-                candidates.add(buildCandidate(inferred, List.of(relation.toString(), location.toString()), 1));
+                candidates.add(buildCandidate(inferred, List.of(relation.toString(), location.toString()), 1, memory));
             }
         }
 
@@ -152,10 +154,12 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
                         && existing.object().equals(assertion.object()));
     }
 
-    private ReasoningCandidate buildCandidate(RelationAssertion assertion, List<String> evidence, int depth) {
+    private ReasoningCandidate buildCandidate(RelationAssertion assertion, List<String> evidence, int depth, WorkingMemory memory) {
         Map<String, Double> breakdown = new HashMap<>();
         breakdown.put("ontology_support", 0.4);
         breakdown.put("graph_confidence", assertion.confidence());
+        double memoryFocus = memoryFocus(memory, assertion);
+        breakdown.put("working_memory_focus", memoryFocus);
         double score = normalize(breakdown.values());
 
         return new ReasoningCandidate(
@@ -167,6 +171,16 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
                 breakdown,
                 depth
         );
+    }
+
+    private double memoryFocus(WorkingMemory memory, RelationAssertion assertion) {
+        if (memory == null || assertion == null) {
+            return 0.6;
+        }
+        if (memory.isActiveEntity(assertion.subject()) || memory.isActiveEntity(assertion.object())) {
+            return 1.0;
+        }
+        return 0.6;
     }
 
     private double normalize(Iterable<Double> parts) {
