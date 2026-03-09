@@ -12,6 +12,7 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
 import com.sahr.core.CandidateType;
+import com.sahr.core.WorkingMemory;
 import com.sahr.heads.RelationPropagationHead;
 import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
@@ -40,6 +41,7 @@ public final class SahrAgent {
     private final StatementParser statementParser;
     private final TermMapper termMapper;
     private final ReasoningTrace trace;
+    private final WorkingMemory workingMemory;
 
     public SahrAgent(
             KnowledgeBase graph,
@@ -64,6 +66,7 @@ public final class SahrAgent {
         this.statementParser = new StatementParser();
         this.termMapper = termMapper;
         this.trace = new ReasoningTrace();
+        this.workingMemory = new WorkingMemory();
     }
 
     public String handle(String input) {
@@ -74,8 +77,11 @@ public final class SahrAgent {
         logger.fine(() -> "Input='" + input + "' statementPresent=" + statement.isPresent()
                 + " queryIntent=" + query.type());
 
+        statement.ifPresent(this::updateWorkingMemoryFromStatement);
+        updateWorkingMemoryFromQuery(query);
+
         if (!isQuestion(query)) {
-            HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null));
+            HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), workingMemory);
             return handleSingle(context, query);
         }
         return handleWithSubgoals(query, statement.orElse(null));
@@ -286,7 +292,7 @@ public final class SahrAgent {
 
     private String resolveQuestionAfterAssertion(QueryGoal query, int maxIterations) {
         for (int i = 0; i < maxIterations; i++) {
-            HeadContext followUpContext = new HeadContext(query, graph, ontology);
+            HeadContext followUpContext = new HeadContext(query, graph, ontology, workingMemory);
             List<ReasoningCandidate> followUp = reasoner.reason(followUpContext);
             if (followUp.isEmpty()) {
                 return isYesNo(query) ? "Unknown." : "No candidates produced.";
@@ -334,15 +340,18 @@ public final class SahrAgent {
         while (!queue.isEmpty() && processed < MAX_SUBGOALS) {
             QueryGoal current = queue.removeFirst();
             processed++;
+            workingMemory.pushGoal(current);
 
             HeadContext context = new HeadContext(
                     current,
                     graph,
                     ontology,
-                    current.goalId().equals(root.goalId()) ? statement : null
+                    current.goalId().equals(root.goalId()) ? statement : null,
+                    workingMemory
             );
             List<ReasoningCandidate> candidates = reasoner.reason(context);
             if (candidates.isEmpty()) {
+                workingMemory.popGoal();
                 if (current.goalId().equals(root.goalId())) {
                     return isYesNo(root) ? "Unknown." : "No candidates produced.";
                 }
@@ -359,12 +368,14 @@ public final class SahrAgent {
                 if (nextDepth <= MAX_SUBGOAL_DEPTH) {
                     queue.addLast(subgoal.withParent(current.goalId(), nextDepth));
                 }
+                workingMemory.popGoal();
                 continue;
             }
 
             if (CandidateType.ASSERTION.equals(winner.type())) {
                 applyCandidate(winner);
                 queue.addLast(root);
+                workingMemory.popGoal();
                 continue;
             }
 
@@ -372,10 +383,13 @@ public final class SahrAgent {
                 if (!current.goalId().equals(root.goalId())) {
                     applyAnswerAsAssertion(winner.payload());
                     queue.addLast(root);
+                    workingMemory.popGoal();
                     continue;
                 }
+                workingMemory.popGoal();
                 return winner.payload() == null ? "No payload." : winner.payload().toString();
             }
+            workingMemory.popGoal();
         }
 
         return "No candidates produced.";
@@ -417,6 +431,7 @@ public final class SahrAgent {
             graph.addEntity(entity);
             return entity;
         });
+        workingMemory.addActiveEntity(id);
     }
 
     private void upsertEntityType(SymbolId id, String typeValue) {
@@ -460,11 +475,14 @@ public final class SahrAgent {
             return false;
         }
         graph.addAssertion(assertion);
+        workingMemory.recordAssertion(assertion);
+        workingMemory.addActiveEntity(assertion.subject());
+        workingMemory.addActiveEntity(assertion.object());
         return true;
     }
 
     private void runPropagationClosure() {
-        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology);
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, workingMemory);
         RelationPropagationHead propagationHead = new RelationPropagationHead();
         int totalAdded = 0;
 
@@ -486,6 +504,35 @@ public final class SahrAgent {
             }
             if (addedThisRound == 0) {
                 return;
+            }
+        }
+    }
+
+    private void updateWorkingMemoryFromStatement(Statement statement) {
+        if (statement == null) {
+            return;
+        }
+        workingMemory.addActiveEntity(statement.subject());
+        workingMemory.addActiveEntity(statement.object());
+    }
+
+    private void updateWorkingMemoryFromQuery(QueryGoal query) {
+        if (query == null) {
+            return;
+        }
+        if (query.subject() != null && query.subject().startsWith("entity:")) {
+            workingMemory.addActiveEntity(new SymbolId(query.subject()));
+        }
+        if (query.object() != null && query.object().startsWith("entity:")) {
+            workingMemory.addActiveEntity(new SymbolId(query.object()));
+        }
+        if (query.type() == QueryGoal.Type.WHERE && query.entityType() != null) {
+            String entityType = query.entityType();
+            if (entityType.startsWith("concept:")) {
+                String raw = stripPrefix(entityType);
+                if (!raw.isBlank()) {
+                    workingMemory.addActiveEntity(new SymbolId("entity:" + raw));
+                }
             }
         }
     }

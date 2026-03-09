@@ -9,6 +9,7 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolicAttentionHead;
+import com.sahr.core.WorkingMemory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,6 +34,7 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
         String requestedType = query.entityType();
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
+        WorkingMemory memory = context.workingMemory();
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
         for (String predicate : LOCATION_PREDICATES) {
@@ -46,13 +48,15 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
                 double entityMatch = 1.0;
                 double ontologySupport = requestedType == null ? 0.5 : 1.0;
                 double graphConfidence = assertion.confidence();
-                double score = normalize(queryMatch, entityMatch, ontologySupport, graphConfidence);
+                double memoryFocus = memory.isActiveEntity(assertion.subject()) ? 1.0 : 0.6;
+                double score = normalize(queryMatch, entityMatch, ontologySupport, graphConfidence, memoryFocus);
 
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("query_match", queryMatch);
                 breakdown.put("entity_type_match", entityMatch);
                 breakdown.put("ontology_support", ontologySupport);
                 breakdown.put("graph_confidence", graphConfidence);
+                breakdown.put("working_memory_focus", memoryFocus);
 
                 String answer = assertion.subject() + " " + assertion.predicate() + " " + assertion.object();
 

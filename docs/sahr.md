@@ -273,6 +273,13 @@ Subgoal expansion treats co-location predicates as aliases: both short
 forms (e.g., `wear`, `with`) and their SAHR relation IRIs
 (`https://sahr.ai/ontology/relations#wear`) are accepted.
 
+Working Memory
+---------------
+
+`WorkingMemory` is session-scoped state owned by `SahrAgent`. It tracks
+active entities, recent assertions, and the current goal stack. The
+reasoner remains stateless and consumes working memory via `HeadContext`.
+
 Symbolic Attention Scoring
 ---------------------------
 
@@ -286,6 +293,9 @@ relation match, type compatibility). The final score is:
 This mirrors transformer-style attention weighting while keeping
 reasoning symbolic and explainable. Final candidate scores are
 softmax-normalized so they form attention weights across candidates.
+Internally, `SahrReasoner` delegates to `HeadExecutor` for head
+execution and `CandidateSelector` for softmax normalization and
+ranking.
 
 Attention Trace Debugging
 --------------------------
