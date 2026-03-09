@@ -1,0 +1,60 @@
+@prefix sahr: <https://sahr.ai/ontology/relations#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://sahr.ai/ontology/relations>
+    a owl:Ontology ;
+    rdfs:label "SAHR Relations" .
+
+sahr:on a owl:ObjectProperty ;
+    rdfs:label "on" ;
+    rdfs:subPropertyOf sahr:surfaceContact .
+
+sahr:colocation a owl:ObjectProperty ;
+    rdfs:label "co-location" .
+
+sahr:locationTransferRelation a owl:ObjectProperty ;
+    rdfs:label "location transfer relation" .
+
+sahr:colocation rdfs:subPropertyOf sahr:locationTransferRelation .
+
+sahr:surfaceContact a owl:ObjectProperty ;
+    rdfs:label "surface contact" ;
+    rdfs:subPropertyOf sahr:locationTransferRelation .
+
+sahr:containment a owl:ObjectProperty ;
+    rdfs:label "containment" ;
+    rdfs:subPropertyOf sahr:locationTransferRelation .
+
+sahr:proximity a owl:ObjectProperty ;
+    rdfs:label "proximity" ;
+    rdfs:subPropertyOf sahr:locationTransferRelation .
+
+sahr:above a owl:ObjectProperty ;
+    rdfs:label "above" ;
+    rdfs:subPropertyOf sahr:proximity .
+
+sahr:below a owl:ObjectProperty ;
+    rdfs:label "below" ;
+    owl:inverseOf sahr:above .
+
+sahr:under a owl:ObjectProperty ;
+    rdfs:label "under" ;
+    owl:inverseOf sahr:on ;
+    rdfs:subPropertyOf sahr:surfaceContact .
+
+sahr:wear a owl:ObjectProperty ;
+    rdfs:label "wear" ;
+    rdfs:subPropertyOf sahr:on ;
+    rdfs:subPropertyOf sahr:colocation .
+
+sahr:wornBy a owl:ObjectProperty ;
+    rdfs:label "worn by" ;
+    owl:inverseOf sahr:wear ;
+    rdfs:subPropertyOf sahr:on .
+
+sahr:with a owl:ObjectProperty ;
+    rdfs:label "with" ;
+    a owl:SymmetricProperty ;
+    rdfs:subPropertyOf sahr:colocation ;
+    rdfs:subPropertyOf sahr:proximity .

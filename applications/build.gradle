@@ -1,0 +1,43 @@
+plugins {
+    id 'application'
+}
+
+dependencies {
+    implementation project(':engine')
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+    implementation 'org.slf4j:slf4j-jdk14:2.0.13'
+}
+
+application {
+    mainClass = 'com.sahr.examples.ChatApplication'
+}
+
+def roOntologyUrl = 'http://purl.obolibrary.org/obo/ro.owl'
+def roOntologyFile = file('src/main/resources/ontology/ro.owl')
+
+tasks.register('downloadRoOntology') {
+    group = 'ontology'
+    description = 'Download the OBO Relation Ontology (RO) OWL file.'
+    outputs.file(roOntologyFile)
+    doLast {
+        if (roOntologyFile.exists() && roOntologyFile.length() > 0) {
+            return
+        }
+        roOntologyFile.parentFile.mkdirs()
+        ant.get(src: roOntologyUrl, dest: roOntologyFile, verbose: true)
+    }
+}
+
+tasks.named('processResources') {
+    dependsOn(tasks.named('downloadRoOntology'))
+}
+
+tasks.register("runDebug", JavaExec) {
+    group = "application"
+    description = "Run ChatApplication with debug logging enabled."
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = application.mainClass
+    systemProperty "sahr.log.level", "FINE"
+    standardInput = System.in
+}
