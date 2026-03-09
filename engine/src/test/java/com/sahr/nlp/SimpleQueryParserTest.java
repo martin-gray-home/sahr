@@ -19,6 +19,15 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void bindsEntityTypeFromWhereWas() {
+        QueryGoal query = parser.parse("Where was the man");
+
+        assertEquals(QueryGoal.Type.WHERE, query.type());
+        assertEquals("man", query.entityType());
+        assertEquals("concept:location", query.expectedRange());
+    }
+
+    @Test
     void returnsUnknownWhenWhereHasNoEntity() {
         QueryGoal query = parser.parse("where is it");
 
@@ -123,6 +132,16 @@ class SimpleQueryParserTest {
         assertEquals("hat", query.subject());
         assertEquals("man", query.object());
         assertEquals("on", query.predicate());
+    }
+
+    @Test
+    void parsesYesNoOppositeQuery() {
+        QueryGoal query = parser.parse("Is the boy opposite the man");
+
+        assertEquals(QueryGoal.Type.YESNO, query.type());
+        assertEquals("boy", query.subject());
+        assertEquals("man", query.object());
+        assertEquals("opposite", query.predicate());
     }
 
     @Test

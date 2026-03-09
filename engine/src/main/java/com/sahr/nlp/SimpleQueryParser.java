@@ -19,7 +19,7 @@ import java.util.Set;
 public final class SimpleQueryParser {
     private static final Set<String> WH_TOKENS = Set.of("who", "what", "where", "when", "why", "how", "which");
     private static final Set<String> YESNO_PREFIXES = Set.of("is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "would", "will");
-    private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "below", "with", "in", "inside");
+    private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "below", "with", "in", "inside", "opposite");
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
 
     public QueryGoal parse(String input) {
@@ -72,6 +72,39 @@ public final class SimpleQueryParser {
         int idx = normalized.indexOf("where is");
         if (idx >= 0) {
             String remainder = normalized.substring(idx + "where is".length()).trim();
+            if (!remainder.isEmpty()) {
+                String token = normalizeToken(remainder);
+                if (isPronoun(token)) {
+                    return null;
+                }
+                return token;
+            }
+        }
+        idx = normalized.indexOf("where was");
+        if (idx >= 0) {
+            String remainder = normalized.substring(idx + "where was".length()).trim();
+            if (!remainder.isEmpty()) {
+                String token = normalizeToken(remainder);
+                if (isPronoun(token)) {
+                    return null;
+                }
+                return token;
+            }
+        }
+        idx = normalized.indexOf("where were");
+        if (idx >= 0) {
+            String remainder = normalized.substring(idx + "where were".length()).trim();
+            if (!remainder.isEmpty()) {
+                String token = normalizeToken(remainder);
+                if (isPronoun(token)) {
+                    return null;
+                }
+                return token;
+            }
+        }
+        idx = normalized.indexOf("where are");
+        if (idx >= 0) {
+            String remainder = normalized.substring(idx + "where are".length()).trim();
             if (!remainder.isEmpty()) {
                 String token = normalizeToken(remainder);
                 if (isPronoun(token)) {
