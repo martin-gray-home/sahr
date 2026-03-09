@@ -273,7 +273,8 @@ relation match, type compatibility). The final score is:
 `finalScore = headScore * queryMatchScore`
 
 This mirrors transformer-style attention weighting while keeping
-reasoning symbolic and explainable.
+reasoning symbolic and explainable. Final candidate scores are
+softmax-normalized so they form attention weights across candidates.
 
 Attention Trace Debugging
 --------------------------
@@ -283,6 +284,10 @@ input. Use:
 
 `-Dsahr.repl.attentionDebug=true`
 `-Dsahr.repl.attentionTopN=5`
+
+To suppress ELK incompleteness warnings in the REPL, set:
+
+`-Dsahr.log.elk.level=SEVERE`
 
 ---
 

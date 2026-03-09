@@ -127,7 +127,9 @@ public final class RelationQueryHead implements SymbolicAttentionHead {
         if (!isIri(expectedType)) {
             return true;
         }
-        return false;
+        // If we only have non-IRI concept tags, avoid hard filtering; let attention scoring rank.
+        boolean hasIriType = entity.get().conceptTypes().stream().anyMatch(this::isIri);
+        return !hasIriType;
     }
 
     private List<String> expandPredicates(String predicate, OntologyService ontology) {

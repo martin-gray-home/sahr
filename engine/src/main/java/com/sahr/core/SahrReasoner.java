@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 import java.util.logging.Logger;
 
 public final class SahrReasoner {
@@ -28,18 +29,19 @@ public final class SahrReasoner {
             List<ReasoningCandidate> headResults = head.evaluate(context);
             for (ReasoningCandidate candidate : headResults) {
                 SymbolicAttentionScorer.QueryMatchResult match = attentionScorer.score(context, candidate);
-                double finalScore = clamp(candidate.headScore() * match.queryMatchScore());
+                double rawScore = clamp(candidate.headScore() * match.queryMatchScore());
                 ReasoningCandidate scored = candidate.withAttentionScores(
                         match.queryMatchScore(),
-                        finalScore,
-                        match.breakdown(candidate.headScore(), finalScore)
+                        rawScore,
+                        match.breakdown(candidate.headScore(), rawScore)
                 );
                 results.add(scored);
             }
             logger.fine(() -> "Head " + head.getName() + " produced " + headResults.size() + " candidates");
         }
-        results.sort(candidateComparator());
-        return results;
+        List<ReasoningCandidate> normalized = applySoftmax(results);
+        normalized.sort(candidateComparator());
+        return normalized;
     }
 
     public Optional<ReasoningCandidate> selectWinner(HeadContext context) {
@@ -57,6 +59,32 @@ public final class SahrReasoner {
                 .thenComparingInt(candidate -> candidate.evidence().size()).reversed()
                 .thenComparingInt(ReasoningCandidate::inferenceDepth)
                 .thenComparing(ReasoningCandidate::producedBy);
+    }
+
+    private List<ReasoningCandidate> applySoftmax(List<ReasoningCandidate> candidates) {
+        if (candidates.isEmpty()) {
+            return candidates;
+        }
+        double max = candidates.stream().mapToDouble(ReasoningCandidate::score).max().orElse(0.0);
+        double sum = 0.0;
+        double[] exp = new double[candidates.size()];
+        for (int i = 0; i < candidates.size(); i++) {
+            exp[i] = Math.exp(candidates.get(i).score() - max);
+            sum += exp[i];
+        }
+        if (sum == 0.0) {
+            return candidates;
+        }
+        List<ReasoningCandidate> normalized = new ArrayList<>(candidates.size());
+        for (int i = 0; i < candidates.size(); i++) {
+            ReasoningCandidate candidate = candidates.get(i);
+            double weight = clamp(exp[i] / sum);
+            Map<String, Double> extra = new java.util.HashMap<>(candidate.scoreBreakdown());
+            extra.put("attention_raw_score", candidate.scoreBreakdown().getOrDefault("attention_final_score", candidate.score()));
+            extra.put("attention_softmax", weight);
+            normalized.add(candidate.withAttentionScores(candidate.queryMatchScore(), weight, extra));
+        }
+        return normalized;
     }
 
     private double clamp(double value) {

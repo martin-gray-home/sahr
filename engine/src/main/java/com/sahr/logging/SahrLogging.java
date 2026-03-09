@@ -29,6 +29,8 @@ public final class SahrLogging {
             }
         }
 
+        setElkLoggingLevel(System.getProperty("sahr.log.elk.level", "SEVERE"));
+
         String logFile = System.getProperty(FILE_PROPERTY);
         if (logFile != null && !logFile.isBlank()) {
             try {
@@ -40,6 +42,25 @@ public final class SahrLogging {
                 root.log(Level.WARNING, "Failed to configure file logging: " + ex.getMessage(), ex);
             }
         }
+    }
+
+    private static void setElkLoggingLevel(String raw) {
+        Level level = parseLevel(raw);
+        String prefix = "org.semanticweb.elk";
+        java.util.logging.LogManager manager = java.util.logging.LogManager.getLogManager();
+        java.util.Enumeration<String> names = manager.getLoggerNames();
+        while (names.hasMoreElements()) {
+            String name = names.nextElement();
+            if (name != null && name.startsWith(prefix)) {
+                Logger logger = Logger.getLogger(name);
+                logger.setLevel(level);
+                for (Handler handler : logger.getHandlers()) {
+                    handler.setLevel(level);
+                }
+            }
+        }
+        Logger elkRoot = Logger.getLogger(prefix);
+        elkRoot.setLevel(level);
     }
 
     private static Level parseLevel(String raw) {

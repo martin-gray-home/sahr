@@ -19,7 +19,7 @@ import java.util.Set;
 public final class SimpleQueryParser {
     private static final Set<String> WH_TOKENS = Set.of("who", "what", "where", "when", "why", "how", "which");
     private static final Set<String> YESNO_PREFIXES = Set.of("is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "would", "will");
-    private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "below");
+    private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "below", "with", "in", "inside");
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
 
     public QueryGoal parse(String input) {
@@ -130,10 +130,19 @@ public final class SimpleQueryParser {
             if (whSubject.isPresent()) {
                 return whSubject;
             }
+
+            Optional<QueryGoal> whPrepSubject = parseWhPrepositionSubjectQuery(graph);
+            if (whPrepSubject.isPresent()) {
+                return whPrepSubject;
+            }
         }
         Optional<QueryGoal> withFallback = parseWithFallback(input);
         if (withFallback.isPresent()) {
             return withFallback;
+        }
+        Optional<QueryGoal> whPrepFallback = parseWhPrepositionFallback(input);
+        if (whPrepFallback.isPresent()) {
+            return whPrepFallback;
         }
         return parsePrepositionFallback(input);
     }
@@ -304,7 +313,78 @@ public final class SimpleQueryParser {
         if (subjectToken == null) {
             return Optional.empty();
         }
-        return Optional.of(QueryGoal.relation(subjectToken, onIndex >= 0 ? "on" : "under", null, expectedTypeForWh(wh)));
+        String predicate = onIndex >= 0 ? "on" : "under";
+        return Optional.of(QueryGoal.relation(subjectToken, predicate, null, expectedTypeForWh(wh)));
+    }
+
+    private Optional<QueryGoal> parseWhPrepositionSubjectQuery(SemanticGraph graph) {
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            String relation = edge.getRelation().getShortName();
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific == null) {
+                continue;
+            }
+            String prep = specific.toLowerCase(Locale.ROOT);
+            if (!PREPOSITION_RELATIONS.contains(prep)) {
+                continue;
+            }
+            CoreLabel whSubject = findDependent(graph, edge.getGovernor(), "nsubj");
+            if (whSubject == null) {
+                continue;
+            }
+            String wh = normalizeToken(whSubject.lemma());
+            if (!WH_TOKENS.contains(wh)) {
+                continue;
+            }
+
+            CoreLabel object = edge.getDependent().backingLabel();
+            String objectToken = normalizeToken(object.word());
+            if (objectToken.isEmpty()) {
+                continue;
+            }
+
+            String predicate = mapPrepositionPredicate(prep);
+            return Optional.of(QueryGoal.relation(null, predicate, objectToken, expectedTypeForWh(wh)));
+        }
+        return Optional.empty();
+    }
+
+    private Optional<QueryGoal> parseWhPrepositionFallback(String input) {
+        String normalized = input.toLowerCase(Locale.ROOT);
+        List<String> tokens = tokenize(normalized);
+        String wh = tokens.stream().filter(WH_TOKENS::contains).findFirst().orElse(null);
+        if (wh == null) {
+            return Optional.empty();
+        }
+        int prepIndex = -1;
+        String prep = null;
+        for (String candidate : PREPOSITION_RELATIONS) {
+            int idx = tokens.indexOf(candidate);
+            if (idx >= 0) {
+                prepIndex = idx;
+                prep = candidate;
+                break;
+            }
+        }
+        if (prepIndex < 0 || prep == null) {
+            return Optional.empty();
+        }
+        String objectToken = firstContentTokenAfter(tokens, prepIndex);
+        if (objectToken == null) {
+            return Optional.empty();
+        }
+        String predicate = mapPrepositionPredicate(prep);
+        return Optional.of(QueryGoal.relation(null, predicate, objectToken, expectedTypeForWh(wh)));
+    }
+
+    private String mapPrepositionPredicate(String prep) {
+        if ("in".equals(prep)) {
+            return "locatedIn";
+        }
+        return prep;
     }
 
     private Optional<QueryGoal> parseYesNoPrepositionFallback(List<String> tokens) {

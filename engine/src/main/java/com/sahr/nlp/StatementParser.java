@@ -98,6 +98,9 @@ public final class StatementParser {
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
+            if (preposition == null && hasDeterminer(graph, edge.getGovernor())) {
+                return Optional.empty();
+            }
 
             return Optional.of(buildStatement(subjectToken, objectToken, predicateType, objectIsConcept));
         }
@@ -169,6 +172,15 @@ public final class StatementParser {
         return null;
     }
 
+    private boolean hasDeterminer(SemanticGraph graph, edu.stanford.nlp.ling.IndexedWord governor) {
+        for (SemanticGraphEdge edge : graph.outgoingEdgeList(governor)) {
+            if ("det".equals(edge.getRelation().getShortName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private String mapPreposition(String prep) {
         if ("in".equals(prep)) {
             return PREDICATE_IN;
@@ -213,12 +225,22 @@ public final class StatementParser {
 
     private String normalizeToken(String raw) {
         String trimmed = raw.trim();
-        if (trimmed.startsWith("the ")) {
-            trimmed = trimmed.substring(4);
-        } else if (trimmed.startsWith("a ")) {
-            trimmed = trimmed.substring(2);
-        } else if (trimmed.startsWith("an ")) {
-            trimmed = trimmed.substring(3);
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            if (trimmed.startsWith("the ")) {
+                trimmed = trimmed.substring(4);
+                changed = true;
+            } else if (trimmed.startsWith("a ")) {
+                trimmed = trimmed.substring(2);
+                changed = true;
+            } else if (trimmed.startsWith("an ")) {
+                trimmed = trimmed.substring(3);
+                changed = true;
+            }
+        }
+        if ("the".equals(trimmed) || "a".equals(trimmed) || "an".equals(trimmed)) {
+            return "";
         }
         trimmed = trimmed.replaceAll("[^a-z0-9_\\s]", "");
         return trimmed.trim().replaceAll("\\s+", "_");

@@ -96,6 +96,9 @@ public final class SymbolicAttentionScorer {
         if (expectedRange == null || expectedRange.isBlank()) {
             return DEFAULT_TYPE_MATCH;
         }
+        if (LOCATION_PREDICATES.contains(predicate)) {
+            return 1.0;
+        }
         if (!isIri(predicate)) {
             return 0.2;
         }

@@ -86,6 +86,26 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesRelationQueryFromWhoIsInPattern() {
+        QueryGoal query = parser.parse("Who is in the house");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("house", query.object());
+        assertEquals("locatedIn", query.predicate());
+        assertEquals("person", query.expectedType());
+    }
+
+    @Test
+    void parsesRelationQueryFromWhatIsInPattern() {
+        QueryGoal query = parser.parse("What is in the house");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("house", query.object());
+        assertEquals("locatedIn", query.predicate());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
     void parsesYesNoQuery() {
         QueryGoal query = parser.parse("Is the man wearing a hat");
 
