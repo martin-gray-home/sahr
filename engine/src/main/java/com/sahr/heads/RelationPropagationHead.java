@@ -24,7 +24,7 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
     private final Set<String> coLocationRelations;
 
     public RelationPropagationHead() {
-        this(Set.of("wear", "hold", "carry", "with", "possess", "have", SAHR_COLOCATION));
+        this(Set.of("wear", "hold", "carry", "with", "possess", "have", "opposite", SAHR_COLOCATION));
     }
 
     public RelationPropagationHead(Set<String> coLocationRelations) {
@@ -46,6 +46,8 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
 
         List<RelationAssertion> atAssertions = graph.findByPredicate(PREDICATE_AT);
         List<RelationAssertion> locatedAssertions = graph.findByPredicate(PREDICATE_LOCATED_IN);
+        List<RelationAssertion> locationAssertions = new ArrayList<>(locatedAssertions);
+        locationAssertions.addAll(atAssertions);
 
         for (RelationAssertion left : atAssertions) {
             for (RelationAssertion right : locatedAssertions) {
@@ -87,7 +89,7 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
             if (!expandedCoLocation.contains(relation.predicate())) {
                 continue;
             }
-            for (RelationAssertion location : locatedAssertions) {
+            for (RelationAssertion location : locationAssertions) {
                 if (!relation.subject().equals(location.subject())) {
                     continue;
                 }
@@ -108,7 +110,7 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
             if (!expandedCoLocation.contains(relation.predicate())) {
                 continue;
             }
-            for (RelationAssertion location : locatedAssertions) {
+            for (RelationAssertion location : locationAssertions) {
                 if (!relation.object().equals(location.subject())) {
                     continue;
                 }

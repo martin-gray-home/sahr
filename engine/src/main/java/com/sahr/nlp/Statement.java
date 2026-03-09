@@ -3,6 +3,7 @@ package com.sahr.nlp;
 import com.sahr.core.SymbolId;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -14,6 +15,7 @@ public final class Statement {
     private final Set<String> objectTypes;
     private final boolean objectIsConcept;
     private final double confidence;
+    private final List<Statement> additionalStatements;
 
     public Statement(SymbolId subject,
                      SymbolId object,
@@ -22,6 +24,17 @@ public final class Statement {
                      Set<String> objectTypes,
                      boolean objectIsConcept,
                      double confidence) {
+        this(subject, object, predicate, subjectTypes, objectTypes, objectIsConcept, confidence, List.of());
+    }
+
+    public Statement(SymbolId subject,
+                     SymbolId object,
+                     String predicate,
+                     Set<String> subjectTypes,
+                     Set<String> objectTypes,
+                     boolean objectIsConcept,
+                     double confidence,
+                     List<Statement> additionalStatements) {
         this.subject = Objects.requireNonNull(subject, "subject");
         this.object = Objects.requireNonNull(object, "object");
         this.predicate = Objects.requireNonNull(predicate, "predicate");
@@ -29,6 +42,8 @@ public final class Statement {
         this.objectTypes = Collections.unmodifiableSet(Objects.requireNonNull(objectTypes, "objectTypes"));
         this.objectIsConcept = objectIsConcept;
         this.confidence = confidence;
+        this.additionalStatements = Collections.unmodifiableList(
+                additionalStatements == null ? List.of() : additionalStatements);
     }
 
     public SymbolId subject() {
@@ -57,5 +72,9 @@ public final class Statement {
 
     public double confidence() {
         return confidence;
+    }
+
+    public List<Statement> additionalStatements() {
+        return additionalStatements;
     }
 }

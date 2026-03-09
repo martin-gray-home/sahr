@@ -5,6 +5,7 @@ import com.sahr.core.HeadContext;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.SymbolicAttentionHead;
 import com.sahr.nlp.Statement;
+import com.sahr.nlp.StatementBatch;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +26,10 @@ public final class AssertionInsertionHead implements SymbolicAttentionHead {
     }
 
     private ReasoningCandidate candidateFor(Statement statement) {
+        Object payload = statement;
+        if (!statement.additionalStatements().isEmpty()) {
+            payload = StatementBatch.from(statement);
+        }
         Map<String, Double> breakdown = new HashMap<>();
         breakdown.put("query_match", 0.6);
         breakdown.put("ontology_support", 0.5);
@@ -34,7 +39,7 @@ public final class AssertionInsertionHead implements SymbolicAttentionHead {
 
         return new ReasoningCandidate(
                 CandidateType.ASSERTION,
-                statement,
+                payload,
                 score,
                 getName(),
                 List.of("statement:" + statement.predicate()),

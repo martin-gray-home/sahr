@@ -132,26 +132,90 @@ public final class StatementParser {
     }
 
     private Optional<Statement> parseNmod(SemanticGraph graph) {
+        java.util.Map<String, Statement> statements = new java.util.LinkedHashMap<>();
         for (SemanticGraphEdge edge : graph.edgeIterable()) {
-            if (!"nmod".equals(edge.getRelation().getShortName())) {
+            String relation = edge.getRelation().getShortName();
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
                 continue;
             }
             String specific = edge.getRelation().getSpecific();
-            String predicate = specific != null ? specific.toLowerCase(Locale.ROOT) : "nmod";
+            String predicate = specific != null ? mapPreposition(specific.toLowerCase(Locale.ROOT)) : "nmod";
 
             CoreLabel subjectLabel = findDependent(graph, edge.getGovernor(), "nsubj");
             CoreLabel head = edge.getGovernor().backingLabel();
             CoreLabel object = edge.getDependent().backingLabel();
 
             String subjectToken = normalizeToken(subjectLabel != null ? subjectLabel.word() : head.word());
+            if (subjectLabel != null) {
+                var conjuncts = findConjuncts(graph, subjectLabel);
+                if (!conjuncts.isEmpty()) {
+                    StringBuilder combined = new StringBuilder(subjectToken);
+                    for (CoreLabel conjunct : conjuncts) {
+                        String token = normalizeToken(conjunct.word());
+                        if (!token.isEmpty()) {
+                            combined.append("_and_").append(token);
+                        }
+                    }
+                    subjectToken = combined.toString();
+                }
+            }
             String objectToken = normalizeToken(object.word());
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
 
-            return Optional.of(buildStatement(subjectToken, objectToken, predicate, false));
+            Statement candidate = buildStatement(subjectToken, objectToken, predicate, false);
+            String key = candidate.subject().value() + "|" + candidate.predicate() + "|" + candidate.object().value();
+            statements.putIfAbsent(key, candidate);
         }
-        return Optional.empty();
+        if (statements.isEmpty()) {
+            return Optional.empty();
+        }
+        java.util.List<Statement> all = new java.util.ArrayList<>(statements.values());
+        Statement primary = selectPrimaryStatement(all);
+        java.util.List<Statement> extras = new java.util.ArrayList<>(all);
+        extras.remove(primary);
+        if (extras.isEmpty()) {
+            return Optional.of(primary);
+        }
+        return Optional.of(new Statement(
+                primary.subject(),
+                primary.object(),
+                primary.predicate(),
+                primary.subjectTypes(),
+                primary.objectTypes(),
+                primary.objectIsConcept(),
+                primary.confidence(),
+                extras
+        ));
+    }
+
+    private Statement selectPrimaryStatement(java.util.List<Statement> statements) {
+        for (Statement statement : statements) {
+            if (isPreferredPredicate(statement.predicate())) {
+                return statement;
+            }
+        }
+        return statements.get(0);
+    }
+
+    private java.util.List<CoreLabel> findConjuncts(SemanticGraph graph, CoreLabel head) {
+        var node = graph.getNodeByIndexSafe(head.index());
+        if (node == null) {
+            return java.util.List.of();
+        }
+        java.util.List<CoreLabel> conjuncts = new java.util.ArrayList<>();
+        for (SemanticGraphEdge edge : graph.outgoingEdgeList(node)) {
+            if ("conj".equals(edge.getRelation().getShortName())) {
+                conjuncts.add(edge.getDependent().backingLabel());
+            }
+        }
+        return conjuncts;
+    }
+
+    private boolean isPreferredPredicate(String predicate) {
+        String mapped = mapPreposition(predicate);
+        return PREDICATE_AT.equals(mapped) || PREDICATE_IN.equals(mapped) || "inside".equals(mapped);
     }
 
     private CoreLabel findDependent(SemanticGraph graph, edu.stanford.nlp.ling.IndexedWord governor, String relation) {

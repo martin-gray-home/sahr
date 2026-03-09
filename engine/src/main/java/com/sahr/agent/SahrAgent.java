@@ -17,6 +17,7 @@ import com.sahr.heads.RelationPropagationHead;
 import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.Statement;
+import com.sahr.nlp.StatementBatch;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
 
@@ -263,24 +264,36 @@ public final class SahrAgent {
             logger.fine(() -> "Applied assertion payload: " + payload);
             return "Assertion recorded.";
         }
+        if (payload instanceof StatementBatch) {
+            StatementBatch batch = (StatementBatch) payload;
+            for (Statement statement : batch.statements()) {
+                applyAssertion(statement);
+            }
+            return "Assertion recorded.";
+        }
         if (payload instanceof Statement) {
             Statement statement = (Statement) payload;
-            upsertEntity(statement.subject(), statement.subjectTypes());
+            List<SymbolId> subjects = expandConjoinedSubjects(statement.subject());
+            for (SymbolId subject : subjects) {
+                upsertEntity(subject, subjectTypesFor(subject, statement.subjectTypes()));
+            }
             if (!statement.objectIsConcept()) {
                 upsertEntity(statement.object(), statement.objectTypes());
             }
-            RelationAssertion assertion = new RelationAssertion(
-                    statement.subject(),
-                    statement.predicate(),
-                    statement.object(),
-                    statement.confidence()
-            );
-            addAssertionIfNew(assertion);
-            if (PREDICATE_TYPE.equals(statement.predicate())) {
-                upsertEntityType(statement.subject(), statement.object().value());
+            for (SymbolId subject : subjects) {
+                RelationAssertion assertion = new RelationAssertion(
+                        subject,
+                        statement.predicate(),
+                        statement.object(),
+                        statement.confidence()
+                );
+                addAssertionIfNew(assertion);
+                if (PREDICATE_TYPE.equals(statement.predicate())) {
+                    upsertEntityType(subject, statement.object().value());
+                }
             }
             runPropagationClosure();
-            logger.fine(() -> "Applied statement assertion: " + assertion);
+            logger.fine(() -> "Applied statement assertion: " + statement);
             return "Assertion recorded.";
         }
         return "Unknown assertion payload.";
@@ -516,8 +529,13 @@ public final class SahrAgent {
         if (statement == null) {
             return;
         }
-        workingMemory.addActiveEntity(statement.subject());
+        for (SymbolId subject : expandConjoinedSubjects(statement.subject())) {
+            workingMemory.addActiveEntity(subject);
+        }
         workingMemory.addActiveEntity(statement.object());
+        for (Statement extra : statement.additionalStatements()) {
+            updateWorkingMemoryFromStatement(extra);
+        }
     }
 
     private void updateWorkingMemoryFromQuery(QueryGoal query) {
@@ -539,5 +557,39 @@ public final class SahrAgent {
                 }
             }
         }
+    }
+
+    private List<SymbolId> expandConjoinedSubjects(SymbolId subject) {
+        if (subject == null) {
+            return List.of();
+        }
+        String value = subject.value();
+        if (!value.startsWith("entity:")) {
+            return List.of(subject);
+        }
+        String raw = value.substring("entity:".length());
+        if (!raw.contains("_and_")) {
+            return List.of(subject);
+        }
+        List<SymbolId> subjects = new java.util.ArrayList<>();
+        for (String token : raw.split("_and_")) {
+            if (!token.isBlank()) {
+                subjects.add(new SymbolId("entity:" + token));
+            }
+        }
+        return subjects.isEmpty() ? List.of(subject) : subjects;
+    }
+
+    private Set<String> subjectTypesFor(SymbolId subject, Set<String> fallback) {
+        if (subject == null) {
+            return fallback;
+        }
+        boolean wantsConcept = fallback != null && fallback.stream().anyMatch(type ->
+                type.startsWith("concept:") || type.startsWith("http://") || type.startsWith("https://"));
+        String raw = stripPrefix(subject.value());
+        if (raw.isBlank()) {
+            return fallback;
+        }
+        return wantsConcept ? Set.of("concept:" + raw) : Set.of(raw);
     }
 }

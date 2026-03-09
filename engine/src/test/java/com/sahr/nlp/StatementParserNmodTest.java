@@ -15,4 +15,23 @@ class StatementParserNmodTest {
         assertEquals("entity:woman", statement.object().value());
         assertEquals("with", statement.predicate());
     }
+
+    @Test
+    void parsesCompoundSubjectAtLocation() {
+        Statement statement = parser.parse("The man and the boy sat at the table").orElseThrow();
+
+        assertEquals("entity:man_and_boy", statement.subject().value());
+        assertEquals("entity:table", statement.object().value());
+        assertEquals("at", statement.predicate());
+    }
+
+    @Test
+    void parsesMultipleNmodStatements() {
+        Statement statement = parser.parse("The boy sat opposite the man at the table").orElseThrow();
+
+        assertEquals("at", statement.predicate());
+        assertEquals("entity:table", statement.object().value());
+        assertEquals(1, statement.additionalStatements().size());
+        assertEquals("opposite", statement.additionalStatements().get(0).predicate());
+    }
 }
