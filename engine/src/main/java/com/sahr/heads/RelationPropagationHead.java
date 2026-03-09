@@ -127,9 +127,9 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
     }
 
     private Set<String> expandCoLocationPredicates(OntologyService ontology) {
-        Set<String> expanded = new HashSet<>(coLocationRelations);
+        Set<String> expanded = RelationPredicateAliases.withSahrIriAliases(coLocationRelations);
         for (String predicate : coLocationRelations) {
-            if (!isIri(predicate)) {
+            if (!RelationPredicateAliases.isIri(predicate)) {
                 continue;
             }
             expanded.addAll(ontology.getSubproperties(predicate));
@@ -143,10 +143,6 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
         for (String predicate : snapshot) {
             ontology.getInverseProperty(predicate).ifPresent(expanded::add);
         }
-    }
-
-    private boolean isIri(String value) {
-        return value != null && (value.startsWith("http://") || value.startsWith("https://"));
     }
 
     private boolean exists(KnowledgeBase graph, RelationAssertion assertion) {

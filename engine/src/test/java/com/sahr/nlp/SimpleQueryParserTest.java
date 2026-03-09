@@ -60,7 +60,7 @@ class SimpleQueryParserTest {
         QueryGoal query = parser.parse("What is on the man");
 
         assertEquals(QueryGoal.Type.RELATION, query.type());
-        assertEquals("man", query.subject());
+        assertEquals("man", query.object());
         assertEquals("on", query.predicate());
         assertEquals("entity", query.expectedType());
     }
@@ -80,7 +80,7 @@ class SimpleQueryParserTest {
         QueryGoal query = parser.parse("What is under the hat");
 
         assertEquals(QueryGoal.Type.RELATION, query.type());
-        assertEquals("hat", query.subject());
+        assertEquals("hat", query.object());
         assertEquals("under", query.predicate());
         assertEquals("entity", query.expectedType());
     }

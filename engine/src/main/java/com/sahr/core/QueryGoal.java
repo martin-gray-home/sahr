@@ -20,6 +20,9 @@ public final class QueryGoal {
     private final String subjectText;
     private final String objectText;
     private final String predicateText;
+    private final String goalId;
+    private final String parentGoalId;
+    private final int depth;
 
     public QueryGoal(Type type,
                      String subject,
@@ -31,6 +34,23 @@ public final class QueryGoal {
                      String subjectText,
                      String objectText,
                      String predicateText) {
+        this(type, subject, object, predicate, expectedType, entityType, expectedRange, subjectText, objectText, predicateText,
+                java.util.UUID.randomUUID().toString(), null, 0);
+    }
+
+    public QueryGoal(Type type,
+                     String subject,
+                     String object,
+                     String predicate,
+                     String expectedType,
+                     String entityType,
+                     String expectedRange,
+                     String subjectText,
+                     String objectText,
+                     String predicateText,
+                     String goalId,
+                     String parentGoalId,
+                     int depth) {
         this.type = Objects.requireNonNull(type, "type");
         this.subject = subject;
         this.object = object;
@@ -41,6 +61,9 @@ public final class QueryGoal {
         this.subjectText = subjectText;
         this.objectText = objectText;
         this.predicateText = predicateText;
+        this.goalId = Objects.requireNonNull(goalId, "goalId");
+        this.parentGoalId = parentGoalId;
+        this.depth = depth;
     }
 
     public static QueryGoal unknown() {
@@ -103,6 +126,36 @@ public final class QueryGoal {
 
     public String predicateText() {
         return predicateText;
+    }
+
+    public String goalId() {
+        return goalId;
+    }
+
+    public String parentGoalId() {
+        return parentGoalId;
+    }
+
+    public int depth() {
+        return depth;
+    }
+
+    public QueryGoal withParent(String parentGoalId, int depth) {
+        return new QueryGoal(
+                type,
+                subject,
+                object,
+                predicate,
+                expectedType,
+                entityType,
+                expectedRange,
+                subjectText,
+                objectText,
+                predicateText,
+                java.util.UUID.randomUUID().toString(),
+                parentGoalId,
+                depth
+        );
     }
 
     public boolean isQuestion() {

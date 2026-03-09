@@ -262,6 +262,17 @@ When a question produces an assertion candidate (for example, via
 ontology symmetry or propagation), the agent applies the assertion and
 re-runs reasoning a limited number of times to surface the best answer.
 
+Subgoals
+--------
+
+Heads may emit `SUBGOAL` candidates that enqueue new `QueryGoal`s. The
+agent processes subgoals breadth-first with a bounded depth to enable
+multi-step reasoning (e.g., resolve a holder’s location before answering
+the original question).
+Subgoal expansion treats co-location predicates as aliases: both short
+forms (e.g., `wear`, `with`) and their SAHR relation IRIs
+(`https://sahr.ai/ontology/relations#wear`) are accepted.
+
 Symbolic Attention Scoring
 ---------------------------
 

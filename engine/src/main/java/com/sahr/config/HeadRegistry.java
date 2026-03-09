@@ -8,6 +8,7 @@ import com.sahr.heads.OntologyReasoningHead;
 import com.sahr.heads.QueryAlignmentHead;
 import com.sahr.heads.RelationPropagationHead;
 import com.sahr.heads.RelationQueryHead;
+import com.sahr.heads.SubgoalExpansionHead;
 import com.sahr.heads.SurfaceContactPropagationHead;
 
 import java.util.ArrayList;
@@ -39,6 +40,8 @@ public final class HeadRegistry {
                 return new AssertionInsertionHead();
             case "relation-propagation":
                 return new RelationPropagationHead();
+            case "subgoal-expansion":
+                return new SubgoalExpansionHead();
             case "containment-propagation":
                 return new ContainmentPropagationHead();
             case "surface-contact-propagation":

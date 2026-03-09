@@ -6,5 +6,6 @@ public enum CandidateType {
     ACTION,
     GRAPH_UPDATE,
     CLARIFICATION,
-    CONTRADICTION
+    CONTRADICTION,
+    SUBGOAL
 }

@@ -30,6 +30,8 @@ public final class SahrAgent {
     private static final String PREDICATE_TYPE = "rdf:type";
     private static final int MAX_PROPAGATION_ITERATIONS = 5;
     private static final int MAX_DERIVED_ASSERTIONS = 100;
+    private static final int MAX_SUBGOAL_DEPTH = 3;
+    private static final int MAX_SUBGOALS = 20;
 
     private final KnowledgeBase graph;
     private final OntologyService ontology;
@@ -72,23 +74,11 @@ public final class SahrAgent {
         logger.fine(() -> "Input='" + input + "' statementPresent=" + statement.isPresent()
                 + " queryIntent=" + query.type());
 
-        HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null));
-        List<ReasoningCandidate> candidates = reasoner.reason(context);
-        if (candidates.isEmpty()) {
-            if (isYesNo(query)) {
-                return "Unknown.";
-            }
-            return "No candidates produced.";
+        if (!isQuestion(query)) {
+            HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null));
+            return handleSingle(context, query);
         }
-        ReasoningCandidate winner = candidates.get(0);
-        trace.addEntry(new ReasoningTraceEntry(query, candidates, winner));
-        logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
-                + " score=" + winner.score());
-        String result = applyCandidate(winner);
-        if (CandidateType.ASSERTION.equals(winner.type()) && isQuestion(query)) {
-            return resolveQuestionAfterAssertion(query, 2);
-        }
-        return result;
+        return handleWithSubgoals(query, statement.orElse(null));
     }
 
     public Optional<ReasoningTrace> trace() {
@@ -117,7 +107,10 @@ public final class SahrAgent {
                 expectedRange,
                 query.subjectText(),
                 query.objectText(),
-                query.predicateText()
+                query.predicateText(),
+                query.goalId(),
+                query.parentGoalId(),
+                query.depth()
         );
 
         return normalizeQuery(mapped);
@@ -312,6 +305,110 @@ public final class SahrAgent {
             applyCandidate(winner);
         }
         return "Assertion recorded.";
+    }
+
+    private String handleSingle(HeadContext context, QueryGoal query) {
+        List<ReasoningCandidate> candidates = reasoner.reason(context);
+        if (candidates.isEmpty()) {
+            if (isYesNo(query)) {
+                return "Unknown.";
+            }
+            return "No candidates produced.";
+        }
+        ReasoningCandidate winner = candidates.get(0);
+        trace.addEntry(new ReasoningTraceEntry(query, candidates, winner));
+        logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
+                + " score=" + winner.score());
+        String result = applyCandidate(winner);
+        if (CandidateType.ASSERTION.equals(winner.type()) && isQuestion(query)) {
+            return resolveQuestionAfterAssertion(query, 2);
+        }
+        return result;
+    }
+
+    private String handleWithSubgoals(QueryGoal root, Statement statement) {
+        java.util.ArrayDeque<QueryGoal> queue = new java.util.ArrayDeque<>();
+        queue.add(root);
+        int processed = 0;
+
+        while (!queue.isEmpty() && processed < MAX_SUBGOALS) {
+            QueryGoal current = queue.removeFirst();
+            processed++;
+
+            HeadContext context = new HeadContext(
+                    current,
+                    graph,
+                    ontology,
+                    current.goalId().equals(root.goalId()) ? statement : null
+            );
+            List<ReasoningCandidate> candidates = reasoner.reason(context);
+            if (candidates.isEmpty()) {
+                if (current.goalId().equals(root.goalId())) {
+                    return isYesNo(root) ? "Unknown." : "No candidates produced.";
+                }
+                continue;
+            }
+            ReasoningCandidate winner = selectPreferredCandidate(candidates);
+            trace.addEntry(new ReasoningTraceEntry(current, candidates, winner));
+            logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
+                    + " score=" + winner.score());
+
+            if (CandidateType.SUBGOAL.equals(winner.type()) && winner.payload() instanceof QueryGoal) {
+                QueryGoal subgoal = (QueryGoal) winner.payload();
+                int nextDepth = current.depth() + 1;
+                if (nextDepth <= MAX_SUBGOAL_DEPTH) {
+                    queue.addLast(subgoal.withParent(current.goalId(), nextDepth));
+                }
+                continue;
+            }
+
+            if (CandidateType.ASSERTION.equals(winner.type())) {
+                applyCandidate(winner);
+                queue.addLast(root);
+                continue;
+            }
+
+            if (CandidateType.ANSWER.equals(winner.type())) {
+                if (!current.goalId().equals(root.goalId())) {
+                    applyAnswerAsAssertion(winner.payload());
+                    queue.addLast(root);
+                    continue;
+                }
+                return winner.payload() == null ? "No payload." : winner.payload().toString();
+            }
+        }
+
+        return "No candidates produced.";
+    }
+
+    private ReasoningCandidate selectPreferredCandidate(List<ReasoningCandidate> candidates) {
+        ReasoningCandidate winner = candidates.get(0);
+        if (CandidateType.SUBGOAL.equals(winner.type())) {
+            for (ReasoningCandidate candidate : candidates) {
+                if (CandidateType.ASSERTION.equals(candidate.type())) {
+                    return candidate;
+                }
+            }
+        }
+        return winner;
+    }
+
+    private void applyAnswerAsAssertion(Object payload) {
+        if (!(payload instanceof String)) {
+            return;
+        }
+        String text = ((String) payload).trim();
+        String[] parts = text.split("\\s+");
+        if (parts.length < 3) {
+            return;
+        }
+        RelationAssertion assertion = new RelationAssertion(
+                new SymbolId(parts[0]),
+                parts[1],
+                new SymbolId(parts[2]),
+                0.8
+        );
+        addAssertionIfNew(assertion);
     }
 
     private void upsertEntity(SymbolId id, Set<String> types) {
