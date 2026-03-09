@@ -91,6 +91,10 @@ public final class SahrAgent {
         return Optional.of(trace);
     }
 
+    public void resetWorkingMemory() {
+        workingMemory.clear();
+    }
+
     private QueryGoal mapQuery(QueryGoal query) {
         if (query.type() == QueryGoal.Type.UNKNOWN) {
             return query;

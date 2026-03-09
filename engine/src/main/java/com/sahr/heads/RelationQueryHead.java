@@ -10,6 +10,7 @@ import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.SymbolicAttentionHead;
+import com.sahr.core.WorkingMemory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,6 +55,7 @@ public final class RelationQueryHead implements SymbolicAttentionHead {
         String expectedType = query.expectedType();
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
+        WorkingMemory memory = context.workingMemory();
         SymbolId subject = subjectBinding == null || subjectBinding.isBlank() ? null : new SymbolId(subjectBinding);
         SymbolId object = objectBinding == null || objectBinding.isBlank() ? null : new SymbolId(objectBinding);
 
@@ -86,12 +88,14 @@ public final class RelationQueryHead implements SymbolicAttentionHead {
                 double queryMatch = forward ? 1.0 : 0.9;
                 double typeMatch = expectedType == null ? 0.5 : 1.0;
                 double graphConfidence = assertion.confidence();
-                double score = normalize(queryMatch, typeMatch, graphConfidence);
+                double memoryFocus = memoryFocus(memory, subject, object, answer);
+                double score = normalize(queryMatch, typeMatch, graphConfidence, memoryFocus);
 
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("query_match", queryMatch);
                 breakdown.put("entity_type_match", typeMatch);
                 breakdown.put("graph_confidence", graphConfidence);
+                breakdown.put("working_memory_focus", memoryFocus);
 
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ANSWER,
@@ -106,6 +110,23 @@ public final class RelationQueryHead implements SymbolicAttentionHead {
         }
 
         return candidates;
+    }
+
+    private double memoryFocus(WorkingMemory memory, SymbolId subject, SymbolId object, SymbolId answer) {
+        if (memory == null) {
+            return 0.6;
+        }
+        double focus = 0.6;
+        if (object != null && memory.isActiveEntity(object)) {
+            focus = Math.max(focus, 0.8);
+        }
+        if (subject != null && memory.isActiveEntity(subject)) {
+            focus = Math.max(focus, 0.9);
+        }
+        if (memory.isActiveEntity(answer)) {
+            focus = Math.max(focus, 1.0);
+        }
+        return focus;
     }
 
     private boolean matchesExpectedType(KnowledgeBase graph, OntologyService ontology, SymbolId answer, String expectedType) {

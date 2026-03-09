@@ -8,9 +8,11 @@ import java.util.List;
 import java.util.Set;
 
 public final class WorkingMemory {
+    private static final int MAX_ACTIVE_ENTITIES = 100;
     private static final int MAX_RECENT_ASSERTIONS = 50;
 
     private final Set<SymbolId> activeEntities = new HashSet<>();
+    private final Deque<SymbolId> activeEntityOrder = new ArrayDeque<>();
     private final Deque<RelationAssertion> recentAssertions = new ArrayDeque<>();
     private final Deque<QueryGoal> goalStack = new ArrayDeque<>();
 
@@ -18,14 +20,22 @@ public final class WorkingMemory {
         if (entity == null) {
             return;
         }
-        activeEntities.add(entity);
+        if (activeEntities.add(entity)) {
+            activeEntityOrder.addFirst(entity);
+        } else {
+            activeEntityOrder.remove(entity);
+            activeEntityOrder.addFirst(entity);
+        }
+        trimActiveEntities();
     }
 
     public void addActiveEntities(Set<SymbolId> entities) {
         if (entities == null || entities.isEmpty()) {
             return;
         }
-        activeEntities.addAll(entities);
+        for (SymbolId entity : entities) {
+            addActiveEntity(entity);
+        }
     }
 
     public boolean isActiveEntity(SymbolId entity) {
@@ -69,7 +79,15 @@ public final class WorkingMemory {
 
     public void clear() {
         activeEntities.clear();
+        activeEntityOrder.clear();
         recentAssertions.clear();
         goalStack.clear();
+    }
+
+    private void trimActiveEntities() {
+        while (activeEntityOrder.size() > MAX_ACTIVE_ENTITIES) {
+            SymbolId evicted = activeEntityOrder.removeLast();
+            activeEntities.remove(evicted);
+        }
     }
 }

@@ -277,8 +277,12 @@ Working Memory
 ---------------
 
 `WorkingMemory` is session-scoped state owned by `SahrAgent`. It tracks
-active entities, recent assertions, and the current goal stack. The
-reasoner remains stateless and consumes working memory via `HeadContext`.
+active entities, recent assertions, and the current goal stack. Active
+entities are bounded (LRU-style) to keep focus tight. The reasoner
+remains stateless and consumes working memory via `HeadContext`.
+`SahrAgent.resetWorkingMemory()` clears the session state when starting a
+new conversation.
+In the REPL, use `:reset` to clear working memory explicitly.
 
 Symbolic Attention Scoring
 ---------------------------
