@@ -212,6 +212,11 @@ public final class SahrAgent {
             predicate = predicateIri.get();
         }
 
+        List<Statement> mappedExtras = new java.util.ArrayList<>();
+        for (Statement extra : statement.additionalStatements()) {
+            mappedExtras.add(mapStatement(extra));
+        }
+
         return new Statement(
                 statement.subject(),
                 objectId,
@@ -219,7 +224,8 @@ public final class SahrAgent {
                 subjectTypes,
                 objectTypes,
                 statement.objectIsConcept(),
-                statement.confidence()
+                statement.confidence(),
+                mappedExtras
         );
     }
 

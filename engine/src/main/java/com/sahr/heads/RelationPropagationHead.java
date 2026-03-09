@@ -24,7 +24,8 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
     private final Set<String> coLocationRelations;
 
     public RelationPropagationHead() {
-        this(Set.of("wear", "hold", "carry", "with", "possess", "have", "opposite", SAHR_COLOCATION));
+        this(Set.of("wear", "wearing", "hold", "holding", "carry", "carrying",
+                "with", "possess", "have", "opposite", "partOf", SAHR_COLOCATION));
     }
 
     public RelationPropagationHead(Set<String> coLocationRelations) {

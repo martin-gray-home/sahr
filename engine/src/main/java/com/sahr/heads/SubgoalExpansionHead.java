@@ -22,7 +22,7 @@ public final class SubgoalExpansionHead implements SymbolicAttentionHead {
     private static final String SAHR_COLOCATION = "https://sahr.ai/ontology/relations#colocation";
     private static final String EXPECTED_RANGE_LOCATION = "concept:location";
     private static final Set<String> DEFAULT_COLOCATION = Set.of(
-            "wear", "with", "hold", "carry", "possess", "have", "opposite", SAHR_COLOCATION
+            "wear", "with", "hold", "carry", "possess", "have", "opposite", "partOf", SAHR_COLOCATION
     );
 
     @Override

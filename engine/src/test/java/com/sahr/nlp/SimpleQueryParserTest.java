@@ -145,6 +145,15 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesWhatPowersQueryAsPassivePredicate() {
+        QueryGoal query = parser.parse("What powers the transmitter");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("transmitter", query.subject());
+        assertEquals("poweredBy", query.predicate());
+    }
+
+    @Test
     void returnsUnknownForNonQuestions() {
         QueryGoal query = parser.parse("The cat is sleeping");
 

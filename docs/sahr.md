@@ -254,6 +254,9 @@ After assertions are inserted, SAHR can run a bounded propagation pass to
 add derived facts (for example, co-location transfer) so future queries
 answer immediately. Dedicated containment and surface-contact propagation
 heads infer location transfer for relations like `inside` and `on`.
+`GraphRetrievalHead` now follows short location chains (e.g., `inside` →
+`locatedIn`) and can answer colocation-based location queries directly
+when the derived assertion is not yet materialized.
 
 Follow-up Resolution
 --------------------
@@ -300,6 +303,13 @@ softmax-normalized so they form attention weights across candidates.
 Internally, `SahrReasoner` delegates to `HeadExecutor` for head
 execution and `CandidateSelector` for softmax normalization and
 ranking.
+
+Dependency Chain Reasoning
+---------------------------
+
+`DependencyChainHead` answers multi-hop dependency queries such as
+power chains (e.g., `poweredBy` followed by `chargedBy`) by walking a
+bounded chain and returning the furthest dependency as the answer.
 
 Attention Trace Debugging
 --------------------------

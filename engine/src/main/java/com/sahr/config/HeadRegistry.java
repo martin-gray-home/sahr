@@ -3,6 +3,7 @@ package com.sahr.config;
 import com.sahr.core.SymbolicAttentionHead;
 import com.sahr.heads.AssertionInsertionHead;
 import com.sahr.heads.ContainmentPropagationHead;
+import com.sahr.heads.DependencyChainHead;
 import com.sahr.heads.GraphRetrievalHead;
 import com.sahr.heads.OntologyReasoningHead;
 import com.sahr.heads.QueryAlignmentHead;
@@ -48,6 +49,8 @@ public final class HeadRegistry {
                 return new SurfaceContactPropagationHead();
             case "relation-query":
                 return new RelationQueryHead(config.predicateAliases());
+            case "dependency-chain":
+                return new DependencyChainHead();
             case "query-alignment":
                 return new QueryAlignmentHead();
             default:

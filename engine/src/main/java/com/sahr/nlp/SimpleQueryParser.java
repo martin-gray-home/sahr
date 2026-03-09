@@ -169,6 +169,10 @@ public final class SimpleQueryParser {
                 return whPrepSubject;
             }
         }
+        Optional<QueryGoal> powerFallback = parsePowerFallback(input);
+        if (powerFallback.isPresent()) {
+            return powerFallback;
+        }
         Optional<QueryGoal> withFallback = parseWithFallback(input);
         if (withFallback.isPresent()) {
             return withFallback;
@@ -178,6 +182,28 @@ public final class SimpleQueryParser {
             return whPrepFallback;
         }
         return parsePrepositionFallback(input);
+    }
+
+    private Optional<QueryGoal> parsePowerFallback(String input) {
+        String normalized = input.toLowerCase(Locale.ROOT);
+        List<String> tokens = tokenize(normalized);
+        if (tokens.size() < 3) {
+            return Optional.empty();
+        }
+        if (!"what".equals(tokens.get(0))) {
+            return Optional.empty();
+        }
+        String verb = tokens.get(1);
+        if (!shouldInvertPowerVerb(verb)) {
+            return Optional.empty();
+        }
+        String subjectToken = firstContentTokenAfter(tokens, 1);
+        if (subjectToken == null || subjectToken.isBlank()) {
+            return Optional.empty();
+        }
+        String base = verb.endsWith("s") ? verb.substring(0, verb.length() - 1) : verb;
+        String predicate = toPassivePredicate(base);
+        return Optional.of(QueryGoal.relation(subjectToken, predicate, null, expectedTypeForWh("what")));
     }
 
     private Optional<QueryGoal> parseYesNoQuery(String input) {
@@ -302,6 +328,10 @@ public final class SimpleQueryParser {
                 continue;
             }
             String predicate = verb.lemma().toLowerCase(Locale.ROOT);
+            if ("what".equals(wh) && shouldInvertPowerVerb(predicate)) {
+                String inverted = toPassivePredicate(predicate);
+                return Optional.of(QueryGoal.relation(objectToken, inverted, null, expectedTypeForWh(wh)));
+            }
 
             return Optional.of(QueryGoal.relation(null, predicate, objectToken, expectedTypeForWh(wh)));
         }
@@ -418,6 +448,24 @@ public final class SimpleQueryParser {
             return "locatedIn";
         }
         return prep;
+    }
+
+    private boolean shouldInvertPowerVerb(String verb) {
+        if (verb == null || verb.isBlank()) {
+            return false;
+        }
+        String normalized = verb.endsWith("s") ? verb.substring(0, verb.length() - 1) : verb;
+        return "power".equals(normalized) || "charge".equals(normalized);
+    }
+
+    private String toPassivePredicate(String verb) {
+        if (verb == null || verb.isBlank()) {
+            return verb;
+        }
+        if (verb.endsWith("e")) {
+            return verb + "dBy";
+        }
+        return verb + "edBy";
     }
 
     private Optional<QueryGoal> parseYesNoPrepositionFallback(List<String> tokens) {

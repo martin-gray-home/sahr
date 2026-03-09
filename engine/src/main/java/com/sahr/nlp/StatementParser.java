@@ -20,6 +20,7 @@ public final class StatementParser {
     private static final String PREDICATE_AT = "at";
     private static final String PREDICATE_IN = "locatedIn";
     private static final String PREDICATE_TYPE = "rdf:type";
+    private static final Set<String> PREPOSITION_PREDICATES = Set.of("inside", "on", "under", "with", "opposite");
 
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
 
@@ -32,23 +33,63 @@ public final class StatementParser {
             return Optional.empty();
         }
 
-        Optional<Statement> coreNlp = parseWithCoreNlp(trimmed);
-        if (coreNlp.isPresent()) {
-            return coreNlp;
-        }
-
         String normalized = trimmed.toLowerCase(Locale.ROOT);
+        if (normalized.contains(" is inside ")) {
+            return parseBinary(normalized, "is inside", "inside", false);
+        }
         if (normalized.contains(" is in ")) {
             return parseBinary(normalized, "is in", PREDICATE_IN, false);
         }
         if (normalized.contains(" is at ")) {
             return parseBinary(normalized, "is at", PREDICATE_AT, false);
         }
+        if (normalized.contains(" is with ")) {
+            return parseBinary(normalized, "is with", "with", false);
+        }
+        if (normalized.contains(" is holding ")) {
+            return parseBinary(normalized, "is holding", "hold", false);
+        }
+        if (normalized.contains(" is carrying ")) {
+            return parseBinary(normalized, "is carrying", "carry", false);
+        }
+        if (normalized.contains(" is wearing ")) {
+            return parseBinary(normalized, "is wearing", "wear", false);
+        }
+        Optional<Statement> passive = parsePassiveBy(normalized);
+        if (passive.isPresent()) {
+            return passive;
+        }
+
+        Optional<Statement> coreNlp = parseWithCoreNlp(trimmed);
+        if (coreNlp.isPresent()) {
+            return coreNlp;
+        }
         if (normalized.contains(" is a ") || normalized.contains(" is an ")) {
             return parseBinary(normalized, normalized.contains(" is a ") ? "is a" : "is an", PREDICATE_TYPE, true);
         }
 
         return Optional.empty();
+    }
+
+    private Optional<Statement> parsePassiveBy(String normalized) {
+        int verbIndex = normalized.indexOf(" is ");
+        int byIndex = normalized.indexOf(" by ");
+        if (verbIndex < 0 || byIndex < 0 || byIndex <= verbIndex + 4) {
+            return Optional.empty();
+        }
+        String subjectPart = normalized.substring(0, verbIndex).trim();
+        String verbPart = normalized.substring(verbIndex + 4, byIndex).trim();
+        String objectPart = normalized.substring(byIndex + 4).trim();
+        if (subjectPart.isBlank() || verbPart.isBlank() || objectPart.isBlank()) {
+            return Optional.empty();
+        }
+        String subjectToken = normalizeToken(subjectPart);
+        String objectToken = normalizeToken(objectPart);
+        if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+            return Optional.empty();
+        }
+        String predicate = verbPart.replaceAll("\\s+", "_") + "By";
+        return Optional.of(buildStatement(subjectToken, objectToken, predicate, false));
     }
 
     private Optional<Statement> parseWithCoreNlp(String input) {
@@ -90,11 +131,22 @@ public final class StatementParser {
             }
 
             String preposition = findCase(graph, edge.getGovernor());
-            String predicateType = preposition != null ? mapPreposition(preposition) : PREDICATE_TYPE;
+            PrepMatch prepMatch = preposition == null ? findCopularPreposition(graph, edge.getGovernor()) : null;
+            if (preposition == null && prepMatch != null) {
+                preposition = prepMatch.preposition();
+            }
+            if (preposition == null && prepMatch == null && isPrepositionPredicate(predicate.word())) {
+                return Optional.empty();
+            }
+            String predicateType = preposition != null ? mapPreposition(preposition, predicate.word()) : PREDICATE_TYPE;
             boolean objectIsConcept = PREDICATE_TYPE.equals(predicateType);
 
             String subjectToken = normalizeToken(subject.word());
-            String objectToken = normalizeToken(predicate.word());
+            CoreLabel prepObject = preposition == null ? null : findPrepositionalObject(graph, edge.getGovernor(), preposition);
+            if (prepObject == null && prepMatch != null) {
+                prepObject = prepMatch.object();
+            }
+            String objectToken = normalizeToken(prepObject != null ? prepObject.word() : predicate.word());
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
@@ -105,6 +157,70 @@ public final class StatementParser {
             return Optional.of(buildStatement(subjectToken, objectToken, predicateType, objectIsConcept));
         }
         return Optional.empty();
+    }
+
+    private boolean isPrepositionPredicate(String word) {
+        if (word == null) {
+            return false;
+        }
+        return PREPOSITION_PREDICATES.contains(word.toLowerCase(Locale.ROOT));
+    }
+
+    private PrepMatch findCopularPreposition(SemanticGraph graph,
+                                             edu.stanford.nlp.ling.IndexedWord governor) {
+        for (SemanticGraphEdge edge : graph.outgoingEdgeList(governor)) {
+            String relation = edge.getRelation().getShortName();
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific == null || specific.isBlank()) {
+                continue;
+            }
+            return new PrepMatch(specific.toLowerCase(Locale.ROOT), edge.getDependent().backingLabel());
+        }
+        return null;
+    }
+
+    private static final class PrepMatch {
+        private final String preposition;
+        private final CoreLabel object;
+
+        private PrepMatch(String preposition, CoreLabel object) {
+            this.preposition = preposition;
+            this.object = object;
+        }
+
+        private String preposition() {
+            return preposition;
+        }
+
+        private CoreLabel object() {
+            return object;
+        }
+    }
+
+    private CoreLabel findPrepositionalObject(SemanticGraph graph,
+                                              edu.stanford.nlp.ling.IndexedWord governor,
+                                              String preposition) {
+        if (preposition == null) {
+            return null;
+        }
+        for (SemanticGraphEdge edge : graph.outgoingEdgeList(governor)) {
+            String relation = edge.getRelation().getShortName();
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific == null) {
+                continue;
+            }
+            if (!preposition.equalsIgnoreCase(specific)) {
+                continue;
+            }
+            return edge.getDependent().backingLabel();
+        }
+        return null;
     }
 
     private Optional<Statement> parseVerbObject(SemanticGraph graph) {
@@ -138,12 +254,11 @@ public final class StatementParser {
             if (!"nmod".equals(relation) && !"obl".equals(relation)) {
                 continue;
             }
-            String specific = edge.getRelation().getSpecific();
-            String predicate = specific != null ? mapPreposition(specific.toLowerCase(Locale.ROOT)) : "nmod";
-
             CoreLabel subjectLabel = findDependent(graph, edge.getGovernor(), "nsubj");
             CoreLabel head = edge.getGovernor().backingLabel();
             CoreLabel object = edge.getDependent().backingLabel();
+            String specific = edge.getRelation().getSpecific();
+            String predicate = specific != null ? mapPreposition(specific.toLowerCase(Locale.ROOT), head.word()) : "nmod";
 
             String subjectToken = normalizeToken(subjectLabel != null ? subjectLabel.word() : head.word());
             if (subjectLabel != null) {
@@ -214,8 +329,7 @@ public final class StatementParser {
     }
 
     private boolean isPreferredPredicate(String predicate) {
-        String mapped = mapPreposition(predicate);
-        return PREDICATE_AT.equals(mapped) || PREDICATE_IN.equals(mapped) || "inside".equals(mapped);
+        return PREDICATE_AT.equals(predicate) || PREDICATE_IN.equals(predicate) || "inside".equals(predicate);
     }
 
     private CoreLabel findDependent(SemanticGraph graph, edu.stanford.nlp.ling.IndexedWord governor, String relation) {
@@ -245,14 +359,28 @@ public final class StatementParser {
         return false;
     }
 
-    private String mapPreposition(String prep) {
+    private String mapPreposition(String prep, String governorWord) {
         if ("in".equals(prep)) {
             return PREDICATE_IN;
         }
         if ("at".equals(prep)) {
             return PREDICATE_AT;
         }
+        if ("of".equals(prep) && isPartGovernor(governorWord)) {
+            return "partOf";
+        }
+        if ("by".equals(prep) && governorWord != null && !governorWord.isBlank()) {
+            return governorWord.toLowerCase(Locale.ROOT) + "By";
+        }
         return prep;
+    }
+
+    private boolean isPartGovernor(String governorWord) {
+        if (governorWord == null) {
+            return false;
+        }
+        String normalized = governorWord.toLowerCase(Locale.ROOT);
+        return "part".equals(normalized) || "member".equals(normalized);
     }
 
     private Statement buildStatement(String subjectToken, String objectToken, String predicate, boolean objectIsConcept) {
