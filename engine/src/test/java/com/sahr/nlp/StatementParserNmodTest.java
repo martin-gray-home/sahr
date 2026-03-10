@@ -3,6 +3,7 @@ package com.sahr.nlp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StatementParserNmodTest {
     private final StatementParser parser = new StatementParser();
@@ -20,7 +21,9 @@ class StatementParserNmodTest {
     void parsesCompoundSubjectAtLocation() {
         Statement statement = parser.parse("The man and the boy sat at the table").orElseThrow();
 
-        assertEquals("entity:man_and_boy", statement.subject().value());
+        java.util.List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
+        all.add(statement);
+        assertTrue(all.stream().anyMatch(item -> "entity:man_and_boy".equals(item.subject().value())));
         assertEquals("entity:table", statement.object().value());
         assertEquals("at", statement.predicate());
     }

@@ -349,7 +349,7 @@ public final class SimpleQueryParser {
                 CoreLabel subject = edge.getDependent().backingLabel();
                 CoreLabel verb = edge.getGovernor().backingLabel();
                 CoreLabel object = findDependent(graph, edge.getGovernor(), "obj");
-                String subjectToken = normalizeToken(subject.word());
+                String subjectToken = normalizeCompoundToken(graph, subject);
                 if (subjectToken.isEmpty()) {
                     continue;
                 }
@@ -360,7 +360,7 @@ public final class SimpleQueryParser {
                 String objectToken = null;
                 String objectText = null;
                 if (object != null) {
-                    objectToken = normalizeToken(object.word());
+                    objectToken = normalizeCompoundToken(graph, object);
                     if (objectToken.isEmpty()) {
                         continue;
                     }
@@ -388,7 +388,7 @@ public final class SimpleQueryParser {
                 continue;
             }
 
-            String subjectToken = normalizeToken(subject.word());
+            String subjectToken = normalizeCompoundToken(graph, subject);
             if (subjectToken.isEmpty()) {
                 continue;
             }
@@ -419,7 +419,7 @@ public final class SimpleQueryParser {
             }
 
             CoreLabel target = edge.getDependent().backingLabel();
-            String subjectToken = normalizeToken(target.word());
+            String subjectToken = normalizeCompoundToken(graph, target);
             if (subjectToken.isEmpty()) {
                 continue;
             }
@@ -448,7 +448,7 @@ public final class SimpleQueryParser {
                 if (object == null) {
                     return Optional.of(QueryGoal.relation(null, inverted, null, expectedTypeForWh(wh)));
                 }
-                String objectToken = normalizeToken(object.word());
+                String objectToken = normalizeCompoundToken(graph, object);
                 if (objectToken.isEmpty()) {
                     continue;
                 }
@@ -457,7 +457,7 @@ public final class SimpleQueryParser {
             if (object == null) {
                 return Optional.of(QueryGoal.relation(null, predicate, null, expectedTypeForWh(wh)));
             }
-            String objectToken = normalizeToken(object.word());
+            String objectToken = normalizeCompoundToken(graph, object);
             if (objectToken.isEmpty()) {
                 continue;
             }
@@ -482,7 +482,7 @@ public final class SimpleQueryParser {
                 if (agent == null) {
                     return Optional.of(QueryGoal.relation(null, predicate, null, expectedTypeForWh(wh)));
                 }
-                String agentToken = normalizeToken(agent.word());
+                String agentToken = normalizeCompoundToken(graph, agent);
                 if (agentToken.isEmpty()) {
                     continue;
                 }
@@ -493,7 +493,7 @@ public final class SimpleQueryParser {
             if (agent == null) {
                 continue;
             }
-            String agentToken = normalizeToken(agent.word());
+            String agentToken = normalizeCompoundToken(graph, agent);
             if (agentToken.isEmpty()) {
                 continue;
             }
@@ -501,7 +501,7 @@ public final class SimpleQueryParser {
             if (!WH_TOKENS.contains(agentLemma)) {
                 continue;
             }
-            String objectToken = normalizeToken(subject.word());
+            String objectToken = normalizeCompoundToken(graph, subject);
             if (objectToken.isEmpty()) {
                 continue;
             }
@@ -601,7 +601,7 @@ public final class SimpleQueryParser {
             }
 
             CoreLabel object = edge.getDependent().backingLabel();
-            String objectToken = normalizeToken(object.word());
+            String objectToken = normalizeCompoundToken(graph, object);
             if (objectToken.isEmpty()) {
                 continue;
             }
@@ -637,7 +637,7 @@ public final class SimpleQueryParser {
             if (subject == null) {
                 continue;
             }
-            String subjectToken = normalizeToken(subject.word());
+            String subjectToken = normalizeCompoundToken(graph, subject);
             if (subjectToken.isEmpty()) {
                 continue;
             }
@@ -666,7 +666,7 @@ public final class SimpleQueryParser {
             if (subject == null) {
                 continue;
             }
-            String subjectToken = normalizeToken(subject.word());
+            String subjectToken = normalizeCompoundToken(graph, subject);
             if (subjectToken.isEmpty()) {
                 continue;
             }
@@ -732,8 +732,8 @@ public final class SimpleQueryParser {
                 if (agent == null) {
                     continue;
                 }
-                String subjectToken = normalizeToken(agent.word());
-                String objectToken = normalizeToken(patient.word());
+                String subjectToken = normalizeCompoundToken(graph, agent);
+                String objectToken = normalizeCompoundToken(graph, patient);
                 if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                     continue;
                 }
@@ -1005,10 +1005,14 @@ public final class SimpleQueryParser {
         if (COLOR_MODIFIERS.contains(candidate)) {
             int next = firstContentIndexAfter(tokens, first);
             if (next >= 0) {
-                return new SubjectModifier(tokens.get(next), candidate);
+                String phrase = nounPhraseFrom(tokens, next, tokens.size());
+                if (phrase != null && !phrase.isBlank()) {
+                    return new SubjectModifier(candidate + "_" + phrase, candidate);
+                }
+                return new SubjectModifier(candidate, candidate);
             }
         }
-        return new SubjectModifier(candidate, null);
+        return new SubjectModifier(nounPhraseFrom(tokens, first, tokens.size()), null);
     }
 
     private String findDiscourseModifier(List<String> tokens) {
@@ -1054,11 +1058,47 @@ public final class SimpleQueryParser {
                 break;
             }
         }
-        String token = normalizeToken(head.word()).replace('_', ' ');
+        String token = normalizeToken(composeCompoundToken(graph, head)).replace('_', ' ');
         if (det != null && !det.isBlank()) {
             return det + " " + token;
         }
         return token;
+    }
+
+    private String normalizeCompoundToken(SemanticGraph graph, CoreLabel head) {
+        return normalizeToken(composeCompoundToken(graph, head));
+    }
+
+    private String composeCompoundToken(SemanticGraph graph, CoreLabel head) {
+        if (head == null) {
+            return "";
+        }
+        var node = graph == null ? null : graph.getNodeByIndexSafe(head.index());
+        if (node == null) {
+            return head.word();
+        }
+        java.util.List<CoreLabel> parts = new java.util.ArrayList<>();
+        parts.add(head);
+        for (SemanticGraphEdge edge : graph.outgoingEdgeList(node)) {
+            String relation = edge.getRelation().getShortName();
+            if (!"compound".equals(relation) && !"amod".equals(relation)) {
+                continue;
+            }
+            if ("compound".equals(relation)
+                    && (edge.getRelation().getSpecific() != null && !edge.getRelation().getSpecific().isBlank())) {
+                continue;
+            }
+            parts.add(edge.getDependent().backingLabel());
+        }
+        if (parts.size() == 1) {
+            return head.word();
+        }
+        parts.sort(java.util.Comparator.comparingInt(CoreLabel::index));
+        java.util.List<String> words = new java.util.ArrayList<>(parts.size());
+        for (CoreLabel part : parts) {
+            words.add(part.word());
+        }
+        return String.join(" ", words);
     }
 
     private String expectedTypeForWh(String wh) {
@@ -1115,25 +1155,71 @@ public final class SimpleQueryParser {
     }
 
     private String firstContentTokenAfter(List<String> tokens, int index) {
-        for (int i = index + 1; i < tokens.size(); i++) {
-            String token = tokens.get(i);
-            if ("the".equals(token) || "a".equals(token) || "an".equals(token)) {
-                continue;
-            }
-            return token;
+        int first = firstContentIndexAfter(tokens, index);
+        if (first < 0) {
+            return null;
         }
-        return null;
+        return nounPhraseFrom(tokens, first, tokens.size());
     }
 
     private String firstContentTokenBefore(List<String> tokens, int index) {
+        int first = -1;
         for (int i = index - 1; i >= 0; i--) {
             String token = tokens.get(i);
             if ("the".equals(token) || "a".equals(token) || "an".equals(token)) {
                 continue;
             }
-            return token;
+            first = i;
+            break;
         }
-        return null;
+        if (first < 0) {
+            return null;
+        }
+        int start = first;
+        while (start - 1 >= 0) {
+            String prev = tokens.get(start - 1);
+            if ("the".equals(prev) || "a".equals(prev) || "an".equals(prev) || isBoundaryToken(prev)) {
+                break;
+            }
+            start--;
+        }
+        return nounPhraseFrom(tokens, start, first + 1);
+    }
+
+    private String nounPhraseFrom(List<String> tokens, int startIndex, int endExclusive) {
+        if (startIndex < 0 || startIndex >= tokens.size()) {
+            return null;
+        }
+        int end = Math.min(endExclusive, tokens.size());
+        int start = startIndex;
+        while (start < end && ("the".equals(tokens.get(start)) || "a".equals(tokens.get(start)) || "an".equals(tokens.get(start)))) {
+            start++;
+        }
+        if (start >= end) {
+            return null;
+        }
+        StringBuilder phrase = new StringBuilder(tokens.get(start));
+        for (int i = start + 1; i < end; i++) {
+            String token = tokens.get(i);
+            if ("the".equals(token) || "a".equals(token) || "an".equals(token) || isBoundaryToken(token)) {
+                break;
+            }
+            phrase.append('_').append(token);
+        }
+        return phrase.toString();
+    }
+
+    private boolean isBoundaryToken(String token) {
+        if (token == null || token.isBlank()) {
+            return true;
+        }
+        if (WH_TOKENS.contains(token) || YESNO_PREFIXES.contains(token)) {
+            return true;
+        }
+        if (PREPOSITION_RELATIONS.contains(token) || "with".equals(token)) {
+            return true;
+        }
+        return "and".equals(token) || "or".equals(token) || "but".equals(token);
     }
 
     private static StanfordCoreNLP buildPipeline() {

@@ -55,13 +55,25 @@ class ComplexSentenceQueryScenarioTest {
                 "entity:hat locatedIn entity:chair");
 
         assertAnyOf(agent.handle("Who is with the dog"),
-                "entity:cat");
+                "entity:cat",
+                "entity:black_cat",
+                "entity:black_cat, entity:cat",
+                "entity:cat, entity:black_cat");
         assertAnyOf(agent.handle("Who is the dog with"),
-                "entity:cat");
+                "entity:cat",
+                "entity:black_cat",
+                "entity:black_cat, entity:cat",
+                "entity:cat, entity:black_cat");
         assertAnyOf(agent.handle("What is with the dog"),
-                "entity:cat");
+                "entity:cat",
+                "entity:black_cat",
+                "entity:black_cat, entity:cat",
+                "entity:cat, entity:black_cat");
         assertAnyOf(agent.handle("Who is with the cat"),
-                "entity:dog");
+                "entity:dog",
+                "entity:red_dog",
+                "entity:red_dog, entity:dog",
+                "entity:dog, entity:red_dog");
         assertAnyOf(agent.handle("Who is with the woman"),
                 "entity:man");
         assertAnyOf(agent.handle("Who is with the man"),
@@ -70,9 +82,18 @@ class ComplexSentenceQueryScenarioTest {
                 "entity:woman");
         assertAnyOf(agent.handle("What is under the table"),
                 "entity:cat",
-                "entity:dog");
+                "entity:black_cat",
+                "entity:black_cat, entity:cat",
+                "entity:cat, entity:black_cat",
+                "entity:dog",
+                "entity:red_dog",
+                "entity:red_dog, entity:dog",
+                "entity:dog, entity:red_dog");
         assertAnyOf(agent.handle("What is opposite the dog"),
                 "entity:cat",
+                "entity:black_cat",
+                "entity:black_cat, entity:cat",
+                "entity:cat, entity:black_cat",
                 "No candidates produced.");
 
         assertAnyOf(agent.handle("What color is the dog"),

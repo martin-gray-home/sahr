@@ -207,6 +207,27 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesRelationQueryWithAdjectiveNounObject() {
+        QueryGoal query = parser.parse("Who is in the red room");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("red_room", query.object());
+        assertEquals("red", query.modifier());
+        assertEquals("locatedIn", query.predicate());
+        assertEquals("person", query.expectedType());
+    }
+
+    @Test
+    void parsesRelationQueryWithCompoundObject() {
+        QueryGoal query = parser.parse("Who is with the power bus");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("power_bus", query.subject());
+        assertEquals("with", query.predicate());
+        assertEquals("person", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromWhatIsInPattern() {
         QueryGoal query = parser.parse("What is in the house");
 

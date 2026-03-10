@@ -188,4 +188,16 @@ class StatementParserTest {
                         && "entity:transmitter".equals(item.subject().value())
                         && "entity:power_bus".equals(item.object().value())));
     }
+
+    @Test
+    void capturesAdjectiveNounObject() {
+        Statement statement = parser.parse("The man is in the red room").orElseThrow();
+        List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
+        all.add(statement);
+
+        assertTrue(all.stream().anyMatch(item ->
+                "locatedIn".equals(item.predicate())
+                        && "entity:man".equals(item.subject().value())
+                        && "entity:red_room".equals(item.object().value())));
+    }
 }

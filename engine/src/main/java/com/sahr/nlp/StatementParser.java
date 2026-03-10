@@ -236,12 +236,13 @@ public final class StatementParser {
             String predicateType = preposition != null ? mapPreposition(preposition, predicate.word()) : PREDICATE_TYPE;
             boolean objectIsConcept = PREDICATE_TYPE.equals(predicateType);
 
-            String subjectToken = normalizeToken(subject.word());
+            String subjectToken = normalizeToken(composeCompoundToken(graph, subject));
+            String baseSubjectToken = normalizeToken(subject.word());
             var conjuncts = collectConjuncts(graph, subject);
             if (!conjuncts.isEmpty()) {
                 StringBuilder combined = new StringBuilder(subjectToken);
                 for (CoreLabel conjunct : conjuncts) {
-                    String token = normalizeToken(conjunct.word());
+                    String token = normalizeToken(composeCompoundToken(graph, conjunct));
                     if (!token.isEmpty()) {
                         combined.append("_and_").append(token);
                     }
@@ -252,19 +253,37 @@ public final class StatementParser {
             if (prepObject == null && prepMatch != null) {
                 prepObject = prepMatch.object();
             }
-            String objectToken = normalizeToken(prepObject != null ? prepObject.word() : predicate.word());
+            CoreLabel objectLabel = prepObject != null ? prepObject : predicate;
+            String objectToken = normalizeToken(composeCompoundToken(graph, objectLabel));
+            String baseObjectToken = normalizeToken(objectLabel.word());
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
             if (preposition == null && hasDeterminer(graph, edge.getGovernor())) {
                 continue;
             }
-            statements.add(buildStatement(subjectToken, objectToken, predicateType, objectIsConcept));
+            java.util.Set<String> subjectTokens = new java.util.LinkedHashSet<>();
+            if (!baseSubjectToken.isEmpty() && !baseSubjectToken.equals(subjectToken)) {
+                subjectTokens.add(baseSubjectToken);
+            }
+            subjectTokens.add(subjectToken);
+            java.util.Set<String> objectTokens = new java.util.LinkedHashSet<>();
+            if (!baseObjectToken.isEmpty() && !baseObjectToken.equals(objectToken)) {
+                objectTokens.add(baseObjectToken);
+            }
+            objectTokens.add(objectToken);
+            for (String subjectEntry : subjectTokens) {
+                for (String objectEntry : objectTokens) {
+                    statements.add(buildStatement(subjectEntry, objectEntry, predicateType, objectIsConcept));
+                }
+            }
             List<CoreLabel> objectConjuncts = findConjuncts(graph, prepObject != null ? prepObject : predicate);
             for (CoreLabel conjunct : objectConjuncts) {
-                String conjunctToken = normalizeToken(conjunct.word());
+                String conjunctToken = normalizeToken(composeCompoundToken(graph, conjunct));
                 if (!conjunctToken.isEmpty()) {
-                    statements.add(buildStatement(subjectToken, conjunctToken, predicateType, objectIsConcept));
+                    for (String subjectEntry : subjectTokens) {
+                        statements.add(buildStatement(subjectEntry, conjunctToken, predicateType, objectIsConcept));
+                    }
                 }
             }
         }
@@ -417,19 +436,21 @@ public final class StatementParser {
             String predicate = specific != null ? mapPreposition(specific.toLowerCase(Locale.ROOT), head.word()) : "nmod";
 
             CoreLabel subjectSource = subjectLabel != null ? subjectLabel : head;
-            String subjectToken = normalizeToken(subjectSource.word());
+            String subjectToken = normalizeToken(composeCompoundToken(graph, subjectSource));
+            String baseSubjectToken = normalizeToken(subjectSource.word());
             var conjuncts = collectConjuncts(graph, subjectSource);
             if (!conjuncts.isEmpty()) {
                 StringBuilder combined = new StringBuilder(subjectToken);
                 for (CoreLabel conjunct : conjuncts) {
-                    String token = normalizeToken(conjunct.word());
+                    String token = normalizeToken(composeCompoundToken(graph, conjunct));
                     if (!token.isEmpty()) {
                         combined.append("_and_").append(token);
                     }
                 }
                 subjectToken = combined.toString();
             }
-            String objectToken = normalizeToken(object.word());
+            String objectToken = normalizeToken(composeCompoundToken(graph, object));
+            String baseObjectToken = normalizeToken(object.word());
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
@@ -445,9 +466,23 @@ public final class StatementParser {
                 }
             }
 
-            Statement candidate = buildStatement(subjectToken, objectToken, predicate, false);
-            String key = candidate.subject().value() + "|" + candidate.predicate() + "|" + candidate.object().value();
-            statements.putIfAbsent(key, candidate);
+            java.util.Set<String> subjectTokens = new java.util.LinkedHashSet<>();
+            if (!baseSubjectToken.isEmpty() && !baseSubjectToken.equals(subjectToken)) {
+                subjectTokens.add(baseSubjectToken);
+            }
+            subjectTokens.add(subjectToken);
+            java.util.Set<String> objectTokens = new java.util.LinkedHashSet<>();
+            if (!baseObjectToken.isEmpty() && !baseObjectToken.equals(objectToken)) {
+                objectTokens.add(baseObjectToken);
+            }
+            objectTokens.add(objectToken);
+            for (String subjectEntry : subjectTokens) {
+                for (String objectEntry : objectTokens) {
+                    Statement candidate = buildStatement(subjectEntry, objectEntry, predicate, false);
+                    String key = candidate.subject().value() + "|" + candidate.predicate() + "|" + candidate.object().value();
+                    statements.putIfAbsent(key, candidate);
+                }
+            }
         }
         return new java.util.ArrayList<>(statements.values());
     }
@@ -460,12 +495,16 @@ public final class StatementParser {
             }
             CoreLabel noun = edge.getGovernor().backingLabel();
             CoreLabel adjective = edge.getDependent().backingLabel();
+            String baseSubject = normalizeToken(noun.word());
             String subjectToken = normalizeToken(composeCompoundToken(graph, noun));
             String objectToken = normalizeToken(adjective.word());
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
             statements.add(buildStatement(subjectToken, objectToken, PREDICATE_ATTRIBUTE, false));
+            if (!baseSubject.isEmpty() && !baseSubject.equals(subjectToken)) {
+                statements.add(buildStatement(baseSubject, objectToken, PREDICATE_ATTRIBUTE, false));
+            }
         }
         return statements;
     }
@@ -782,18 +821,28 @@ public final class StatementParser {
         if (node == null) {
             return head.word();
         }
-        java.util.List<String> parts = new java.util.ArrayList<>();
-        parts.add(head.word());
+        java.util.List<CoreLabel> parts = new java.util.ArrayList<>();
+        parts.add(head);
         for (SemanticGraphEdge edge : graph.outgoingEdgeList(node)) {
-            if ("compound".equals(edge.getRelation().getShortName())
-                    && (edge.getRelation().getSpecific() == null || edge.getRelation().getSpecific().isBlank())) {
-                parts.add(edge.getDependent().word());
+            String relation = edge.getRelation().getShortName();
+            if (!"compound".equals(relation) && !"amod".equals(relation)) {
+                continue;
             }
+            if ("compound".equals(relation)
+                    && (edge.getRelation().getSpecific() != null && !edge.getRelation().getSpecific().isBlank())) {
+                continue;
+            }
+            parts.add(edge.getDependent().backingLabel());
         }
         if (parts.size() == 1) {
             return head.word();
         }
-        return String.join(" ", parts);
+        parts.sort(java.util.Comparator.comparingInt(CoreLabel::index));
+        java.util.List<String> words = new java.util.ArrayList<>(parts.size());
+        for (CoreLabel part : parts) {
+            words.add(part.word());
+        }
+        return String.join(" ", words);
     }
 
     private boolean isPreferredPredicate(String predicate) {
