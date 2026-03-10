@@ -2,6 +2,7 @@ package com.sahr.heads;
 
 import com.sahr.core.CandidateType;
 import com.sahr.core.EntityNode;
+import com.sahr.core.HeadOntology;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
@@ -17,14 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class GraphRetrievalHead extends BaseHead {
-    private static final String PREDICATE_LOCATED_IN = "locatedIn";
-    private static final List<String> LOCATION_PREDICATES = List.of("at", PREDICATE_LOCATED_IN, "inside", "in");
     private static final int MAX_LOCATION_DEPTH = 6;
-    private static final String SAHR_COLOCATION = "https://sahr.ai/ontology/relations#colocation";
-    private static final java.util.Set<String> COLOCATION_PREDICATES = java.util.Set.of(
-            "wear", "wearing", "hold", "holding", "carry", "carrying",
-            "with", "possess", "have", "opposite", "partOf", SAHR_COLOCATION
-    );
 
     @Override
     public String getName() {
@@ -50,11 +44,15 @@ public final class GraphRetrievalHead extends BaseHead {
         java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(query, graph);
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph);
+        Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph, locationPredicates);
         java.util.Set<String> emitted = new java.util.HashSet<>();
-        List<RelationAssertion> locationAssertions = collectLocationAssertions(graph);
-        java.util.Set<String> expandedCoLocation = expandCoLocationPredicates(ontology, COLOCATION_PREDICATES);
-        for (String predicate : LOCATION_PREDICATES) {
+        java.util.Set<String> locationPredicates = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
+        if (locationPredicates.isEmpty()) {
+            return List.of();
+        }
+        List<RelationAssertion> locationAssertions = collectLocationAssertions(graph, locationPredicates);
+        java.util.Set<String> expandedCoLocation = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION);
+        for (String predicate : locationPredicates) {
             for (RelationAssertion assertion : graph.findByPredicate(predicate)) {
                 boolean typeMatch = matchesType(graph, ontology, assertion, requestedType, requestedEntity);
                 if (!typeMatch) {
@@ -85,7 +83,7 @@ public final class GraphRetrievalHead extends BaseHead {
                 breakdown.put("depth_boost", depthBoost);
                 breakdown.put("working_memory_focus", memoryFocus);
 
-                String answer = assertion.subject() + " " + PREDICATE_LOCATED_IN + " " + terminal;
+                String answer = assertion.subject() + " " + displayPredicate(path.get(0).predicate()) + " " + terminal;
 
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ANSWER,
@@ -135,7 +133,7 @@ public final class GraphRetrievalHead extends BaseHead {
                 breakdown.put("graph_confidence", graphConfidence);
                 breakdown.put("working_memory_focus", memoryFocus);
 
-                String answer = inferredSubject + " " + PREDICATE_LOCATED_IN + " " + location.object();
+                String answer = inferredSubject + " " + displayPredicate(location.predicate()) + " " + location.object();
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ANSWER,
                         answer,
@@ -151,9 +149,9 @@ public final class GraphRetrievalHead extends BaseHead {
         return candidates;
     }
 
-    private Map<SymbolId, List<RelationAssertion>> buildAdjacency(KnowledgeBase graph) {
+    private Map<SymbolId, List<RelationAssertion>> buildAdjacency(KnowledgeBase graph, java.util.Set<String> locationPredicates) {
         Map<SymbolId, List<RelationAssertion>> adjacency = new java.util.HashMap<>();
-        for (String predicate : LOCATION_PREDICATES) {
+        for (String predicate : locationPredicates) {
             for (RelationAssertion assertion : graph.findByPredicate(predicate)) {
                 adjacency.computeIfAbsent(assertion.subject(), key -> new ArrayList<>()).add(assertion);
             }
@@ -161,9 +159,9 @@ public final class GraphRetrievalHead extends BaseHead {
         return adjacency;
     }
 
-    private List<RelationAssertion> collectLocationAssertions(KnowledgeBase graph) {
+    private List<RelationAssertion> collectLocationAssertions(KnowledgeBase graph, java.util.Set<String> locationPredicates) {
         List<RelationAssertion> locationAssertions = new ArrayList<>();
-        for (String predicate : LOCATION_PREDICATES) {
+        for (String predicate : locationPredicates) {
             locationAssertions.addAll(graph.findByPredicate(predicate));
         }
         return locationAssertions;

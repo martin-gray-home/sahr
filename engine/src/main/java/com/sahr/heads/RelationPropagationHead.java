@@ -2,6 +2,7 @@ package com.sahr.heads;
 
 import com.sahr.core.CandidateType;
 import com.sahr.core.HeadContext;
+import com.sahr.core.HeadOntology;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.ReasoningCandidate;
@@ -16,19 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 public final class RelationPropagationHead extends BaseHead {
-    private static final String PREDICATE_AT = "at";
-    private static final String PREDICATE_LOCATED_IN = "locatedIn";
-    private static final String SAHR_COLOCATION = "https://sahr.ai/ontology/relations#colocation";
-
-    private final Set<String> coLocationRelations;
-
     public RelationPropagationHead() {
-        this(Set.of("wear", "wearing", "hold", "holding", "carry", "carrying",
-                "with", "possess", "have", "opposite", "partOf", SAHR_COLOCATION));
-    }
-
-    public RelationPropagationHead(Set<String> coLocationRelations) {
-        this.coLocationRelations = new HashSet<>(coLocationRelations);
     }
 
     @Override
@@ -47,39 +36,26 @@ public final class RelationPropagationHead extends BaseHead {
         OntologyService ontology = context.ontology();
         WorkingMemory memory = context.workingMemory();
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        Set<String> expandedCoLocation = expandCoLocationPredicates(ontology, coLocationRelations);
-
-        List<RelationAssertion> atAssertions = graph.findByPredicate(PREDICATE_AT);
-        List<RelationAssertion> locatedAssertions = graph.findByPredicate(PREDICATE_LOCATED_IN);
-        List<RelationAssertion> locationAssertions = new ArrayList<>(locatedAssertions);
-        locationAssertions.addAll(atAssertions);
-
-        for (RelationAssertion left : atAssertions) {
-            for (RelationAssertion right : locatedAssertions) {
-                if (!left.object().equals(right.subject())) {
-                    continue;
-                }
-                RelationAssertion inferred = new RelationAssertion(
-                        left.subject(),
-                        PREDICATE_LOCATED_IN,
-                        right.object(),
-                        averageConfidence(left.confidence(), right.confidence())
-                );
-                if (exists(graph, inferred)) {
-                    continue;
-                }
-                candidates.add(buildCandidate(inferred, List.of(left.toString(), right.toString()), 1, memory));
+        Set<String> expandedCoLocation = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION);
+        Set<String> locationPredicates = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
+        if (locationPredicates.isEmpty()) {
+            return List.of();
+        }
+        List<RelationAssertion> locationAssertions = new ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (locationPredicates.contains(assertion.predicate())) {
+                locationAssertions.add(assertion);
             }
         }
 
-        for (RelationAssertion left : locatedAssertions) {
-            for (RelationAssertion right : locatedAssertions) {
+        for (RelationAssertion left : locationAssertions) {
+            for (RelationAssertion right : locationAssertions) {
                 if (!left.object().equals(right.subject())) {
                     continue;
                 }
                 RelationAssertion inferred = new RelationAssertion(
                         left.subject(),
-                        PREDICATE_LOCATED_IN,
+                        right.predicate(),
                         right.object(),
                         averageConfidence(left.confidence(), right.confidence())
                 );
@@ -100,7 +76,7 @@ public final class RelationPropagationHead extends BaseHead {
                 }
                 RelationAssertion inferred = new RelationAssertion(
                         relation.object(),
-                        PREDICATE_LOCATED_IN,
+                        location.predicate(),
                         location.object(),
                         averageConfidence(relation.confidence(), location.confidence())
                 );
@@ -121,7 +97,7 @@ public final class RelationPropagationHead extends BaseHead {
                 }
                 RelationAssertion inferred = new RelationAssertion(
                         relation.subject(),
-                        PREDICATE_LOCATED_IN,
+                        location.predicate(),
                         location.object(),
                         averageConfidence(relation.confidence(), location.confidence())
                 );

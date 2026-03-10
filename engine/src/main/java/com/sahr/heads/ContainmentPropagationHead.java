@@ -2,6 +2,7 @@ package com.sahr.heads;
 
 import com.sahr.core.CandidateType;
 import com.sahr.core.EntityNode;
+import com.sahr.core.HeadOntology;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
@@ -18,10 +19,6 @@ import java.util.Map;
 import java.util.Set;
 
 public final class ContainmentPropagationHead extends BaseHead {
-    private static final String PREDICATE_LOCATED_IN = "locatedIn";
-    private static final String CONTAINMENT_IRI = "https://sahr.ai/ontology/relations#containment";
-    private static final String PREDICATE_INSIDE = "inside";
-    private static final String PREDICATE_IN = "in";
     private static final int MAX_CHAIN_DEPTH = 6;
 
     @Override
@@ -42,10 +39,10 @@ public final class ContainmentPropagationHead extends BaseHead {
         java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(query, graph);
         List<ReasoningCandidate> candidates = new ArrayList<>();
 
-        Set<String> containmentPredicates = expandContainmentPredicates(ontology);
-        containmentPredicates.add(PREDICATE_LOCATED_IN);
-        containmentPredicates.add(PREDICATE_INSIDE);
-        containmentPredicates.add(PREDICATE_IN);
+        Set<String> containmentPredicates = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.CONTAINMENT);
+        if (containmentPredicates.isEmpty()) {
+            return List.of();
+        }
 
         Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph, containmentPredicates);
         Set<String> emitted = new HashSet<>();
@@ -62,14 +59,6 @@ public final class ContainmentPropagationHead extends BaseHead {
         }
 
         return candidates;
-    }
-
-    private Set<String> expandContainmentPredicates(OntologyService ontology) {
-        Set<String> expanded = new HashSet<>();
-        expanded.add(CONTAINMENT_IRI);
-        expanded.addAll(ontology.getSubproperties(CONTAINMENT_IRI));
-        addInversePredicates(ontology, expanded);
-        return expanded;
     }
 
     private Map<SymbolId, List<RelationAssertion>> buildAdjacency(KnowledgeBase graph, Set<String> predicates) {
@@ -133,7 +122,8 @@ public final class ContainmentPropagationHead extends BaseHead {
         if (path.size() > 1) {
             confidence = Math.min(1.0, confidence + 0.05 * (path.size() - 1));
         }
-        RelationAssertion inferred = new RelationAssertion(subject, PREDICATE_LOCATED_IN, location, confidence);
+        String predicate = path.isEmpty() ? HeadOntology.LOCATION_TRANSFER : path.get(path.size() - 1).predicate();
+        RelationAssertion inferred = new RelationAssertion(subject, predicate, location, confidence);
         candidates.add(buildCandidate(inferred, buildEvidence(path), path.size()));
         if (query != null && query.type() == QueryGoal.Type.WHERE) {
             if (requestedEntity.isPresent() && !requestedEntity.get().equals(subject)) {
@@ -169,7 +159,7 @@ public final class ContainmentPropagationHead extends BaseHead {
         breakdown.put("graph_confidence", assertion.confidence());
         breakdown.put("depth_boost", depthBoost);
         breakdown.put("ontology_support", 0.6);
-        String answer = assertion.subject() + " " + assertion.predicate() + " " + assertion.object();
+        String answer = assertion.subject() + " " + displayPredicate(assertion.predicate()) + " " + assertion.object();
 
         return new ReasoningCandidate(
                 CandidateType.ANSWER,

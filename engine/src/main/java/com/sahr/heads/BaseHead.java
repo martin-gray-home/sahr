@@ -1,16 +1,13 @@
 package com.sahr.heads;
 
 import com.sahr.core.HeadContext;
-import com.sahr.core.OntologyService;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.SymbolicAttentionHead;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public abstract class BaseHead implements SymbolicAttentionHead {
     @Override
@@ -67,6 +64,19 @@ public abstract class BaseHead implements SymbolicAttentionHead {
         return value != null && (value.startsWith("http://") || value.startsWith("https://"));
     }
 
+    protected String displayPredicate(String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return "";
+        }
+        if (isIri(predicate)) {
+            int idx = Math.max(predicate.lastIndexOf('#'), predicate.lastIndexOf('/'));
+            if (idx >= 0 && idx < predicate.length() - 1) {
+                return predicate.substring(idx + 1);
+            }
+        }
+        return predicate;
+    }
+
     protected String normalizeTypeToken(String raw) {
         if (raw == null) {
             return "";
@@ -78,25 +88,6 @@ public abstract class BaseHead implements SymbolicAttentionHead {
             return raw.substring("entity:".length());
         }
         return raw;
-    }
-
-    protected Set<String> expandCoLocationPredicates(OntologyService ontology, Set<String> predicates) {
-        Set<String> expanded = RelationPredicateAliases.withSahrIriAliases(predicates);
-        for (String predicate : predicates) {
-            if (!RelationPredicateAliases.isIri(predicate)) {
-                continue;
-            }
-            expanded.addAll(ontology.getSubproperties(predicate));
-        }
-        addInversePredicates(ontology, expanded);
-        return expanded;
-    }
-
-    protected void addInversePredicates(OntologyService ontology, Set<String> expanded) {
-        Set<String> snapshot = new HashSet<>(expanded);
-        for (String predicate : snapshot) {
-            ontology.getInverseProperty(predicate).ifPresent(expanded::add);
-        }
     }
 
     protected java.util.Optional<SymbolId> resolveEntityFromQuery(QueryGoal query, com.sahr.core.KnowledgeBase graph) {
