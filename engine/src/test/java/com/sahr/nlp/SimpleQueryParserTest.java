@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class SimpleQueryParserTest {
-    private final SimpleQueryParser parser = new SimpleQueryParser();
+    private final SimpleQueryParser parser = new SimpleQueryParser(true);
 
     @Test
     void bindsEntityTypeFromWhereIs() {
@@ -202,7 +202,7 @@ class SimpleQueryParserTest {
 
         assertEquals(QueryGoal.Type.RELATION, query.type());
         assertEquals("house", query.object());
-        assertEquals("locatedIn", query.predicate());
+        assertEquals("in", query.predicate());
         assertEquals("person", query.expectedType());
     }
 
@@ -213,7 +213,7 @@ class SimpleQueryParserTest {
         assertEquals(QueryGoal.Type.RELATION, query.type());
         assertEquals("red_room", query.object());
         assertEquals("red", query.modifier());
-        assertEquals("locatedIn", query.predicate());
+        assertEquals("in", query.predicate());
         assertEquals("person", query.expectedType());
     }
 
@@ -228,13 +228,13 @@ class SimpleQueryParserTest {
     }
 
     @Test
-    void preservesPrepositionPredicateWhenOntologyDriven() {
-        SimpleQueryParser ontologyParser = new SimpleQueryParser(true);
-        QueryGoal query = ontologyParser.parse("Who is in the house");
+    void mapsPrepositionPredicateWhenLegacyParsing() {
+        SimpleQueryParser legacyParser = new SimpleQueryParser(false);
+        QueryGoal query = legacyParser.parse("Who is in the house");
 
         assertEquals(QueryGoal.Type.RELATION, query.type());
         assertEquals("house", query.object());
-        assertEquals("in", query.predicate());
+        assertEquals("locatedIn", query.predicate());
         assertEquals("person", query.expectedType());
     }
 
@@ -244,7 +244,7 @@ class SimpleQueryParserTest {
 
         assertEquals(QueryGoal.Type.RELATION, query.type());
         assertEquals("house", query.object());
-        assertEquals("locatedIn", query.predicate());
+        assertEquals("in", query.predicate());
         assertEquals("entity", query.expectedType());
     }
 

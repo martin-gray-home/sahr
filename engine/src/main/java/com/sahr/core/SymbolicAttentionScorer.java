@@ -10,7 +10,7 @@ public final class SymbolicAttentionScorer {
     private static final double DEFAULT_ENTITY_MATCH = 0.8;
     private static final double DEFAULT_RELATION_MATCH = 0.7;
     private static final double DEFAULT_TYPE_MATCH = 0.8;
-    private static final List<String> LOCATION_PREDICATES = List.of("at", "locatedIn");
+    private static final List<String> LOCATION_PREDICATES = List.of("at", "in", "locatedIn");
 
     public QueryMatchResult score(HeadContext context, ReasoningCandidate candidate) {
         QueryGoal query = context.query();

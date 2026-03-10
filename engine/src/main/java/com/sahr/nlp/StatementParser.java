@@ -45,7 +45,7 @@ public final class StatementParser {
     private final boolean ontologyDriven;
 
     public StatementParser() {
-        this(false);
+        this(true);
     }
 
     public StatementParser(boolean ontologyDriven) {

@@ -26,6 +26,6 @@ class SahrAgentTypeIngestionTest {
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The man is a doctor"));
-        assertEquals("entity:man locatedIn entity:room", agent.handle("Where is the doctor"));
+        assertEquals("entity:man in entity:room", agent.handle("Where is the doctor"));
     }
 }

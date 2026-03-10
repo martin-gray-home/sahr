@@ -7,11 +7,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StatementParserTest {
-    private final StatementParser parser = new StatementParser();
+    private final StatementParser parser = new StatementParser(true);
 
     @Test
     void parsesLocatedInStatement() {
         Statement statement = parser.parse("The person is in the house").orElseThrow();
+
+        assertEquals("entity:person", statement.subject().value());
+        assertEquals("entity:house", statement.object().value());
+        assertEquals("in", statement.predicate());
+    }
+
+    @Test
+    void mapsLocatedInWhenLegacyParsing() {
+        StatementParser legacyParser = new StatementParser(false);
+        Statement statement = legacyParser.parse("The person is in the house").orElseThrow();
 
         assertEquals("entity:person", statement.subject().value());
         assertEquals("entity:house", statement.object().value());
@@ -62,7 +72,7 @@ class StatementParserTest {
         all.add(statement);
 
         assertTrue(all.stream().anyMatch(item ->
-                "locatedIn".equals(item.predicate())
+                "in".equals(item.predicate())
                         && "entity:man".equals(item.subject().value())
                         && "entity:room".equals(item.object().value())));
         assertTrue(all.stream().anyMatch(item ->
@@ -89,7 +99,7 @@ class StatementParserTest {
         all.add(statement);
 
         assertTrue(all.stream().anyMatch(item ->
-                "locatedIn".equals(item.predicate())
+                "in".equals(item.predicate())
                         && "entity:boy".equals(item.subject().value())
                         && "entity:garden".equals(item.object().value())));
     }
@@ -212,15 +222,14 @@ class StatementParserTest {
         all.add(statement);
 
         assertTrue(all.stream().anyMatch(item ->
-                "locatedIn".equals(item.predicate())
+                "in".equals(item.predicate())
                         && "entity:man".equals(item.subject().value())
                         && "entity:red_room".equals(item.object().value())));
     }
 
     @Test
     void preservesPrepositionPredicateWhenOntologyDriven() {
-        StatementParser ontologyParser = new StatementParser(true);
-        Statement statement = ontologyParser.parse("The man is in the room").orElseThrow();
+        Statement statement = parser.parse("The man is in the room").orElseThrow();
 
         assertEquals("in", statement.predicate());
     }

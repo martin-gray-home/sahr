@@ -25,7 +25,7 @@ class SahrAgentIngestionTest {
         SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
 
         assertEquals("Assertion recorded.", agent.handle("The person is in the house"));
-        assertEquals("entity:person locatedIn entity:house", agent.handle("Where is the person?"));
+        assertEquals("entity:person in entity:house", agent.handle("Where is the person?"));
     }
 
     @Test
@@ -41,6 +41,6 @@ class SahrAgentIngestionTest {
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The man is wearing a hat"));
 
-        assertEquals("entity:hat locatedIn entity:room", agent.handle("Where is the hat"));
+        assertEquals("entity:hat in entity:room", agent.handle("Where is the hat"));
     }
 }

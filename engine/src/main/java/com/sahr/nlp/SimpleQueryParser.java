@@ -29,7 +29,7 @@ public final class SimpleQueryParser {
     private final boolean ontologyDriven;
 
     public SimpleQueryParser() {
-        this(false);
+        this(true);
     }
 
     public SimpleQueryParser(boolean ontologyDriven) {

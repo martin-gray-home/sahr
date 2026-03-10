@@ -179,6 +179,6 @@ class SahrAgentQueryTest {
                 java.util.Set.of("concept:woman")
         ));
 
-        assertEquals("entity:woman locatedIn entity:room", agent.handle("Where is the woman"));
+        assertEquals("entity:woman in entity:room", agent.handle("Where is the woman"));
     }
 }
