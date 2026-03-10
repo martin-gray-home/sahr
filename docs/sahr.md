@@ -257,6 +257,9 @@ heads infer location transfer for relations like `inside` and `on`.
 `GraphRetrievalHead` now follows short location chains (e.g., `inside` →
 `locatedIn`) and can answer colocation-based location queries directly
 when the derived assertion is not yet materialized.
+For non-question inputs, the agent always prefers the
+`assertion-insertion` candidate so statement ingestion cannot be
+pre-empted by propagation heads.
 
 Follow-up Resolution
 --------------------

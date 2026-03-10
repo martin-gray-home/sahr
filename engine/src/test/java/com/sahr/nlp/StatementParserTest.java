@@ -35,4 +35,22 @@ class StatementParserTest {
         assertEquals("entity:hat", statement.object().value());
         assertEquals("wear", statement.predicate());
     }
+
+    @Test
+    void parsesWithHoldingAndCarryingStatements() {
+        Statement with = parser.parse("The woman is with the man").orElseThrow();
+        assertEquals("entity:woman", with.subject().value());
+        assertEquals("entity:man", with.object().value());
+        assertEquals("with", with.predicate());
+
+        Statement carrying = parser.parse("The woman is carrying a bag").orElseThrow();
+        assertEquals("entity:woman", carrying.subject().value());
+        assertEquals("entity:bag", carrying.object().value());
+        assertEquals("carry", carrying.predicate());
+
+        Statement holding = parser.parse("The man is holding a key").orElseThrow();
+        assertEquals("entity:man", holding.subject().value());
+        assertEquals("entity:key", holding.object().value());
+        assertEquals("hold", holding.predicate());
+    }
 }

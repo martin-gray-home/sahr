@@ -43,6 +43,7 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
         WorkingMemory memory = context.workingMemory();
+        java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(requestedType, graph);
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
         Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph);
@@ -51,7 +52,7 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
         java.util.Set<String> expandedCoLocation = expandCoLocationPredicates(ontology);
         for (String predicate : LOCATION_PREDICATES) {
             for (RelationAssertion assertion : graph.findByPredicate(predicate)) {
-                boolean typeMatch = matchesType(graph, ontology, assertion, requestedType);
+                boolean typeMatch = matchesType(graph, ontology, assertion, requestedType, requestedEntity);
                 if (!typeMatch) {
                     continue;
                 }
@@ -108,7 +109,7 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
                 if (inferredSubject == null) {
                     continue;
                 }
-                if (!matchesType(graph, ontology, inferredSubject, requestedType)) {
+                if (!matchesType(graph, ontology, inferredSubject, requestedType, requestedEntity)) {
                     continue;
                 }
                 String key = inferredSubject.value() + "|" + location.object().value();
@@ -223,9 +224,16 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
         return expanded;
     }
 
-    private boolean matchesType(KnowledgeBase graph, OntologyService ontology, SymbolId subject, String requestedType) {
+    private boolean matchesType(KnowledgeBase graph,
+                                OntologyService ontology,
+                                SymbolId subject,
+                                String requestedType,
+                                java.util.Optional<SymbolId> requestedEntity) {
         if (requestedType == null || requestedType.isBlank()) {
             return true;
+        }
+        if (requestedEntity.isPresent()) {
+            return requestedEntity.get().equals(subject);
         }
         String normalizedRequested = normalizeTypeToken(requestedType);
         if (normalizeTypeToken(subject.value()).equals(normalizedRequested)) {
@@ -240,9 +248,16 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
                 .orElse(false);
     }
 
-    private boolean matchesType(KnowledgeBase graph, OntologyService ontology, RelationAssertion assertion, String requestedType) {
+    private boolean matchesType(KnowledgeBase graph,
+                                OntologyService ontology,
+                                RelationAssertion assertion,
+                                String requestedType,
+                                java.util.Optional<SymbolId> requestedEntity) {
         if (requestedType == null || requestedType.isBlank()) {
             return true;
+        }
+        if (requestedEntity.isPresent()) {
+            return requestedEntity.get().equals(assertion.subject());
         }
         String normalizedRequested = normalizeTypeToken(requestedType);
         if (normalizeTypeToken(assertion.subject().value()).equals(normalizedRequested)) {
@@ -268,6 +283,21 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
             return raw.substring("entity:".length());
         }
         return raw;
+    }
+
+    private java.util.Optional<SymbolId> resolveEntityFromQuery(String requestedType, KnowledgeBase graph) {
+        if (requestedType == null || requestedType.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        String normalized = normalizeTypeToken(requestedType);
+        if (normalized.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        SymbolId candidate = new SymbolId("entity:" + normalized);
+        if (graph.findEntity(candidate).isPresent()) {
+            return java.util.Optional.of(candidate);
+        }
+        return java.util.Optional.empty();
     }
 
     private double normalize(double... parts) {

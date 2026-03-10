@@ -344,7 +344,8 @@ public final class SahrAgent {
             }
             return "No candidates produced.";
         }
-        ReasoningCandidate winner = candidates.get(0);
+        ReasoningCandidate winner = selectStatementCandidate(context, query, candidates)
+                .orElseGet(() -> candidates.get(0));
         trace.addEntry(new ReasoningTraceEntry(query, candidates, winner));
         logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                 + " score=" + winner.score());
@@ -353,6 +354,24 @@ public final class SahrAgent {
             return resolveQuestionAfterAssertion(query, 2);
         }
         return result;
+    }
+
+    private java.util.Optional<ReasoningCandidate> selectStatementCandidate(HeadContext context,
+                                                                             QueryGoal query,
+                                                                             List<ReasoningCandidate> candidates) {
+        if (isQuestion(query)) {
+            return java.util.Optional.empty();
+        }
+        if (context == null || context.statement().isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        for (ReasoningCandidate candidate : candidates) {
+            if (CandidateType.ASSERTION.equals(candidate.type())
+                    && "assertion-insertion".equals(candidate.producedBy())) {
+                return java.util.Optional.of(candidate);
+            }
+        }
+        return java.util.Optional.empty();
     }
 
     private String handleWithSubgoals(QueryGoal root, Statement statement) {
@@ -420,6 +439,11 @@ public final class SahrAgent {
 
     private ReasoningCandidate selectPreferredCandidate(List<ReasoningCandidate> candidates) {
         ReasoningCandidate winner = candidates.get(0);
+        for (ReasoningCandidate candidate : candidates) {
+            if (CandidateType.ANSWER.equals(candidate.type())) {
+                return candidate;
+            }
+        }
         if (CandidateType.SUBGOAL.equals(winner.type())) {
             for (ReasoningCandidate candidate : candidates) {
                 if (CandidateType.ASSERTION.equals(candidate.type())) {

@@ -35,6 +35,7 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
         QueryGoal query = context.query();
+        java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(query, graph);
         List<ReasoningCandidate> candidates = new ArrayList<>();
 
         Set<String> containmentPredicates = expandContainmentPredicates(ontology);
@@ -52,7 +53,7 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
                 Set<SymbolId> visited = new HashSet<>();
                 visited.add(subject);
                 visited.add(relation.object());
-                walkContainment(subject, relation.object(), adjacency, path, visited, candidates, emitted, query, graph, ontology);
+                walkContainment(subject, relation.object(), adjacency, path, visited, candidates, emitted, query, graph, ontology, requestedEntity);
             }
         }
 
@@ -87,15 +88,16 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
                                  Set<String> emitted,
                                  QueryGoal query,
                                  KnowledgeBase graph,
-                                 OntologyService ontology) {
+                                 OntologyService ontology,
+                                 java.util.Optional<SymbolId> requestedEntity) {
         if (path.size() >= MAX_CHAIN_DEPTH) {
-            emitCandidate(root, current, path, candidates, emitted, query, graph, ontology);
+            emitCandidate(root, current, path, candidates, emitted, query, graph, ontology, requestedEntity);
             return;
         }
 
         List<RelationAssertion> nextEdges = adjacency.getOrDefault(current, List.of());
         if (nextEdges.isEmpty()) {
-            emitCandidate(root, current, path, candidates, emitted, query, graph, ontology);
+            emitCandidate(root, current, path, candidates, emitted, query, graph, ontology, requestedEntity);
             return;
         }
 
@@ -104,7 +106,7 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
                 continue;
             }
             path.add(next);
-            walkContainment(root, next.object(), adjacency, path, visited, candidates, emitted, query, graph, ontology);
+            walkContainment(root, next.object(), adjacency, path, visited, candidates, emitted, query, graph, ontology, requestedEntity);
             path.remove(path.size() - 1);
             visited.remove(next.object());
         }
@@ -117,7 +119,8 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
                                Set<String> emitted,
                                QueryGoal query,
                                KnowledgeBase graph,
-                               OntologyService ontology) {
+                               OntologyService ontology,
+                               java.util.Optional<SymbolId> requestedEntity) {
         String key = subject.value() + "|" + location.value();
         if (!emitted.add(key)) {
             return;
@@ -129,6 +132,9 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
         RelationAssertion inferred = new RelationAssertion(subject, PREDICATE_LOCATED_IN, location, confidence);
         candidates.add(buildCandidate(inferred, buildEvidence(path), path.size()));
         if (query != null && query.type() == QueryGoal.Type.WHERE) {
+            if (requestedEntity.isPresent() && !requestedEntity.get().equals(subject)) {
+                return;
+            }
             if (matchesType(graph, ontology, subject, query.entityType())) {
                 candidates.add(buildAnswerCandidate(inferred, path));
             }
@@ -236,5 +242,24 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
             return raw.substring("entity:".length());
         }
         return raw;
+    }
+
+    private java.util.Optional<SymbolId> resolveEntityFromQuery(QueryGoal query, KnowledgeBase graph) {
+        if (query == null || query.type() != QueryGoal.Type.WHERE) {
+            return java.util.Optional.empty();
+        }
+        String requestedType = query.entityType();
+        if (requestedType == null || requestedType.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        String normalized = normalizeTypeToken(requestedType);
+        if (normalized.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        SymbolId candidate = new SymbolId("entity:" + normalized);
+        if (graph.findEntity(candidate).isPresent()) {
+            return java.util.Optional.of(candidate);
+        }
+        return java.util.Optional.empty();
     }
 }
