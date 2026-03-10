@@ -1,0 +1,27 @@
+@prefix head: <https://sahr.ai/ontology/head#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://sahr.ai/ontology/head>
+    a owl:Ontology ;
+    rdfs:label "SAHR Head Ontology" .
+
+head:locationTransfer a owl:ObjectProperty ;
+    rdfs:label "location transfer" .
+
+head:colocation a owl:ObjectProperty ;
+    rdfs:label "colocation" .
+
+head:containment a owl:ObjectProperty ;
+    rdfs:label "containment" ;
+    rdfs:subPropertyOf head:locationTransfer .
+
+head:surfaceContact a owl:ObjectProperty ;
+    rdfs:label "surface contact" ;
+    rdfs:subPropertyOf head:locationTransfer .
+
+head:dependencyChain a owl:ObjectProperty ;
+    rdfs:label "dependency chain" .
+
+head:attributeRelation a owl:ObjectProperty ;
+    rdfs:label "attribute relation" .

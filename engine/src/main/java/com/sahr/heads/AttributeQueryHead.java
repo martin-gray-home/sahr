@@ -2,7 +2,9 @@ package com.sahr.heads;
 
 import com.sahr.core.CandidateType;
 import com.sahr.core.HeadContext;
+import com.sahr.core.HeadOntology;
 import com.sahr.core.KnowledgeBase;
+import com.sahr.core.OntologyService;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
@@ -15,8 +17,6 @@ import java.util.List;
 import java.util.Map;
 
 public final class AttributeQueryHead extends BaseHead {
-    private static final String ATTRIBUTE_PREDICATE = "hasAttribute";
-
     @Override
     public String getName() {
         return "attribute-query";
@@ -38,11 +38,16 @@ public final class AttributeQueryHead extends BaseHead {
         }
         SymbolId subject = new SymbolId(query.subject());
         KnowledgeBase graph = context.graph();
+        OntologyService ontology = context.ontology();
         WorkingMemory memory = context.workingMemory();
+        java.util.Set<String> attributePredicates = HeadOntology.expandFamily(ontology, HeadOntology.ATTRIBUTE_RELATION);
+        if (attributePredicates.isEmpty()) {
+            return List.of();
+        }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
         for (RelationAssertion assertion : graph.findBySubject(subject)) {
-            if (!ATTRIBUTE_PREDICATE.equals(assertion.predicate())) {
+            if (!attributePredicates.contains(assertion.predicate())) {
                 continue;
             }
             String objectValue = assertion.object().value().replace("entity:", "");

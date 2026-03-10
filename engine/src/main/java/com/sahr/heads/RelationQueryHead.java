@@ -3,6 +3,7 @@ package com.sahr.heads;
 import com.sahr.core.CandidateType;
 import com.sahr.core.EntityNode;
 import com.sahr.core.HeadContext;
+import com.sahr.core.HeadOntology;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.QueryGoal;
@@ -67,10 +68,10 @@ public final class RelationQueryHead extends BaseHead {
         String modifier = query.modifier();
 
         if (modifier != null && !modifier.isBlank()) {
-            if (subject != null && !entityHasAttribute(graph, subject, modifier)) {
+            if (subject != null && !entityHasAttribute(graph, ontology, subject, modifier)) {
                 return List.of();
             }
-            if (object != null && !entityHasAttribute(graph, object, modifier)) {
+            if (object != null && !entityHasAttribute(graph, ontology, object, modifier)) {
                 return List.of();
             }
         }
@@ -141,10 +142,10 @@ public final class RelationQueryHead extends BaseHead {
                                                    String expectedType) {
         String modifier = query.modifier();
         if (modifier != null && !modifier.isBlank()) {
-            if (object != null && !entityHasAttribute(graph, object, modifier)) {
+            if (object != null && !entityHasAttribute(graph, ontology, object, modifier)) {
                 return List.of(buildCountAnswer(0, predicate));
             }
-            if (object == null && subject != null && !entityHasAttribute(graph, subject, modifier)) {
+            if (object == null && subject != null && !entityHasAttribute(graph, ontology, subject, modifier)) {
                 return List.of(buildCountAnswer(0, predicate));
             }
         }
@@ -245,13 +246,17 @@ public final class RelationQueryHead extends BaseHead {
         );
     }
 
-    private boolean entityHasAttribute(KnowledgeBase graph, SymbolId entity, String modifier) {
+    private boolean entityHasAttribute(KnowledgeBase graph, OntologyService ontology, SymbolId entity, String modifier) {
         if (entity == null || modifier == null || modifier.isBlank()) {
             return true;
         }
         String normalized = modifier.toLowerCase(java.util.Locale.ROOT);
+        java.util.Set<String> attributePredicates = HeadOntology.expandFamily(ontology, HeadOntology.ATTRIBUTE_RELATION);
+        if (attributePredicates.isEmpty()) {
+            return false;
+        }
         for (RelationAssertion assertion : graph.findBySubject(entity)) {
-            if (!"hasAttribute".equals(assertion.predicate())) {
+            if (!attributePredicates.contains(assertion.predicate())) {
                 continue;
             }
             String value = assertion.object().value().replace("entity:", "").toLowerCase(java.util.Locale.ROOT);

@@ -58,7 +58,7 @@ public final class QueryAlignmentHead extends BaseHead {
             breakdown.put("ontology_support", ontologySupport);
             breakdown.put("graph_confidence", graphConfidence);
 
-            String answer = assertion.subject() + " " + assertion.predicate() + " " + assertion.object();
+            String answer = assertion.subject() + " " + displayPredicate(assertion.predicate()) + " " + assertion.object();
 
             candidates.add(new ReasoningCandidate(
                     CandidateType.ANSWER,
