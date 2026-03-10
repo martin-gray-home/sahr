@@ -177,6 +177,11 @@ public final class SimpleQueryParser {
                 return withQuery;
             }
 
+            Optional<QueryGoal> whPrepObject = parseWhPrepositionObjectQuery(graph);
+            if (whPrepObject.isPresent()) {
+                return whPrepObject;
+            }
+
             Optional<QueryGoal> whSubject = parseWhSubjectQuery(graph);
             if (whSubject.isPresent()) {
                 return whSubject;
@@ -312,20 +317,23 @@ public final class SimpleQueryParser {
                 CoreLabel subject = edge.getDependent().backingLabel();
                 CoreLabel verb = edge.getGovernor().backingLabel();
                 CoreLabel object = findDependent(graph, edge.getGovernor(), "obj");
-                if (object == null) {
-                    continue;
-                }
-
                 String subjectToken = normalizeToken(subject.word());
-                String objectToken = normalizeToken(object.word());
-                if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+                if (subjectToken.isEmpty()) {
                     continue;
                 }
 
                 String predicate = verb.lemma().toLowerCase(Locale.ROOT);
                 String predicateText = "is " + verb.word().toLowerCase(Locale.ROOT);
                 String subjectText = withDeterminer(graph, subject);
-                String objectText = withDeterminer(graph, object);
+                String objectToken = null;
+                String objectText = null;
+                if (object != null) {
+                    objectToken = normalizeToken(object.word());
+                    if (objectToken.isEmpty()) {
+                        continue;
+                    }
+                    objectText = withDeterminer(graph, object);
+                }
                 return Optional.of(QueryGoal.yesNo(subjectToken, predicate, objectToken, null, subjectText, objectText, predicateText));
             }
         }
@@ -500,6 +508,40 @@ public final class SimpleQueryParser {
         return Optional.empty();
     }
 
+    private Optional<QueryGoal> parseWhPrepositionObjectQuery(SemanticGraph graph) {
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            String relation = edge.getRelation().getShortName();
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific == null) {
+                continue;
+            }
+            String prep = specific.toLowerCase(Locale.ROOT);
+            if (!PREPOSITION_RELATIONS.contains(prep)) {
+                continue;
+            }
+            CoreLabel whObject = edge.getDependent().backingLabel();
+            String wh = normalizeToken(whObject.lemma());
+            if (!WH_TOKENS.contains(wh)) {
+                continue;
+            }
+
+            CoreLabel subject = findDependent(graph, edge.getGovernor(), "nsubj");
+            if (subject == null) {
+                continue;
+            }
+            String subjectToken = normalizeToken(subject.word());
+            if (subjectToken.isEmpty()) {
+                continue;
+            }
+            String predicate = mapPrepositionPredicate(prep);
+            return Optional.of(QueryGoal.relation(subjectToken, predicate, null, expectedTypeForWh(wh)));
+        }
+        return Optional.empty();
+    }
+
     private Optional<QueryGoal> parseWhPrepositionFallback(String input) {
         String normalized = input.toLowerCase(Locale.ROOT);
         List<String> tokens = tokenize(normalized);
@@ -522,10 +564,18 @@ public final class SimpleQueryParser {
         }
         SubjectModifier objectModifier = subjectModifierAfter(tokens, prepIndex);
         String objectToken = objectModifier.subject;
+        String predicate = mapPrepositionPredicate(prep);
         if (objectToken == null) {
+            if (!tokens.isEmpty() && wh.equals(tokens.get(0)) && prepIndex == tokens.size() - 1) {
+                int subjectIndex = firstContentIndexAfter(tokens, 1);
+                if (subjectIndex < 0) {
+                    return Optional.empty();
+                }
+                String subject = tokens.get(subjectIndex);
+                return Optional.of(QueryGoal.relation(subject, predicate, null, expectedTypeForWh(wh)));
+            }
             return Optional.empty();
         }
-        String predicate = mapPrepositionPredicate(prep);
         return Optional.of(QueryGoal.relationWithModifier(null, predicate, objectToken, expectedTypeForWh(wh), objectModifier.modifier));
     }
 

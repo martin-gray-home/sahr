@@ -408,8 +408,13 @@ public final class SahrAgent {
 
     private String handleSingle(HeadContext context, QueryGoal query, boolean questionLike) {
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
-        if ((isQuestion(query) || questionLike) && hasOnlyAssertionInsertion(candidates)) {
-            return isYesNo(query) ? "Unknown." : "No candidates produced.";
+        boolean question = isQuestion(query) || questionLike;
+        if (question) {
+            List<ReasoningCandidate> questionCandidates = filterQuestionCandidates(candidates);
+            if (questionCandidates.isEmpty()) {
+                return isYesNo(query) ? "Unknown." : "No candidates produced.";
+            }
+            candidates = questionCandidates;
         }
         if (candidates.isEmpty()) {
             if (isYesNo(query)) {
@@ -461,6 +466,7 @@ public final class SahrAgent {
         java.util.ArrayDeque<QueryGoal> queue = new java.util.ArrayDeque<>();
         queue.add(root);
         int processed = 0;
+        boolean question = isQuestion(root) || questionLike;
 
         while (!queue.isEmpty() && processed < MAX_SUBGOALS) {
             QueryGoal current = queue.removeFirst();
@@ -476,10 +482,13 @@ public final class SahrAgent {
             );
             List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
             if (current.goalId().equals(root.goalId())
-                    && (isQuestion(root) || questionLike)
-                    && hasOnlyAssertionInsertion(candidates)) {
-                workingMemory.popGoal();
-                return isYesNo(root) ? "Unknown." : "No candidates produced.";
+                    && question) {
+                List<ReasoningCandidate> questionCandidates = filterQuestionCandidates(candidates);
+                if (questionCandidates.isEmpty()) {
+                    workingMemory.popGoal();
+                    return isYesNo(root) ? "Unknown." : "No candidates produced.";
+                }
+                candidates = questionCandidates;
             }
             if (candidates.isEmpty()) {
                 workingMemory.popGoal();
@@ -566,6 +575,25 @@ public final class SahrAgent {
             return false;
         }
         return true;
+    }
+
+    private List<ReasoningCandidate> filterQuestionCandidates(List<ReasoningCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        List<ReasoningCandidate> allowed = new java.util.ArrayList<>();
+        for (ReasoningCandidate candidate : candidates) {
+            if (CandidateType.ANSWER.equals(candidate.type())
+                    || CandidateType.SUBGOAL.equals(candidate.type())) {
+                allowed.add(candidate);
+                continue;
+            }
+            if (CandidateType.ASSERTION.equals(candidate.type())
+                    && !"assertion-insertion".equals(candidate.producedBy())) {
+                allowed.add(candidate);
+            }
+        }
+        return allowed;
     }
 
     private ReasoningCandidate selectPreferredCandidate(List<ReasoningCandidate> candidates) {

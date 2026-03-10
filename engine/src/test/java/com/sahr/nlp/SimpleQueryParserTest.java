@@ -95,6 +95,16 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesRelationQueryFromWhPrepositionObjectPattern() {
+        QueryGoal query = parser.parse("What is the man sitting on");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("man", query.subject());
+        assertEquals("on", query.predicate());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromWhoIsInPattern() {
         QueryGoal query = parser.parse("Who is in the house");
 
@@ -122,6 +132,15 @@ class SimpleQueryParserTest {
         assertEquals("man", query.subject());
         assertEquals("hat", query.object());
         assertEquals("wear", query.predicate());
+    }
+
+    @Test
+    void parsesYesNoQueryWithoutObject() {
+        QueryGoal query = parser.parse("Is the man sitting");
+
+        assertEquals(QueryGoal.Type.YESNO, query.type());
+        assertEquals("man", query.subject());
+        assertEquals("sit", query.predicate());
     }
 
     @Test
