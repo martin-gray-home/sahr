@@ -14,7 +14,9 @@ import com.sahr.heads.RelationPropagationHead;
 import com.sahr.heads.RelationQueryHead;
 import com.sahr.heads.SubgoalExpansionHead;
 import com.sahr.heads.SurfaceContactPropagationHead;
+import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.support.HeadOntologyTestSupport;
 import org.junit.jupiter.api.Test;
 
@@ -134,6 +136,8 @@ class ComplexSentenceQueryScenarioTest {
     }
 
     private SahrAgent newAgent() {
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
         return new SahrAgent(
                 new InMemoryKnowledgeBase(),
                 HeadOntologyTestSupport.createOntology(),
@@ -150,7 +154,9 @@ class ComplexSentenceQueryScenarioTest {
                         new DependencyChainHead(),
                         new QueryAlignmentHead()
                 )),
-                new SimpleQueryParser()
+                parser,
+                statementParser,
+                new NoopTermMapper()
         );
     }
 
