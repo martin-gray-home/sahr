@@ -55,14 +55,14 @@ class ComplexSentenceScenarioTest {
         assertEquals("entity:dog", agent.handle("What is the man with"));
 
         String whoIsWithDog = agent.handle("Who is with the dog");
-        assertTrue(Set.of("entity:man", "entity:boy").contains(whoIsWithDog));
+        assertTrue(Set.of("entity:man", "entity:boy", "entity:man, entity:boy").contains(whoIsWithDog));
 
         assertTrue(agent.handle("Is the man with the dog").startsWith("Yes,"));
         assertTrue(agent.handle("Is the boy with the dog").startsWith("Yes,"));
 
         assertEquals("red", agent.handle("What color is the dog"));
         String whoIsWithRedDog = agent.handle("Who is with the red dog");
-        assertTrue(Set.of("entity:man", "entity:boy").contains(whoIsWithRedDog));
+        assertTrue(Set.of("entity:man", "entity:boy", "entity:man, entity:boy").contains(whoIsWithRedDog));
         assertEquals("2", agent.handle("How many people are in the room"));
         assertEquals("2", agent.handle("How many people with the dog"));
     }

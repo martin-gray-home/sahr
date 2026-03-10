@@ -146,14 +146,8 @@ class SahrAgentQueryTest {
         assertEquals("Assertion recorded.", agent.handle("The man is with the mother"));
         assertEquals("Assertion recorded.", agent.handle("The boy is with the mother"));
 
-        String first = agent.handle("Who is with the mother");
-        String second = agent.handle("Who else is with the mother");
-
-        if ("entity:man".equals(first)) {
-            assertEquals("entity:boy", second);
-        } else {
-            assertEquals("entity:man", second);
-        }
+        assertEquals("entity:man, entity:boy", agent.handle("Who is with the mother"));
+        assertEquals("No candidates produced.", agent.handle("Who else is with the mother"));
     }
 
     @Test

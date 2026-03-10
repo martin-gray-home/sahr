@@ -389,6 +389,11 @@ public final class SahrAgent {
                 logger.fine(() -> "Follow-up winner type=" + winner.type()
                         + " producedBy=" + winner.producedBy()
                         + " score=" + winner.score());
+                String multiAnswer = buildMultiAnswer(query, followUp);
+                if (multiAnswer != null) {
+                    recordAnswerValues(query, extractAnswerValues(followUp));
+                    return multiAnswer;
+                }
                 recordAnswerIfPossible(query, winner.payload());
                 return winner.payload().toString();
             }
@@ -417,6 +422,13 @@ public final class SahrAgent {
         trace.addEntry(new ReasoningTraceEntry(query, candidates, winner));
         logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                 + " score=" + winner.score());
+        if (CandidateType.ANSWER.equals(winner.type())) {
+            String multiAnswer = buildMultiAnswer(query, candidates);
+            if (multiAnswer != null) {
+                recordAnswerValues(query, extractAnswerValues(candidates));
+                return multiAnswer;
+            }
+        }
         String result = applyCandidate(winner);
         if (CandidateType.ASSERTION.equals(winner.type()) && isQuestion(query)) {
             return resolveQuestionAfterAssertion(query, 2);
@@ -506,6 +518,12 @@ public final class SahrAgent {
                     queue.addLast(root);
                     workingMemory.popGoal();
                     continue;
+                }
+                String multiAnswer = buildMultiAnswer(root, candidates);
+                if (multiAnswer != null) {
+                    recordAnswerValues(root, extractAnswerValues(candidates));
+                    workingMemory.popGoal();
+                    return multiAnswer;
                 }
                 recordAnswerIfPossible(root, winner.payload());
                 workingMemory.popGoal();
@@ -608,6 +626,56 @@ public final class SahrAgent {
             return;
         }
         workingMemory.recordAnswer(key, answer);
+    }
+
+    private void recordAnswerValues(QueryGoal query, java.util.List<String> answers) {
+        if (query == null || answers == null || answers.isEmpty()) {
+            return;
+        }
+        QueryKey key = QueryKey.from(query);
+        if (key == null) {
+            return;
+        }
+        for (String answer : answers) {
+            if (answer == null || answer.isBlank()) {
+                continue;
+            }
+            workingMemory.recordAnswer(key, answer);
+        }
+    }
+
+    private String buildMultiAnswer(QueryGoal query, List<ReasoningCandidate> candidates) {
+        if (query == null || query.discourseModifier() != null || query.type() != QueryGoal.Type.RELATION) {
+            return null;
+        }
+        java.util.List<String> values = extractAnswerValues(candidates);
+        if (values.size() <= 1) {
+            return null;
+        }
+        return String.join(", ", values);
+    }
+
+    private java.util.List<String> extractAnswerValues(List<ReasoningCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        java.util.LinkedHashSet<String> values = new java.util.LinkedHashSet<>();
+        for (ReasoningCandidate candidate : candidates) {
+            if (!CandidateType.ANSWER.equals(candidate.type())) {
+                continue;
+            }
+            Object payload = candidate.payload();
+            String value = null;
+            if (payload instanceof SymbolId) {
+                value = ((SymbolId) payload).value();
+            } else if (payload instanceof String) {
+                value = payload.toString();
+            }
+            if (value != null && !value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return new java.util.ArrayList<>(values);
     }
 
     private void upsertEntity(SymbolId id, Set<String> types) {
