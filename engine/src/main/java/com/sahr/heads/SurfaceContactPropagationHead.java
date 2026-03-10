@@ -2,6 +2,7 @@ package com.sahr.heads;
 
 import com.sahr.core.CandidateType;
 import com.sahr.core.HeadContext;
+import com.sahr.core.HeadOntology;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.ReasoningCandidate;
@@ -15,9 +16,6 @@ import java.util.Map;
 import java.util.Set;
 
 public final class SurfaceContactPropagationHead extends BaseHead {
-    private static final String PREDICATE_LOCATED_IN = "locatedIn";
-    private static final String SURFACE_IRI = "https://sahr.ai/ontology/relations#surfaceContact";
-
     @Override
     public String getName() {
         return "surface-contact-propagation";
@@ -34,8 +32,17 @@ public final class SurfaceContactPropagationHead extends BaseHead {
         OntologyService ontology = context.ontology();
         List<ReasoningCandidate> candidates = new ArrayList<>();
 
-        Set<String> surfacePredicates = expandSurfacePredicates(ontology);
-        List<RelationAssertion> locatedAssertions = graph.findByPredicate(PREDICATE_LOCATED_IN);
+        Set<String> surfacePredicates = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.SURFACE_CONTACT);
+        Set<String> locationPredicates = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
+        if (surfacePredicates.isEmpty() || locationPredicates.isEmpty()) {
+            return List.of();
+        }
+        List<RelationAssertion> locatedAssertions = new ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (locationPredicates.contains(assertion.predicate())) {
+                locatedAssertions.add(assertion);
+            }
+        }
 
         for (RelationAssertion relation : graph.getAllAssertions()) {
             if (!surfacePredicates.contains(relation.predicate())) {
@@ -47,7 +54,7 @@ public final class SurfaceContactPropagationHead extends BaseHead {
                 }
                 RelationAssertion inferred = new RelationAssertion(
                         relation.subject(),
-                        PREDICATE_LOCATED_IN,
+                        location.predicate(),
                         location.object(),
                         averageConfidence(relation.confidence(), location.confidence())
                 );
@@ -59,14 +66,6 @@ public final class SurfaceContactPropagationHead extends BaseHead {
         }
 
         return candidates;
-    }
-
-    private Set<String> expandSurfacePredicates(OntologyService ontology) {
-        Set<String> expanded = new HashSet<>();
-        expanded.add(SURFACE_IRI);
-        expanded.addAll(ontology.getSubproperties(SURFACE_IRI));
-        addInversePredicates(ontology, expanded);
-        return expanded;
     }
 
     private boolean exists(KnowledgeBase graph, RelationAssertion assertion) {

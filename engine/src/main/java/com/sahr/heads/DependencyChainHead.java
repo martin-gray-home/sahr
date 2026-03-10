@@ -1,6 +1,8 @@
 package com.sahr.heads;
 
 import com.sahr.core.CandidateType;
+import com.sahr.core.HeadOntology;
+import com.sahr.core.OntologyService;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.QueryGoal;
@@ -46,8 +48,13 @@ public final class DependencyChainHead extends BaseHead {
         }
 
         KnowledgeBase graph = context.graph();
+        OntologyService ontology = context.ontology();
         SymbolId start = new SymbolId(query.subject());
-        List<RelationAssertion> chain = followChain(graph, start, query.predicate());
+        Set<String> dependencyPredicates = HeadOntology.expandFamily(ontology, HeadOntology.DEPENDENCY_CHAIN);
+        if (dependencyPredicates.isEmpty() || !dependencyPredicates.contains(query.predicate())) {
+            return List.of();
+        }
+        List<RelationAssertion> chain = followChain(graph, start, dependencyPredicates);
         if (chain.size() < 2) {
             return List.of();
         }
@@ -81,11 +88,10 @@ public final class DependencyChainHead extends BaseHead {
         ));
     }
 
-    private List<RelationAssertion> followChain(KnowledgeBase graph, SymbolId start, String predicate) {
+    private List<RelationAssertion> followChain(KnowledgeBase graph, SymbolId start, Set<String> predicates) {
         List<RelationAssertion> chain = new ArrayList<>();
         Set<SymbolId> visited = new HashSet<>();
         SymbolId current = start;
-        List<String> predicates = allowedPredicates(predicate);
         for (int depth = 0; depth < MAX_CHAIN_DEPTH; depth++) {
             if (!visited.add(current)) {
                 break;
@@ -109,16 +115,5 @@ public final class DependencyChainHead extends BaseHead {
         }
         return chain;
     }
-
-    private List<String> allowedPredicates(String predicate) {
-        if (predicate == null || predicate.isBlank()) {
-            return List.of();
-        }
-        if ("poweredBy".equals(predicate)) {
-            return List.of("poweredBy", "chargedBy");
-        }
-        return List.of(predicate);
-    }
-
 
 }

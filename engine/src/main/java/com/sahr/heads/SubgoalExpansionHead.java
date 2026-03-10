@@ -2,6 +2,7 @@ package com.sahr.heads;
 
 import com.sahr.core.CandidateType;
 import com.sahr.core.EntityNode;
+import com.sahr.core.HeadOntology;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
@@ -18,11 +19,7 @@ import java.util.Map;
 import java.util.Set;
 
 public final class SubgoalExpansionHead extends BaseHead {
-    private static final String SAHR_COLOCATION = "https://sahr.ai/ontology/relations#colocation";
     private static final String EXPECTED_RANGE_LOCATION = "concept:location";
-    private static final Set<String> DEFAULT_COLOCATION = Set.of(
-            "wear", "with", "hold", "carry", "possess", "have", "opposite", "partOf", SAHR_COLOCATION
-    );
 
     @Override
     public String getName() {
@@ -47,7 +44,10 @@ public final class SubgoalExpansionHead extends BaseHead {
 
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
-        Set<String> coLocationPredicates = expandCoLocationPredicates(ontology, DEFAULT_COLOCATION);
+        Set<String> coLocationPredicates = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION);
+        if (coLocationPredicates.isEmpty()) {
+            return List.of();
+        }
         List<EntityNode> targets = findEntitiesByType(graph, ontology, requestedType);
         if (targets.isEmpty()) {
             return List.of();
