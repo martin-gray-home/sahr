@@ -14,7 +14,9 @@ import com.sahr.heads.RelationPropagationHead;
 import com.sahr.heads.RelationQueryHead;
 import com.sahr.heads.SurfaceContactPropagationHead;
 import com.sahr.heads.SubgoalExpansionHead;
+import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
@@ -53,7 +55,7 @@ class ReasoningScenarioSuiteTest {
         assertEquals("Assertion recorded.", agent.handle("The hat is on the head"));
         assertEquals("Assertion recorded.", agent.handle("The head is part of the man"));
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
-        assertEquals("entity:hat locatedIn entity:room", agent.handle("Where is the hat"));
+        assertEquals("entity:hat in entity:room", agent.handle("Where is the hat"));
     }
 
     @Test
@@ -62,7 +64,7 @@ class ReasoningScenarioSuiteTest {
 
         assertEquals("Assertion recorded.", agent.handle("The woman is in the garden"));
         assertEquals("Assertion recorded.", agent.handle("The woman is carrying a bag"));
-        assertEquals("entity:bag locatedIn entity:garden", agent.handle("Where is the bag"));
+        assertEquals("entity:bag in entity:garden", agent.handle("Where is the bag"));
     }
 
     @Test
@@ -74,7 +76,7 @@ class ReasoningScenarioSuiteTest {
         assertEquals("Assertion recorded.", agent.handle("The book is in the bag"));
         assertEquals("Assertion recorded.", agent.handle("The bag is in the car"));
         assertEquals("Assertion recorded.", agent.handle("The car is in the garage"));
-        assertEquals("entity:book locatedIn entity:garage", agent.handle("Where is the book"));
+        assertEquals("entity:book in entity:garage", agent.handle("Where is the book"));
     }
 
     @Test
@@ -126,7 +128,7 @@ class ReasoningScenarioSuiteTest {
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The woman is with the man"));
-        assertEquals("entity:woman locatedIn entity:room", agent.handle("Where is the woman"));
+        assertEquals("entity:woman in entity:room", agent.handle("Where is the woman"));
     }
 
     @Test
@@ -148,7 +150,7 @@ class ReasoningScenarioSuiteTest {
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The man is holding a key"));
         assertEquals("Assertion recorded.", agent.handle("The key opens the door"));
-        assertEquals("entity:key locatedIn entity:room", agent.handle("Where is the key"));
+        assertEquals("entity:key in entity:room", agent.handle("Where is the key"));
     }
 
     private SahrAgent newAgent(InMemoryKnowledgeBase graph, InMemoryOntologyService ontology, TermMapper mapper) {
@@ -164,9 +166,11 @@ class ReasoningScenarioSuiteTest {
                 new DependencyChainHead(),
                 new QueryAlignmentHead()
         ));
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
         if (mapper == null) {
-            return new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
+            return new SahrAgent(graph, ontology, reasoner, parser, statementParser, new NoopTermMapper());
         }
-        return new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser(), mapper);
+        return new SahrAgent(graph, ontology, reasoner, parser, statementParser, mapper);
     }
 }

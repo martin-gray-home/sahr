@@ -6,7 +6,9 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.SahrReasoner;
 import com.sahr.heads.AssertionInsertionHead;
 import com.sahr.heads.GraphRetrievalHead;
+import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
 import java.util.List;
@@ -23,7 +25,9 @@ class UnknownHandlingScenarioTest {
                 new AssertionInsertionHead(),
                 new GraphRetrievalHead()
         ));
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
+        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, new NoopTermMapper());
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("No candidates produced.", agent.handle("Where is it"));

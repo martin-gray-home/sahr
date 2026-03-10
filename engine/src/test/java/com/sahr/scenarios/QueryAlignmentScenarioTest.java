@@ -10,6 +10,7 @@ import com.sahr.core.SymbolId;
 import com.sahr.heads.AssertionInsertionHead;
 import com.sahr.heads.QueryAlignmentHead;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,9 @@ class QueryAlignmentScenarioTest {
                 return Optional.empty();
             }
         };
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser(), mapper);
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
+        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, mapper);
 
         SymbolId catId = new SymbolId("entity:cat");
         graph.addEntity(new EntityNode(catId, "cat", Set.of("concept:cat")));

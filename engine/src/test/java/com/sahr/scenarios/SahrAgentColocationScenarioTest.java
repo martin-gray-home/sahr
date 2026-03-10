@@ -14,7 +14,9 @@ import com.sahr.heads.RelationPropagationHead;
 import com.sahr.heads.RelationQueryHead;
 import com.sahr.heads.SubgoalExpansionHead;
 import com.sahr.heads.SurfaceContactPropagationHead;
+import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
 import java.util.List;
@@ -40,13 +42,15 @@ class SahrAgentColocationScenarioTest {
                 new DependencyChainHead(),
                 new QueryAlignmentHead()
         ));
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
+        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, new NoopTermMapper());
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The woman is with the man"));
 
         assertTrue(graph.getAllAssertions().stream().anyMatch(assertion ->
-                "locatedIn".equals(assertion.predicate())
+                "in".equals(assertion.predicate())
                         && "entity:man".equals(assertion.subject().value())
                         && "entity:room".equals(assertion.object().value())));
         assertTrue(graph.getAllAssertions().stream().anyMatch(assertion ->
@@ -55,6 +59,6 @@ class SahrAgentColocationScenarioTest {
                         && "entity:man".equals(assertion.object().value())));
 
         String answer = agent.handle("Where is the woman");
-        assertEquals("entity:woman locatedIn entity:room", answer);
+        assertEquals("entity:woman in entity:room", answer);
     }
 }
