@@ -30,6 +30,26 @@ sahr:proximity a owl:ObjectProperty ;
     rdfs:label "proximity" ;
     rdfs:subPropertyOf sahr:locationTransferRelation .
 
+sahr:near a owl:ObjectProperty ;
+    rdfs:label "near" ;
+    rdfs:subPropertyOf sahr:colocation ;
+    rdfs:subPropertyOf sahr:proximity .
+
+sahr:beside a owl:ObjectProperty ;
+    rdfs:label "beside" ;
+    rdfs:subPropertyOf sahr:colocation ;
+    rdfs:subPropertyOf sahr:proximity .
+
+sahr:alongside a owl:ObjectProperty ;
+    rdfs:label "alongside" ;
+    rdfs:subPropertyOf sahr:colocation ;
+    rdfs:subPropertyOf sahr:proximity .
+
+sahr:nextTo a owl:ObjectProperty ;
+    rdfs:label "next to" ;
+    rdfs:subPropertyOf sahr:colocation ;
+    rdfs:subPropertyOf sahr:proximity .
+
 sahr:locatedIn a owl:ObjectProperty ;
     rdfs:label "locatedIn" ;
     rdfs:label "located in" ;

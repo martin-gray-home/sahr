@@ -20,6 +20,7 @@ public final class SimpleQueryParser {
     private static final Set<String> WH_TOKENS = Set.of("who", "what", "where", "when", "why", "how", "which");
     private static final Set<String> YESNO_PREFIXES = Set.of("is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "would", "will");
     private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "below", "with", "in", "inside", "opposite");
+    private static final Set<String> COLOCATION_SYNONYMS = Set.of("near", "beside", "alongside", "next");
     private static final Set<String> COLOR_MODIFIERS = Set.of("red", "blue", "green", "black", "white");
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
 
@@ -714,7 +715,29 @@ public final class SimpleQueryParser {
         if (cleaned.isEmpty()) {
             return List.of();
         }
-        return List.of(cleaned.split("\\s+"));
+        List<String> tokens = List.of(cleaned.split("\\s+"));
+        return normalizeColocationSynonyms(tokens);
+    }
+
+    private List<String> normalizeColocationSynonyms(List<String> tokens) {
+        if (tokens.isEmpty()) {
+            return tokens;
+        }
+        java.util.List<String> normalized = new java.util.ArrayList<>(tokens.size());
+        for (int i = 0; i < tokens.size(); i++) {
+            String token = tokens.get(i);
+            if ("next".equals(token) && i + 1 < tokens.size() && "to".equals(tokens.get(i + 1))) {
+                normalized.add("with");
+                i++;
+                continue;
+            }
+            if (COLOCATION_SYNONYMS.contains(token)) {
+                normalized.add("with");
+                continue;
+            }
+            normalized.add(token);
+        }
+        return normalized;
     }
 
     private String firstContentTokenAfter(List<String> tokens, int index) {

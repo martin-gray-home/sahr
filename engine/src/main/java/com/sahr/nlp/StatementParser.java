@@ -23,7 +23,19 @@ public final class StatementParser {
     private static final String PREDICATE_TYPE = "rdf:type";
     private static final String PREDICATE_ATTRIBUTE = "hasAttribute";
     private static final String PREDICATE_MANNER = "hasManner";
-    private static final Set<String> PREPOSITION_PREDICATES = Set.of("inside", "on", "under", "with", "opposite");
+    private static final Set<String> PREPOSITION_PREDICATES = Set.of(
+            "inside",
+            "on",
+            "under",
+            "with",
+            "opposite",
+            "near",
+            "beside",
+            "alongside",
+            "next",
+            "next_to",
+            "next-to"
+    );
 
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
 
@@ -56,6 +68,21 @@ public final class StatementParser {
         }
         if (normalized.contains(" is with ")) {
             return parseBinary(normalized, "is with", "with", false);
+        }
+        if (normalized.contains(" is near ")) {
+            return parseBinary(normalized, "is near", "with", false);
+        }
+        if (normalized.contains(" is beside ")) {
+            return parseBinary(normalized, "is beside", "with", false);
+        }
+        if (normalized.contains(" is alongside ")) {
+            return parseBinary(normalized, "is alongside", "with", false);
+        }
+        if (normalized.contains(" is next to ")) {
+            return parseBinary(normalized, "is next to", "with", false);
+        }
+        if (normalized.contains(" is next-to ")) {
+            return parseBinary(normalized, "is next-to", "with", false);
         }
         if (normalized.contains(" is holding ")) {
             return parseBinary(normalized, "is holding", "hold", false);
@@ -731,6 +758,14 @@ public final class StatementParser {
         }
         if ("at".equals(prep)) {
             return PREDICATE_AT;
+        }
+        if ("near".equals(prep)
+                || "beside".equals(prep)
+                || "alongside".equals(prep)
+                || "next".equals(prep)
+                || "next_to".equals(prep)
+                || "next-to".equals(prep)) {
+            return "with";
         }
         if ("of".equals(prep) && isPartGovernor(governorWord)) {
             return "partOf";

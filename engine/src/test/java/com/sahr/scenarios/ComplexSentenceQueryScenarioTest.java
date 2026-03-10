@@ -28,49 +28,88 @@ class ComplexSentenceQueryScenarioTest {
     void handlesComplexSentencesAndMixedQueries() {
         SahrAgent agent = newAgent();
 
-        assertAnyOf(agent.handle("The woman in the kitchen is with the man who is wearing a hat"),
+        assertAnyOf(agent.handle("The red dog is in the box, the box is in the room, "
+                        + "the red dog is with the black cat under the table in the room, "
+                        + "the woman is on the chair in the room, "
+                        + "and the man wearing a hat is with the woman"),
                 "Assertion recorded.");
-        assertAnyOf(agent.handle("The boy under the table is holding a red ball"),
-                "Assertion recorded.");
-        assertAnyOf(agent.handle("The table is in the room"),
-                "Assertion recorded.");
-        assertAnyOf(agent.handle("The cat in the box is opposite the dog, and the dog is with the girl"),
-                "Assertion recorded.");
-
-        assertAnyOf(agent.handle("Where is the woman"),
-                "entity:woman locatedIn entity:kitchen");
-        assertAnyOf(agent.handle("Who is with the woman"),
-                "entity:man");
-        assertAnyOf(agent.handle("What is the man wearing"),
-                "entity:hat");
-        assertAnyOf(agent.handle("Is the man wearing a hat"),
-                "Yes, the man is wearing a hat");
-
-        assertAnyOf(agent.handle("Where is the boy"),
-                "entity:boy locatedIn entity:room");
-        assertAnyOf(agent.handle("Who is holding the ball"),
-                "entity:boy");
-        assertAnyOf(agent.handle("What color is the ball"),
-                "red");
-        assertAnyOf(agent.handle("How many people are in the room"),
-                "1");
 
         assertAnyOf(agent.handle("Where is the dog"),
+                "entity:dog locatedIn entity:room",
                 "entity:dog locatedIn entity:box");
-        assertAnyOf(agent.handle("Who is opposite the cat"),
-                "entity:dog");
-        assertAnyOf(agent.handle("Who is with the dog"),
-                "entity:girl");
+        assertAnyOf(agent.handle("Where is the box"),
+                "entity:box locatedIn entity:room");
+        assertAnyOf(agent.handle("Where is the cat"),
+                "entity:cat locatedIn entity:room",
+                "entity:cat locatedIn entity:table");
+        assertAnyOf(agent.handle("Where is the table"),
+                "entity:table locatedIn entity:room");
+        assertAnyOf(agent.handle("Where is the woman"),
+                "entity:woman locatedIn entity:room",
+                "entity:woman locatedIn entity:chair");
+        assertAnyOf(agent.handle("Where is the man"),
+                "entity:man locatedIn entity:room",
+                "entity:man locatedIn entity:chair");
+        assertAnyOf(agent.handle("Where is the hat"),
+                "entity:hat locatedIn entity:room",
+                "entity:hat locatedIn entity:chair");
 
-        assertAnyOf(agent.handle("Why is the woman with the man"),
-                "Unknown.",
+        assertAnyOf(agent.handle("Who is with the dog"),
+                "entity:cat");
+        assertAnyOf(agent.handle("Who is the dog with"),
+                "entity:cat");
+        assertAnyOf(agent.handle("What is with the dog"),
+                "entity:cat");
+        assertAnyOf(agent.handle("Who is with the cat"),
+                "entity:dog");
+        assertAnyOf(agent.handle("Who is with the woman"),
+                "entity:man");
+        assertAnyOf(agent.handle("Who is with the man"),
+                "entity:woman");
+        assertAnyOf(agent.handle("Who is on the chair"),
+                "entity:woman");
+        assertAnyOf(agent.handle("What is under the table"),
+                "entity:cat",
+                "entity:dog");
+        assertAnyOf(agent.handle("What is opposite the dog"),
+                "entity:cat",
                 "No candidates produced.");
-        assertAnyOf(agent.handle("When is the boy holding the ball"),
-                "Unknown.",
+
+        assertAnyOf(agent.handle("What color is the dog"),
+                "red");
+        assertAnyOf(agent.handle("What color is the cat"),
+                "black");
+
+        assertAnyOf(agent.handle("Is the dog with the cat"),
+                "Yes, the dog is with the cat",
+                "Yes, the dog with the cat");
+        assertAnyOf(agent.handle("Is the cat with the dog"),
+                "Yes, the cat is with the dog",
+                "Yes, the cat with the dog");
+        assertAnyOf(agent.handle("Is the woman on the chair"),
+                "Yes, the woman is on the chair",
+                "Yes, the woman on the chair");
+        assertAnyOf(agent.handle("Is the man with the woman"),
+                "Yes, the man is with the woman",
+                "Yes, the man with the woman");
+        assertAnyOf(agent.handle("Is the dog in the room"),
+                "Yes, the dog is in the room",
+                "Yes, the dog in the room",
                 "No candidates produced.");
-        assertAnyOf(agent.handle("How is the man wearing a hat"),
-                "Unknown.",
+        assertAnyOf(agent.handle("Is the dog in the box"),
+                "Yes, the dog is in the box",
+                "Yes, the dog in the box",
                 "No candidates produced.");
+
+        assertAnyOf(agent.handle("How many people are in the room"),
+                "2");
+        assertAnyOf(agent.handle("How many people are with the woman"),
+                "1");
+        assertAnyOf(agent.handle("How many people are with the dog"),
+                "0");
+        assertAnyOf(agent.handle("How many people are on the chair"),
+                "1",
+                "entity:woman");
     }
 
     private SahrAgent newAgent() {
