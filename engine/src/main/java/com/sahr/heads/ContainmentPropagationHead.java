@@ -9,7 +9,6 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
-import com.sahr.core.SymbolicAttentionHead;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public final class ContainmentPropagationHead implements SymbolicAttentionHead {
+public final class ContainmentPropagationHead extends BaseHead {
     private static final String PREDICATE_LOCATED_IN = "locatedIn";
     private static final String CONTAINMENT_IRI = "https://sahr.ai/ontology/relations#containment";
     private static final String PREDICATE_INSIDE = "inside";
@@ -28,6 +27,11 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
     @Override
     public String getName() {
         return "containment-propagation";
+    }
+
+    @Override
+    protected String describe(HeadContext context) {
+        return "Propagates containment relations (inside/in/locatedIn) into location assertions.";
     }
 
     @Override
@@ -141,21 +145,6 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
         }
     }
 
-    private List<String> buildEvidence(List<RelationAssertion> path) {
-        List<String> evidence = new ArrayList<>(path.size());
-        for (RelationAssertion assertion : path) {
-            evidence.add(assertion.toString());
-        }
-        return evidence;
-    }
-
-    private void addInversePredicates(OntologyService ontology, Set<String> expanded) {
-        Set<String> snapshot = new HashSet<>(expanded);
-        for (String predicate : snapshot) {
-            ontology.getInverseProperty(predicate).ifPresent(expanded::add);
-        }
-    }
-
     private ReasoningCandidate buildCandidate(RelationAssertion assertion, List<String> evidence, int depth) {
         Map<String, Double> breakdown = new HashMap<>();
         breakdown.put("ontology_support", 0.6);
@@ -193,27 +182,6 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
         );
     }
 
-    private double normalize(Iterable<Double> parts) {
-        double total = 0.0;
-        int count = 0;
-        for (double part : parts) {
-            total += part;
-            count += 1;
-        }
-        return count == 0 ? 0.0 : Math.min(1.0, total / count);
-    }
-
-    private double averageConfidence(List<RelationAssertion> assertions) {
-        if (assertions.isEmpty()) {
-            return 0.0;
-        }
-        double total = 0.0;
-        for (RelationAssertion assertion : assertions) {
-            total += assertion.confidence();
-        }
-        return Math.min(1.0, total / assertions.size());
-    }
-
     private boolean matchesType(KnowledgeBase graph, OntologyService ontology, SymbolId subject, String requestedType) {
         if (requestedType == null || requestedType.isBlank()) {
             return true;
@@ -231,35 +199,4 @@ public final class ContainmentPropagationHead implements SymbolicAttentionHead {
                 .orElse(false);
     }
 
-    private String normalizeTypeToken(String raw) {
-        if (raw == null) {
-            return "";
-        }
-        if (raw.startsWith("concept:")) {
-            return raw.substring("concept:".length());
-        }
-        if (raw.startsWith("entity:")) {
-            return raw.substring("entity:".length());
-        }
-        return raw;
-    }
-
-    private java.util.Optional<SymbolId> resolveEntityFromQuery(QueryGoal query, KnowledgeBase graph) {
-        if (query == null || query.type() != QueryGoal.Type.WHERE) {
-            return java.util.Optional.empty();
-        }
-        String requestedType = query.entityType();
-        if (requestedType == null || requestedType.isBlank()) {
-            return java.util.Optional.empty();
-        }
-        String normalized = normalizeTypeToken(requestedType);
-        if (normalized.isBlank()) {
-            return java.util.Optional.empty();
-        }
-        SymbolId candidate = new SymbolId("entity:" + normalized);
-        if (graph.findEntity(candidate).isPresent()) {
-            return java.util.Optional.of(candidate);
-        }
-        return java.util.Optional.empty();
-    }
 }

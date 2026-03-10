@@ -7,7 +7,6 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
-import com.sahr.core.SymbolicAttentionHead;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,12 +16,17 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-public final class DependencyChainHead implements SymbolicAttentionHead {
+public final class DependencyChainHead extends BaseHead {
     private static final int MAX_CHAIN_DEPTH = 6;
 
     @Override
     public String getName() {
         return "dependency-chain";
+    }
+
+    @Override
+    protected String describe(HeadContext context) {
+        return "Walks dependency chains (e.g., poweredBy/chargedBy) to answer causal queries.";
     }
 
     @Override
@@ -116,22 +120,5 @@ public final class DependencyChainHead implements SymbolicAttentionHead {
         return List.of(predicate);
     }
 
-    private double averageConfidence(List<RelationAssertion> chain) {
-        if (chain.isEmpty()) {
-            return 0.0;
-        }
-        double total = 0.0;
-        for (RelationAssertion assertion : chain) {
-            total += assertion.confidence();
-        }
-        return Math.min(1.0, total / chain.size());
-    }
 
-    private double normalize(double... parts) {
-        double total = 0.0;
-        for (double part : parts) {
-            total += part;
-        }
-        return Math.min(1.0, total / parts.length);
-    }
 }

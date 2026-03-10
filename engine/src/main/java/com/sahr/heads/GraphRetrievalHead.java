@@ -9,7 +9,6 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
-import com.sahr.core.SymbolicAttentionHead;
 import com.sahr.core.WorkingMemory;
 
 import java.util.ArrayList;
@@ -17,7 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class GraphRetrievalHead implements SymbolicAttentionHead {
+public final class GraphRetrievalHead extends BaseHead {
     private static final String PREDICATE_LOCATED_IN = "locatedIn";
     private static final List<String> LOCATION_PREDICATES = List.of("at", PREDICATE_LOCATED_IN, "inside", "in");
     private static final int MAX_LOCATION_DEPTH = 6;
@@ -33,6 +32,11 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
     }
 
     @Override
+    protected String describe(HeadContext context) {
+        return "Retrieves location answers, following short location chains and colocation cues.";
+    }
+
+    @Override
     public List<ReasoningCandidate> evaluate(HeadContext context) {
         QueryGoal query = context.query();
         if (query.type() != QueryGoal.Type.WHERE) {
@@ -43,13 +47,13 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
         WorkingMemory memory = context.workingMemory();
-        java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(requestedType, graph);
+        java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(query, graph);
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
         Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph);
         java.util.Set<String> emitted = new java.util.HashSet<>();
         List<RelationAssertion> locationAssertions = collectLocationAssertions(graph);
-        java.util.Set<String> expandedCoLocation = expandCoLocationPredicates(ontology);
+        java.util.Set<String> expandedCoLocation = expandCoLocationPredicates(ontology, COLOCATION_PREDICATES);
         for (String predicate : LOCATION_PREDICATES) {
             for (RelationAssertion assertion : graph.findByPredicate(predicate)) {
                 boolean typeMatch = matchesType(graph, ontology, assertion, requestedType, requestedEntity);
@@ -186,44 +190,6 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
         return cursor;
     }
 
-    private List<String> buildEvidence(List<RelationAssertion> path) {
-        List<String> evidence = new ArrayList<>(path.size());
-        for (RelationAssertion assertion : path) {
-            evidence.add(assertion.toString());
-        }
-        return evidence;
-    }
-
-    private double averageConfidence(List<RelationAssertion> path) {
-        if (path.isEmpty()) {
-            return 0.0;
-        }
-        double total = 0.0;
-        for (RelationAssertion assertion : path) {
-            total += assertion.confidence();
-        }
-        return Math.min(1.0, total / path.size());
-    }
-
-    private double averageConfidence(double left, double right) {
-        return Math.min(1.0, (left + right) / 2.0);
-    }
-
-    private java.util.Set<String> expandCoLocationPredicates(OntologyService ontology) {
-        java.util.Set<String> expanded = RelationPredicateAliases.withSahrIriAliases(COLOCATION_PREDICATES);
-        for (String predicate : COLOCATION_PREDICATES) {
-            if (!RelationPredicateAliases.isIri(predicate)) {
-                continue;
-            }
-            expanded.addAll(ontology.getSubproperties(predicate));
-        }
-        java.util.Set<String> snapshot = new java.util.HashSet<>(expanded);
-        for (String predicate : snapshot) {
-            ontology.getInverseProperty(predicate).ifPresent(expanded::add);
-        }
-        return expanded;
-    }
-
     private boolean matchesType(KnowledgeBase graph,
                                 OntologyService ontology,
                                 SymbolId subject,
@@ -272,39 +238,4 @@ public final class GraphRetrievalHead implements SymbolicAttentionHead {
                 .orElse(false);
     }
 
-    private String normalizeTypeToken(String raw) {
-        if (raw == null) {
-            return "";
-        }
-        if (raw.startsWith("concept:")) {
-            return raw.substring("concept:".length());
-        }
-        if (raw.startsWith("entity:")) {
-            return raw.substring("entity:".length());
-        }
-        return raw;
-    }
-
-    private java.util.Optional<SymbolId> resolveEntityFromQuery(String requestedType, KnowledgeBase graph) {
-        if (requestedType == null || requestedType.isBlank()) {
-            return java.util.Optional.empty();
-        }
-        String normalized = normalizeTypeToken(requestedType);
-        if (normalized.isBlank()) {
-            return java.util.Optional.empty();
-        }
-        SymbolId candidate = new SymbolId("entity:" + normalized);
-        if (graph.findEntity(candidate).isPresent()) {
-            return java.util.Optional.of(candidate);
-        }
-        return java.util.Optional.empty();
-    }
-
-    private double normalize(double... parts) {
-        double total = 0.0;
-        for (double part : parts) {
-            total += part;
-        }
-        return Math.min(1.0, total / parts.length);
-    }
 }

@@ -9,7 +9,6 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
-import com.sahr.core.SymbolicAttentionHead;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public final class SubgoalExpansionHead implements SymbolicAttentionHead {
+public final class SubgoalExpansionHead extends BaseHead {
     private static final String SAHR_COLOCATION = "https://sahr.ai/ontology/relations#colocation";
     private static final String EXPECTED_RANGE_LOCATION = "concept:location";
     private static final Set<String> DEFAULT_COLOCATION = Set.of(
@@ -28,6 +27,11 @@ public final class SubgoalExpansionHead implements SymbolicAttentionHead {
     @Override
     public String getName() {
         return "subgoal-expansion";
+    }
+
+    @Override
+    protected String describe(HeadContext context) {
+        return "Proposes WHERE subgoals by following co-location relations.";
     }
 
     @Override
@@ -43,7 +47,7 @@ public final class SubgoalExpansionHead implements SymbolicAttentionHead {
 
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
-        Set<String> coLocationPredicates = expandCoLocationPredicates(ontology);
+        Set<String> coLocationPredicates = expandCoLocationPredicates(ontology, DEFAULT_COLOCATION);
         List<EntityNode> targets = findEntitiesByType(graph, ontology, requestedType);
         if (targets.isEmpty()) {
             return List.of();
@@ -98,25 +102,6 @@ public final class SubgoalExpansionHead implements SymbolicAttentionHead {
         return candidates;
     }
 
-    private Set<String> expandCoLocationPredicates(OntologyService ontology) {
-        Set<String> expanded = RelationPredicateAliases.withSahrIriAliases(DEFAULT_COLOCATION);
-        for (String predicate : DEFAULT_COLOCATION) {
-            if (!RelationPredicateAliases.isIri(predicate)) {
-                continue;
-            }
-            expanded.addAll(ontology.getSubproperties(predicate));
-        }
-        addInversePredicates(ontology, expanded);
-        return expanded;
-    }
-
-    private void addInversePredicates(OntologyService ontology, Set<String> expanded) {
-        Set<String> snapshot = new HashSet<>(expanded);
-        for (String predicate : snapshot) {
-            ontology.getInverseProperty(predicate).ifPresent(expanded::add);
-        }
-    }
-
     private List<EntityNode> findEntitiesByType(KnowledgeBase graph, OntologyService ontology, String requestedType) {
         List<EntityNode> matches = new ArrayList<>();
         for (EntityNode entity : graph.getAllEntities()) {
@@ -149,13 +134,4 @@ public final class SubgoalExpansionHead implements SymbolicAttentionHead {
         return value;
     }
 
-    private double normalize(Iterable<Double> parts) {
-        double total = 0.0;
-        int count = 0;
-        for (double part : parts) {
-            total += part;
-            count += 1;
-        }
-        return count == 0 ? 0.0 : Math.min(1.0, total / count);
-    }
 }

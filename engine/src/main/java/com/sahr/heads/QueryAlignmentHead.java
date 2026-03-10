@@ -8,17 +8,21 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
-import com.sahr.core.SymbolicAttentionHead;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class QueryAlignmentHead implements SymbolicAttentionHead {
+public final class QueryAlignmentHead extends BaseHead {
     @Override
     public String getName() {
         return "query-alignment";
+    }
+
+    @Override
+    protected String describe(HeadContext context) {
+        return "Aligns WHERE queries with ontology ranges to surface matching location assertions.";
     }
 
     @Override
@@ -95,15 +99,4 @@ public final class QueryAlignmentHead implements SymbolicAttentionHead {
         return false;
     }
 
-    private boolean isIri(String value) {
-        return value != null && (value.startsWith("http://") || value.startsWith("https://"));
-    }
-
-    private double normalize(double... parts) {
-        double total = 0.0;
-        for (double part : parts) {
-            total += part;
-        }
-        return Math.min(1.0, total / parts.length);
-    }
 }

@@ -18,6 +18,7 @@ final class HeadExecutor {
     List<ReasoningCandidate> execute(HeadContext context) {
         List<ReasoningCandidate> results = new ArrayList<>();
         for (SymbolicAttentionHead head : heads) {
+            logger.fine(() -> head.explain(context));
             List<ReasoningCandidate> headResults = head.evaluate(context);
             for (ReasoningCandidate candidate : headResults) {
                 SymbolicAttentionScorer.QueryMatchResult match = attentionScorer.score(context, candidate);

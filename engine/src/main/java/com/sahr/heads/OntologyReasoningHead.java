@@ -7,7 +7,6 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
-import com.sahr.core.SymbolicAttentionHead;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,10 +14,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public final class OntologyReasoningHead implements SymbolicAttentionHead {
+public final class OntologyReasoningHead extends BaseHead {
     @Override
     public String getName() {
         return "ontology-reasoning";
+    }
+
+    @Override
+    protected String describe(HeadContext context) {
+        return "Applies ontology symmetry, inverse, and transitive rules.";
     }
 
     @Override
@@ -140,17 +144,4 @@ public final class OntologyReasoningHead implements SymbolicAttentionHead {
         );
     }
 
-    private double normalize(Iterable<Double> parts) {
-        double total = 0.0;
-        int count = 0;
-        for (double part : parts) {
-            total += part;
-            count += 1;
-        }
-        return count == 0 ? 0.0 : Math.min(1.0, total / count);
-    }
-
-    private double averageConfidence(double left, double right) {
-        return Math.min(1.0, (left + right) / 2.0);
-    }
 }

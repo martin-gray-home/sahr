@@ -9,7 +9,6 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
-import com.sahr.core.SymbolicAttentionHead;
 import com.sahr.core.WorkingMemory;
 
 import java.util.ArrayList;
@@ -18,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public final class RelationQueryHead implements SymbolicAttentionHead {
+public final class RelationQueryHead extends BaseHead {
     private final Map<String, List<String>> predicateAliases;
 
     public RelationQueryHead() {
@@ -32,6 +31,11 @@ public final class RelationQueryHead implements SymbolicAttentionHead {
     @Override
     public String getName() {
         return "relation-query";
+    }
+
+    @Override
+    protected String describe(HeadContext context) {
+        return "Answers direct relation queries from the knowledge graph.";
     }
 
     @Override
@@ -168,10 +172,6 @@ public final class RelationQueryHead implements SymbolicAttentionHead {
         return expanded;
     }
 
-    private boolean isIri(String value) {
-        return value != null && (value.startsWith("http://") || value.startsWith("https://"));
-    }
-
     private List<ReasoningCandidate> evaluateYesNo(QueryGoal query,
                                                    KnowledgeBase graph,
                                                    OntologyService ontology,
@@ -246,11 +246,4 @@ public final class RelationQueryHead implements SymbolicAttentionHead {
         return predicateText.replace('_', ' ');
     }
 
-    private double normalize(double... parts) {
-        double total = 0.0;
-        for (double part : parts) {
-            total += part;
-        }
-        return Math.min(1.0, total / parts.length);
-    }
 }

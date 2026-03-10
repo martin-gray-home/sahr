@@ -6,7 +6,6 @@ import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
-import com.sahr.core.SymbolicAttentionHead;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,13 +14,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public final class SurfaceContactPropagationHead implements SymbolicAttentionHead {
+public final class SurfaceContactPropagationHead extends BaseHead {
     private static final String PREDICATE_LOCATED_IN = "locatedIn";
     private static final String SURFACE_IRI = "https://sahr.ai/ontology/relations#surfaceContact";
 
     @Override
     public String getName() {
         return "surface-contact-propagation";
+    }
+
+    @Override
+    protected String describe(HeadContext context) {
+        return "Propagates surface-contact relations (on/under) into location assertions.";
     }
 
     @Override
@@ -65,13 +69,6 @@ public final class SurfaceContactPropagationHead implements SymbolicAttentionHea
         return expanded;
     }
 
-    private void addInversePredicates(OntologyService ontology, Set<String> expanded) {
-        Set<String> snapshot = new HashSet<>(expanded);
-        for (String predicate : snapshot) {
-            ontology.getInverseProperty(predicate).ifPresent(expanded::add);
-        }
-    }
-
     private boolean exists(KnowledgeBase graph, RelationAssertion assertion) {
         return graph.getAllAssertions().stream().anyMatch(existing ->
                 existing.subject().equals(assertion.subject())
@@ -96,17 +93,4 @@ public final class SurfaceContactPropagationHead implements SymbolicAttentionHea
         );
     }
 
-    private double normalize(Iterable<Double> parts) {
-        double total = 0.0;
-        int count = 0;
-        for (double part : parts) {
-            total += part;
-            count += 1;
-        }
-        return count == 0 ? 0.0 : Math.min(1.0, total / count);
-    }
-
-    private double averageConfidence(double left, double right) {
-        return Math.min(1.0, (left + right) / 2.0);
-    }
 }

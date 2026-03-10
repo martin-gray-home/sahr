@@ -3,7 +3,6 @@ package com.sahr.heads;
 import com.sahr.core.CandidateType;
 import com.sahr.core.HeadContext;
 import com.sahr.core.ReasoningCandidate;
-import com.sahr.core.SymbolicAttentionHead;
 import com.sahr.nlp.Statement;
 import com.sahr.nlp.StatementBatch;
 
@@ -11,10 +10,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class AssertionInsertionHead implements SymbolicAttentionHead {
+public final class AssertionInsertionHead extends BaseHead {
     @Override
     public String getName() {
         return "assertion-insertion";
+    }
+
+    @Override
+    protected String describe(com.sahr.core.HeadContext context) {
+        return "Inserts new assertions from parsed statements into the knowledge graph.";
     }
 
     @Override
@@ -46,15 +50,5 @@ public final class AssertionInsertionHead implements SymbolicAttentionHead {
                 breakdown,
                 0
         );
-    }
-
-    private double normalize(Iterable<Double> parts) {
-        double total = 0.0;
-        int count = 0;
-        for (double part : parts) {
-            total += part;
-            count += 1;
-        }
-        return count == 0 ? 0.0 : Math.min(1.0, total / count);
     }
 }

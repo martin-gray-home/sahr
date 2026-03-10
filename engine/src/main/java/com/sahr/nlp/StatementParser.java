@@ -11,6 +11,7 @@ import edu.stanford.nlp.util.CoreMap;
 
 import com.sahr.core.SymbolId;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Properties;
@@ -279,6 +280,25 @@ public final class StatementParser {
                 continue;
             }
 
+            if (isReciprocalOpposite(predicate, objectToken) && subjectLabel != null) {
+                List<Statement> reciprocal = buildReciprocalOpposite(subjectLabel, graph);
+                if (!reciprocal.isEmpty()) {
+                    Statement primary = reciprocal.get(0);
+                    List<Statement> extras = new java.util.ArrayList<>(reciprocal);
+                    extras.remove(0);
+                    return Optional.of(new Statement(
+                            primary.subject(),
+                            primary.object(),
+                            primary.predicate(),
+                            primary.subjectTypes(),
+                            primary.objectTypes(),
+                            primary.objectIsConcept(),
+                            primary.confidence(),
+                            extras
+                    ));
+                }
+            }
+
             Statement candidate = buildStatement(subjectToken, objectToken, predicate, false);
             String key = candidate.subject().value() + "|" + candidate.predicate() + "|" + candidate.object().value();
             statements.putIfAbsent(key, candidate);
@@ -303,6 +323,38 @@ public final class StatementParser {
                 primary.confidence(),
                 extras
         ));
+    }
+
+    private boolean isReciprocalOpposite(String predicate, String objectToken) {
+        if (!"opposite".equals(predicate)) {
+            return false;
+        }
+        return "other".equals(objectToken) || "each_other".equals(objectToken);
+    }
+
+    private List<Statement> buildReciprocalOpposite(CoreLabel subjectLabel, SemanticGraph graph) {
+        if (subjectLabel == null) {
+            return List.of();
+        }
+        List<CoreLabel> subjects = new java.util.ArrayList<>();
+        subjects.add(subjectLabel);
+        subjects.addAll(findConjuncts(graph, subjectLabel));
+        if (subjects.size() < 2) {
+            return List.of();
+        }
+        List<Statement> statements = new java.util.ArrayList<>();
+        for (int i = 0; i < subjects.size(); i++) {
+            for (int j = i + 1; j < subjects.size(); j++) {
+                String left = normalizeToken(subjects.get(i).word());
+                String right = normalizeToken(subjects.get(j).word());
+                if (left.isEmpty() || right.isEmpty()) {
+                    continue;
+                }
+                statements.add(buildStatement(left, right, "opposite", false));
+                statements.add(buildStatement(right, left, "opposite", false));
+            }
+        }
+        return statements;
     }
 
     private Statement selectPrimaryStatement(java.util.List<Statement> statements) {
@@ -435,7 +487,15 @@ public final class StatementParser {
             return "";
         }
         trimmed = trimmed.replaceAll("[^a-z0-9_\\s]", "");
-        return trimmed.trim().replaceAll("\\s+", "_");
+        String normalized = trimmed.trim().replaceAll("\\s+", "_");
+        return correctCommonTypos(normalized);
+    }
+
+    private String correctCommonTypos(String token) {
+        if ("able".equals(token)) {
+            return "table";
+        }
+        return token;
     }
 
     private static StanfordCoreNLP buildPipeline() {

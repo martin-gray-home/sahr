@@ -6,7 +6,6 @@ import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
-import com.sahr.core.SymbolicAttentionHead;
 import com.sahr.core.WorkingMemory;
 
 import java.util.ArrayList;
@@ -16,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public final class RelationPropagationHead implements SymbolicAttentionHead {
+public final class RelationPropagationHead extends BaseHead {
     private static final String PREDICATE_AT = "at";
     private static final String PREDICATE_LOCATED_IN = "locatedIn";
     private static final String SAHR_COLOCATION = "https://sahr.ai/ontology/relations#colocation";
@@ -38,12 +37,17 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
     }
 
     @Override
+    protected String describe(HeadContext context) {
+        return "Propagates location through co-location and location-transfer relations.";
+    }
+
+    @Override
     public List<ReasoningCandidate> evaluate(HeadContext context) {
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
         WorkingMemory memory = context.workingMemory();
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        Set<String> expandedCoLocation = expandCoLocationPredicates(ontology);
+        Set<String> expandedCoLocation = expandCoLocationPredicates(ontology, coLocationRelations);
 
         List<RelationAssertion> atAssertions = graph.findByPredicate(PREDICATE_AT);
         List<RelationAssertion> locatedAssertions = graph.findByPredicate(PREDICATE_LOCATED_IN);
@@ -131,25 +135,6 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
         return candidates;
     }
 
-    private Set<String> expandCoLocationPredicates(OntologyService ontology) {
-        Set<String> expanded = RelationPredicateAliases.withSahrIriAliases(coLocationRelations);
-        for (String predicate : coLocationRelations) {
-            if (!RelationPredicateAliases.isIri(predicate)) {
-                continue;
-            }
-            expanded.addAll(ontology.getSubproperties(predicate));
-        }
-        addInversePredicates(ontology, expanded);
-        return expanded;
-    }
-
-    private void addInversePredicates(OntologyService ontology, Set<String> expanded) {
-        Set<String> snapshot = new HashSet<>(expanded);
-        for (String predicate : snapshot) {
-            ontology.getInverseProperty(predicate).ifPresent(expanded::add);
-        }
-    }
-
     private boolean exists(KnowledgeBase graph, RelationAssertion assertion) {
         return graph.getAllAssertions().stream().anyMatch(existing ->
                 existing.subject().equals(assertion.subject())
@@ -186,17 +171,4 @@ public final class RelationPropagationHead implements SymbolicAttentionHead {
         return 0.6;
     }
 
-    private double normalize(Iterable<Double> parts) {
-        double total = 0.0;
-        int count = 0;
-        for (double part : parts) {
-            total += part;
-            count += 1;
-        }
-        return count == 0 ? 0.0 : Math.min(1.0, total / count);
-    }
-
-    private double averageConfidence(double left, double right) {
-        return Math.min(1.0, (left + right) / 2.0);
-    }
 }

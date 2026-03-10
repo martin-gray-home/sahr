@@ -278,6 +278,9 @@ the original question).
 Subgoal expansion treats co-location predicates as aliases: both short
 forms (e.g., `wear`, `with`) and their SAHR relation IRIs
 (`https://sahr.ai/ontology/relations#wear`) are accepted.
+Reciprocal phrases like “each other” are parsed into symmetric
+relations (e.g., `opposite`) rather than introducing a literal `other`
+entity.
 
 Working Memory
 ---------------
@@ -306,6 +309,9 @@ softmax-normalized so they form attention weights across candidates.
 Internally, `SahrReasoner` delegates to `HeadExecutor` for head
 execution and `CandidateSelector` for softmax normalization and
 ranking.
+Each head also exposes a human-readable explanation string that the
+executor logs at `FINE` level per query to make reasoning steps easier
+to trace.
 
 Dependency Chain Reasoning
 ---------------------------
