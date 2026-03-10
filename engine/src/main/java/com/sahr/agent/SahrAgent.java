@@ -56,7 +56,7 @@ public final class SahrAgent {
             SahrReasoner reasoner,
             SimpleQueryParser parser
     ) {
-        this(graph, ontology, reasoner, parser, new NoopTermMapper());
+        this(graph, ontology, reasoner, parser, new StatementParser(), new NoopTermMapper());
     }
 
     public SahrAgent(
@@ -66,12 +66,23 @@ public final class SahrAgent {
             SimpleQueryParser parser,
             TermMapper termMapper
     ) {
+        this(graph, ontology, reasoner, parser, new StatementParser(), termMapper);
+    }
+
+    public SahrAgent(
+            KnowledgeBase graph,
+            OntologyService ontology,
+            SahrReasoner reasoner,
+            SimpleQueryParser parser,
+            StatementParser statementParser,
+            TermMapper termMapper
+    ) {
         this.phases = new ReasoningPhaseCoordinator();
         this.graph = new GuardedKnowledgeBase(graph, phases);
         this.ontology = ontology;
         this.reasoner = reasoner;
         this.parser = parser;
-        this.statementParser = new StatementParser();
+        this.statementParser = statementParser;
         this.termMapper = termMapper;
         this.trace = new ReasoningTrace();
         this.workingMemory = new WorkingMemory(phases);

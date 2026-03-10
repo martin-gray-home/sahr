@@ -11,6 +11,7 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.SahrReasoner;
 import com.sahr.logging.SahrLogging;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.ontology.CompositeOntologyService;
 import com.sahr.ontology.InMemoryOntologyService;
 
@@ -30,7 +31,9 @@ public final class ChatApplication {
         OntologyService ontology = new CompositeOntologyService(java.util.List.of(localOntology, context.service()));
 
         SahrReasoner reasoner = new SahrReasoner(HeadRegistry.buildHeads(config));
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser(), context.termMapper());
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
+        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, context.termMapper());
 
         new ChatRepl(agent, System.in, System.out).run();
     }

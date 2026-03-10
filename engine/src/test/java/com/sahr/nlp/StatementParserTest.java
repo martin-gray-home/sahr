@@ -200,4 +200,12 @@ class StatementParserTest {
                         && "entity:man".equals(item.subject().value())
                         && "entity:red_room".equals(item.object().value())));
     }
+
+    @Test
+    void preservesPrepositionPredicateWhenOntologyDriven() {
+        StatementParser ontologyParser = new StatementParser(true);
+        Statement statement = ontologyParser.parse("The man is in the room").orElseThrow();
+
+        assertEquals("in", statement.predicate());
+    }
 }

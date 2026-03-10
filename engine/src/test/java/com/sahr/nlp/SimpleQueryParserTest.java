@@ -228,6 +228,17 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void preservesPrepositionPredicateWhenOntologyDriven() {
+        SimpleQueryParser ontologyParser = new SimpleQueryParser(true);
+        QueryGoal query = ontologyParser.parse("Who is in the house");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("house", query.object());
+        assertEquals("in", query.predicate());
+        assertEquals("person", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromWhatIsInPattern() {
         QueryGoal query = parser.parse("What is in the house");
 

@@ -41,6 +41,16 @@ public final class StatementParser {
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
     private static final Morphology MORPHOLOGY = new Morphology();
 
+    private final boolean ontologyDriven;
+
+    public StatementParser() {
+        this(false);
+    }
+
+    public StatementParser(boolean ontologyDriven) {
+        this.ontologyDriven = ontologyDriven;
+    }
+
     public Optional<Statement> parse(String input) {
         if (input == null) {
             return Optional.empty();
@@ -60,31 +70,31 @@ public final class StatementParser {
             return coreNlp;
         }
         if (normalized.contains(" is inside ")) {
-            return parseBinary(normalized, "is inside", "inside", false);
+            return parseBinary(normalized, "is inside", mapPreposition("inside", null), false);
         }
         if (normalized.contains(" is in ")) {
-            return parseBinary(normalized, "is in", PREDICATE_IN, false);
+            return parseBinary(normalized, "is in", mapPreposition("in", null), false);
         }
         if (normalized.contains(" is at ")) {
-            return parseBinary(normalized, "is at", PREDICATE_AT, false);
+            return parseBinary(normalized, "is at", mapPreposition("at", null), false);
         }
         if (normalized.contains(" is with ")) {
-            return parseBinary(normalized, "is with", "with", false);
+            return parseBinary(normalized, "is with", mapPreposition("with", null), false);
         }
         if (normalized.contains(" is near ")) {
-            return parseBinary(normalized, "is near", "with", false);
+            return parseBinary(normalized, "is near", mapPreposition("near", null), false);
         }
         if (normalized.contains(" is beside ")) {
-            return parseBinary(normalized, "is beside", "with", false);
+            return parseBinary(normalized, "is beside", mapPreposition("beside", null), false);
         }
         if (normalized.contains(" is alongside ")) {
-            return parseBinary(normalized, "is alongside", "with", false);
+            return parseBinary(normalized, "is alongside", mapPreposition("alongside", null), false);
         }
         if (normalized.contains(" is next to ")) {
-            return parseBinary(normalized, "is next to", "with", false);
+            return parseBinary(normalized, "is next to", mapPreposition("next_to", null), false);
         }
         if (normalized.contains(" is next-to ")) {
-            return parseBinary(normalized, "is next-to", "with", false);
+            return parseBinary(normalized, "is next-to", mapPreposition("next-to", null), false);
         }
         if (normalized.contains(" is holding ")) {
             return parseBinary(normalized, "is holding", "hold", false);
@@ -877,6 +887,15 @@ public final class StatementParser {
     }
 
     private String mapPreposition(String prep, String governorWord) {
+        if (ontologyDriven) {
+            if ("of".equals(prep) && isPartGovernor(governorWord)) {
+                return "partOf";
+            }
+            if ("by".equals(prep) && governorWord != null && !governorWord.isBlank()) {
+                return governorWord.toLowerCase(Locale.ROOT) + "By";
+            }
+            return prep;
+        }
         if ("in".equals(prep)) {
             return PREDICATE_IN;
         }

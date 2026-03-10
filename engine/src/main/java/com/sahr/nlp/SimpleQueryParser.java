@@ -26,6 +26,16 @@ public final class SimpleQueryParser {
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
     private static final Morphology MORPHOLOGY = new Morphology();
 
+    private final boolean ontologyDriven;
+
+    public SimpleQueryParser() {
+        this(false);
+    }
+
+    public SimpleQueryParser(boolean ontologyDriven) {
+        this.ontologyDriven = ontologyDriven;
+    }
+
     public QueryGoal parse(String input) {
         String normalized = input == null ? "" : input.toLowerCase(Locale.ROOT).trim();
 
@@ -884,6 +894,9 @@ public final class SimpleQueryParser {
     }
 
     private String mapPrepositionPredicate(String prep) {
+        if (ontologyDriven) {
+            return prep;
+        }
         if ("in".equals(prep)) {
             return "locatedIn";
         }
@@ -1134,6 +1147,9 @@ public final class SimpleQueryParser {
     }
 
     private List<String> normalizeColocationSynonyms(List<String> tokens) {
+        if (ontologyDriven) {
+            return tokens;
+        }
         if (tokens.isEmpty()) {
             return tokens;
         }
