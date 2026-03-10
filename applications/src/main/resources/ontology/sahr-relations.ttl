@@ -1,4 +1,5 @@
 @prefix sahr: <https://sahr.ai/ontology/relations#> .
+@prefix head: <https://sahr.ai/ontology/head#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
@@ -11,23 +12,44 @@ sahr:on a owl:ObjectProperty ;
     rdfs:subPropertyOf sahr:surfaceContact .
 
 sahr:colocation a owl:ObjectProperty ;
-    rdfs:label "co-location" .
+    rdfs:label "co-location" ;
+    rdfs:subPropertyOf head:colocation .
 
 sahr:locationTransferRelation a owl:ObjectProperty ;
-    rdfs:label "location transfer relation" .
+    rdfs:label "location transfer relation" ;
+    rdfs:subPropertyOf head:locationTransfer .
 
 sahr:colocation rdfs:subPropertyOf sahr:locationTransferRelation .
 
 sahr:surfaceContact a owl:ObjectProperty ;
     rdfs:label "surface contact" ;
-    rdfs:subPropertyOf sahr:locationTransferRelation .
+    rdfs:subPropertyOf sahr:locationTransferRelation ;
+    rdfs:subPropertyOf head:surfaceContact .
 
 sahr:containment a owl:ObjectProperty ;
     rdfs:label "containment" ;
-    rdfs:subPropertyOf sahr:locationTransferRelation .
+    rdfs:subPropertyOf sahr:locationTransferRelation ;
+    rdfs:subPropertyOf head:containment .
 
 sahr:proximity a owl:ObjectProperty ;
     rdfs:label "proximity" ;
+    rdfs:subPropertyOf sahr:locationTransferRelation .
+
+sahr:locatedIn a owl:ObjectProperty ;
+    rdfs:label "locatedIn" ;
+    rdfs:label "located in" ;
+    rdfs:subPropertyOf sahr:containment .
+
+sahr:inside a owl:ObjectProperty ;
+    rdfs:label "inside" ;
+    rdfs:subPropertyOf sahr:containment .
+
+sahr:in a owl:ObjectProperty ;
+    rdfs:label "in" ;
+    rdfs:subPropertyOf sahr:containment .
+
+sahr:at a owl:ObjectProperty ;
+    rdfs:label "at" ;
     rdfs:subPropertyOf sahr:locationTransferRelation .
 
 sahr:above a owl:ObjectProperty ;
@@ -42,6 +64,31 @@ sahr:under a owl:ObjectProperty ;
     rdfs:label "under" ;
     owl:inverseOf sahr:on ;
     rdfs:subPropertyOf sahr:surfaceContact .
+
+sahr:opposite a owl:ObjectProperty ;
+    rdfs:label "opposite" ;
+    a owl:SymmetricProperty ;
+    rdfs:subPropertyOf sahr:colocation .
+
+sahr:partOf a owl:ObjectProperty ;
+    rdfs:label "partOf" ;
+    rdfs:subPropertyOf sahr:colocation .
+
+sahr:hold a owl:ObjectProperty ;
+    rdfs:label "hold" ;
+    rdfs:subPropertyOf sahr:colocation .
+
+sahr:carry a owl:ObjectProperty ;
+    rdfs:label "carry" ;
+    rdfs:subPropertyOf sahr:colocation .
+
+sahr:possess a owl:ObjectProperty ;
+    rdfs:label "possess" ;
+    rdfs:subPropertyOf sahr:colocation .
+
+sahr:have a owl:ObjectProperty ;
+    rdfs:label "have" ;
+    rdfs:subPropertyOf sahr:colocation .
 
 sahr:wear a owl:ObjectProperty ;
     rdfs:label "wear" ;
@@ -58,3 +105,15 @@ sahr:with a owl:ObjectProperty ;
     a owl:SymmetricProperty ;
     rdfs:subPropertyOf sahr:colocation ;
     rdfs:subPropertyOf sahr:proximity .
+
+sahr:hasAttribute a owl:ObjectProperty ;
+    rdfs:label "hasAttribute" ;
+    rdfs:subPropertyOf head:attributeRelation .
+
+sahr:poweredBy a owl:ObjectProperty ;
+    rdfs:label "poweredBy" ;
+    rdfs:subPropertyOf head:dependencyChain .
+
+sahr:chargedBy a owl:ObjectProperty ;
+    rdfs:label "chargedBy" ;
+    rdfs:subPropertyOf head:dependencyChain .
