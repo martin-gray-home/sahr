@@ -162,6 +162,22 @@ class StatementParserTest {
     }
 
     @Test
+    void capturesIndirectObjectStatements() {
+        Statement statement = parser.parse("The man gave the book to the boy").orElseThrow();
+        List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
+        all.add(statement);
+
+        assertTrue(all.stream().anyMatch(item ->
+                "give".equals(item.predicate())
+                        && "entity:man".equals(item.subject().value())
+                        && "entity:book".equals(item.object().value())));
+        assertTrue(all.stream().anyMatch(item ->
+                "give".equals(item.predicate())
+                        && "entity:man".equals(item.subject().value())
+                        && "entity:boy".equals(item.object().value())));
+    }
+
+    @Test
     void capturesCompoundNounObject() {
         Statement statement = parser.parse("The transmitter is powered by the power bus").orElseThrow();
         List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());

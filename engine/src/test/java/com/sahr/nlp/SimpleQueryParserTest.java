@@ -147,6 +147,36 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesDativeRecipientQuery() {
+        QueryGoal query = parser.parse("Who did the man give the book to");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("man", query.subject());
+        assertEquals("give", query.predicate());
+        assertEquals("person", query.expectedType());
+    }
+
+    @Test
+    void parsesDativeObjectQuery() {
+        QueryGoal query = parser.parse("What did the man give the boy");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("man", query.subject());
+        assertEquals("give", query.predicate());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
+    void parsesYesNoPassiveByQuery() {
+        QueryGoal query = parser.parse("Was the hat worn by the man");
+
+        assertEquals(QueryGoal.Type.YESNO, query.type());
+        assertEquals("man", query.subject());
+        assertEquals("hat", query.object());
+        assertEquals("wear", query.predicate());
+    }
+
+    @Test
     void parsesRelationQueryFromUnderPattern() {
         QueryGoal query = parser.parse("What is under the hat");
 

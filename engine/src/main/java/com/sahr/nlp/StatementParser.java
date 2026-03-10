@@ -312,6 +312,13 @@ public final class StatementParser {
 
             String predicate = resolveVerbPredicate(graph, verbNode);
             statements.add(buildStatement(subjectToken, objectToken, predicate, false));
+            CoreLabel indirect = findIndirectObject(graph, verbNode);
+            if (indirect != null) {
+                String indirectToken = normalizeToken(composeCompoundToken(graph, indirect));
+                if (!indirectToken.isEmpty()) {
+                    statements.add(buildStatement(subjectToken, indirectToken, predicate, false));
+                }
+            }
             for (CoreLabel conjunctVerb : findConjuncts(graph, verb)) {
                 String conjPredicate = resolveVerbPredicate(graph, conjunctVerb);
                 if (!conjPredicate.isEmpty()) {
@@ -326,6 +333,26 @@ public final class StatementParser {
             }
         }
         return statements;
+    }
+
+    private CoreLabel findIndirectObject(SemanticGraph graph, edu.stanford.nlp.ling.IndexedWord verbNode) {
+        if (graph == null || verbNode == null) {
+            return null;
+        }
+        for (SemanticGraphEdge edge : graph.outgoingEdgeList(verbNode)) {
+            String relation = edge.getRelation().getShortName();
+            if ("iobj".equals(relation)) {
+                return edge.getDependent().backingLabel();
+            }
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific != null && "to".equalsIgnoreCase(specific)) {
+                return edge.getDependent().backingLabel();
+            }
+        }
+        return null;
     }
 
     private List<Statement> parseNmodStatements(SemanticGraph graph) {

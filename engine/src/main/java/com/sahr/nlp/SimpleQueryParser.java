@@ -179,6 +179,11 @@ public final class SimpleQueryParser {
                 return withQuery;
             }
 
+            Optional<QueryGoal> dativeQuery = parseWhDativeQuery(graph);
+            if (dativeQuery.isPresent()) {
+                return dativeQuery;
+            }
+
             Optional<QueryGoal> passiveBy = parseWhPassiveByQuery(graph);
             if (passiveBy.isPresent()) {
                 return passiveBy;
@@ -211,9 +216,17 @@ public final class SimpleQueryParser {
         if (whPrepFallback.isPresent()) {
             return whPrepFallback;
         }
+        Optional<QueryGoal> whAuxFallback = parseWhAuxVerbFallback(input);
+        if (whAuxFallback.isPresent()) {
+            return whAuxFallback;
+        }
         Optional<QueryGoal> whVerbFallback = parseWhVerbFallback(input);
         if (whVerbFallback.isPresent()) {
             return whVerbFallback;
+        }
+        Optional<QueryGoal> whDativeFallback = parseWhDativeFallback(input);
+        if (whDativeFallback.isPresent()) {
+            return whDativeFallback;
         }
         return parsePrepositionFallback(input);
     }
@@ -308,6 +321,14 @@ public final class SimpleQueryParser {
         List<String> tokens = tokenize(normalized);
         if (tokens.isEmpty() || !YESNO_PREFIXES.contains(tokens.get(0))) {
             return Optional.empty();
+        }
+        Optional<QueryGoal> passive = parseYesNoPassiveByQuery(input);
+        if (passive.isPresent()) {
+            return passive;
+        }
+        Optional<QueryGoal> passiveFallback = parseYesNoPassiveByFallback(tokens);
+        if (passiveFallback.isPresent()) {
+            return passiveFallback;
         }
         Optional<QueryGoal> preposition = parseYesNoPrepositionFallback(tokens);
         if (preposition.isPresent()) {
@@ -626,6 +647,36 @@ public final class SimpleQueryParser {
         return Optional.empty();
     }
 
+    private Optional<QueryGoal> parseWhDativeQuery(SemanticGraph graph) {
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            String relation = edge.getRelation().getShortName();
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific == null || !"to".equalsIgnoreCase(specific)) {
+                continue;
+            }
+            CoreLabel whObject = edge.getDependent().backingLabel();
+            String wh = normalizeToken(whObject.lemma());
+            if (!WH_TOKENS.contains(wh)) {
+                continue;
+            }
+            CoreLabel subject = findDependent(graph, edge.getGovernor(), "nsubj");
+            if (subject == null) {
+                continue;
+            }
+            String subjectToken = normalizeToken(subject.word());
+            if (subjectToken.isEmpty()) {
+                continue;
+            }
+            CoreLabel verb = edge.getGovernor().backingLabel();
+            String predicate = normalizeVerb(verb.lemma().toLowerCase(Locale.ROOT));
+            return Optional.of(QueryGoal.relation(subjectToken, predicate, null, expectedTypeForWh(wh)));
+        }
+        return Optional.empty();
+    }
+
     private Optional<QueryGoal> parseWhPrepositionFallback(String input) {
         String normalized = input.toLowerCase(Locale.ROOT);
         List<String> tokens = tokenize(normalized);
@@ -663,6 +714,68 @@ public final class SimpleQueryParser {
         return Optional.of(QueryGoal.relationWithModifier(null, predicate, objectToken, expectedTypeForWh(wh), objectModifier.modifier));
     }
 
+    private Optional<QueryGoal> parseYesNoPassiveByQuery(String input) {
+        Annotation doc = new Annotation(input);
+        PIPELINE.annotate(doc);
+        for (CoreMap sentence : doc.get(CoreAnnotations.SentencesAnnotation.class)) {
+            SemanticGraph graph = sentence.get(SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class);
+            if (graph == null) {
+                continue;
+            }
+            for (SemanticGraphEdge edge : graph.edgeIterable()) {
+                if (!"nsubjpass".equals(edge.getRelation().getShortName())) {
+                    continue;
+                }
+                CoreLabel patient = edge.getDependent().backingLabel();
+                CoreLabel verb = edge.getGovernor().backingLabel();
+                CoreLabel agent = findByAgent(graph, edge.getGovernor().backingLabel());
+                if (agent == null) {
+                    continue;
+                }
+                String subjectToken = normalizeToken(agent.word());
+                String objectToken = normalizeToken(patient.word());
+                if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+                    continue;
+                }
+                String predicate = normalizeVerb(verb.lemma().toLowerCase(Locale.ROOT));
+                String predicateText = "was " + verb.word().toLowerCase(Locale.ROOT) + " by";
+                String subjectText = withDeterminer(graph, agent);
+                String objectText = withDeterminer(graph, patient);
+                return Optional.of(QueryGoal.yesNo(subjectToken, predicate, objectToken, null, subjectText, objectText, predicateText));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<QueryGoal> parseYesNoPassiveByFallback(List<String> tokens) {
+        int byIndex = tokens.indexOf("by");
+        if (byIndex < 0) {
+            return Optional.empty();
+        }
+        int verbIndex = byIndex - 1;
+        if (verbIndex <= 0) {
+            return Optional.empty();
+        }
+        int subjectIndex = firstContentIndexAfter(tokens, 0);
+        if (subjectIndex < 0 || subjectIndex >= verbIndex) {
+            return Optional.empty();
+        }
+        int agentIndex = firstContentIndexAfter(tokens, byIndex);
+        if (agentIndex < 0) {
+            return Optional.empty();
+        }
+        String subjectToken = tokens.get(subjectIndex);
+        String agentToken = tokens.get(agentIndex);
+        if (subjectToken.isBlank() || agentToken.isBlank()) {
+            return Optional.empty();
+        }
+        String predicate = normalizeVerb(tokens.get(verbIndex));
+        String subjectText = buildPhrase(tokens, agentIndex);
+        String objectText = buildPhrase(tokens, subjectIndex);
+        String predicateText = "was " + tokens.get(verbIndex) + " by";
+        return Optional.of(QueryGoal.yesNo(agentToken, predicate, subjectToken, null, subjectText, objectText, predicateText));
+    }
+
     private Optional<QueryGoal> parseWhVerbFallback(String input) {
         String normalized = input.toLowerCase(Locale.ROOT);
         List<String> tokens = tokenize(normalized);
@@ -671,6 +784,9 @@ public final class SimpleQueryParser {
         }
         String wh = tokens.get(0);
         if (!WH_TOKENS.contains(wh) || tokens.size() < 2) {
+            return Optional.empty();
+        }
+        if (tokens.contains("to")) {
             return Optional.empty();
         }
         int verbIndex = 1;
@@ -686,6 +802,74 @@ public final class SimpleQueryParser {
         }
         String predicate = normalizeVerb(verb);
         return Optional.of(QueryGoal.relation(null, predicate, null, expectedTypeForWh(wh)));
+    }
+
+    private Optional<QueryGoal> parseWhAuxVerbFallback(String input) {
+        String normalized = input.toLowerCase(Locale.ROOT);
+        List<String> tokens = tokenize(normalized);
+        if (tokens.size() < 4) {
+            return Optional.empty();
+        }
+        String wh = tokens.get(0);
+        if (!WH_TOKENS.contains(wh)) {
+            return Optional.empty();
+        }
+        if (!YESNO_PREFIXES.contains(tokens.get(1))) {
+            return Optional.empty();
+        }
+        if (tokens.contains("by")) {
+            return Optional.empty();
+        }
+        int subjectIndex = firstContentIndexAfter(tokens, 1);
+        if (subjectIndex < 0) {
+            return Optional.empty();
+        }
+        int verbIndex = firstContentIndexAfter(tokens, subjectIndex);
+        if (verbIndex < 0 || verbIndex >= tokens.size() - 1) {
+            return Optional.empty();
+        }
+        String verb = tokens.get(verbIndex);
+        if (verb.isBlank()) {
+            return Optional.empty();
+        }
+        String predicate = normalizeVerb(verb);
+        String subject = tokens.get(subjectIndex);
+        return Optional.of(QueryGoal.relation(subject, predicate, null, expectedTypeForWh(wh)));
+    }
+
+    private Optional<QueryGoal> parseWhDativeFallback(String input) {
+        String normalized = input.toLowerCase(Locale.ROOT);
+        List<String> tokens = tokenize(normalized);
+        if (tokens.isEmpty()) {
+            return Optional.empty();
+        }
+        String wh = tokens.get(0);
+        if (!WH_TOKENS.contains(wh)) {
+            return Optional.empty();
+        }
+        int toIndex = tokens.indexOf("to");
+        if (toIndex < 0) {
+            return Optional.empty();
+        }
+        int startIndex = 1;
+        if (tokens.size() > 2 && YESNO_PREFIXES.contains(tokens.get(1))) {
+            startIndex = 2;
+        }
+        int subjectIndex = firstContentIndexAfter(tokens, startIndex - 1);
+        if (subjectIndex < 0) {
+            return Optional.empty();
+        }
+        int verbIndex = firstContentIndexAfter(tokens, subjectIndex);
+        if (verbIndex < 0 || verbIndex >= toIndex) {
+            return Optional.empty();
+        }
+        String verb = tokens.get(verbIndex);
+        if (verb.isBlank()) {
+            return Optional.empty();
+        }
+        String predicate = normalizeVerb(verb);
+        String subject = tokens.get(subjectIndex);
+        return Optional.of(QueryGoal.relation(subject, predicate, null, expectedTypeForWh(wh)));
     }
 
     private String normalizeVerb(String verb) {
