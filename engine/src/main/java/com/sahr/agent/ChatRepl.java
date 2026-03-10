@@ -13,6 +13,7 @@ public final class ChatRepl {
     private final PrintStream out;
     private final boolean attentionDebug;
     private final int attentionTopN;
+    private final CommandProcessor commandProcessor;
 
     public ChatRepl(SahrAgent agent, InputStream input, PrintStream out) {
         this.agent = agent;
@@ -20,10 +21,11 @@ public final class ChatRepl {
         this.out = out;
         this.attentionDebug = Boolean.parseBoolean(System.getProperty("sahr.repl.attentionDebug", "false"));
         this.attentionTopN = parseTopN(System.getProperty("sahr.repl.attentionTopN", "3"));
+        this.commandProcessor = new CommandProcessor(agent);
     }
 
     public void run() throws IOException {
-        out.println("SAHR REPL ready. Type 'exit' to quit.");
+        out.println("SAHR REPL ready. Type :help for commands.");
         while (true) {
             out.print("> ");
             String line = reader.readLine();
@@ -31,12 +33,14 @@ public final class ChatRepl {
                 break;
             }
             String trimmed = line.trim();
-            if (trimmed.equalsIgnoreCase("exit") || trimmed.equalsIgnoreCase("quit")) {
-                break;
-            }
-            if (trimmed.equalsIgnoreCase(":reset")) {
-                agent.resetWorkingMemory();
-                out.println("Working memory reset.");
+            CommandProcessor.CommandResult commandResult = commandProcessor.handle(trimmed);
+            if (commandResult != null) {
+                if (commandResult.output() != null && !commandResult.output().isBlank()) {
+                    out.println(commandResult.output());
+                }
+                if (commandResult.shouldExit()) {
+                    break;
+                }
                 continue;
             }
             if (trimmed.isEmpty()) {

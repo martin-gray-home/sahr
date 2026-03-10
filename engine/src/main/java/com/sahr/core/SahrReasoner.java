@@ -28,4 +28,8 @@ public final class SahrReasoner {
         List<ReasoningCandidate> results = reason(context);
         return candidateSelector.selectWinner(results);
     }
+
+    public List<SymbolicAttentionHead> heads() {
+        return heads;
+    }
 }

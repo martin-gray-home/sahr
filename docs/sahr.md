@@ -291,7 +291,10 @@ entities are bounded (LRU-style) to keep focus tight. The reasoner
 remains stateless and consumes working memory via `HeadContext`.
 `SahrAgent.resetWorkingMemory()` clears the session state when starting a
 new conversation.
-In the REPL, use `:reset` to clear working memory explicitly.
+In the REPL, use `:reset` to clear working memory explicitly. Use
+`:explain` to inspect the last reasoning trace (supports `--depth`,
+`--verbose`, `--memory`, and `--heads`), and `:help` for the full
+command list.
 
 Symbolic Attention Scoring
 ---------------------------

@@ -92,6 +92,32 @@ public final class SahrAgent {
         return Optional.of(trace);
     }
 
+    public Optional<ReasoningTraceEntry> lastTraceEntry() {
+        List<ReasoningTraceEntry> entries = trace.entries();
+        if (entries.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(entries.get(entries.size() - 1));
+    }
+
+    public WorkingMemorySnapshot workingMemorySnapshot() {
+        return new WorkingMemorySnapshot(
+                List.copyOf(workingMemory.activeEntities()),
+                workingMemory.recentAssertions(),
+                workingMemory.goalStack()
+        );
+    }
+
+    public List<String> describeHeads(QueryGoal query) {
+        if (query == null) {
+            return List.of();
+        }
+        HeadContext context = new HeadContext(query, graph, ontology, null, workingMemory);
+        return reasoner.heads().stream()
+                .map(head -> head.explain(context))
+                .toList();
+    }
+
     public void resetWorkingMemory() {
         workingMemory.clear();
     }
