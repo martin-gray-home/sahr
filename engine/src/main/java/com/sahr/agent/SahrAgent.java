@@ -153,6 +153,8 @@ public final class SahrAgent {
                 expectedType,
                 requestedType,
                 expectedRange,
+                query.attribute(),
+                query.modifier(),
                 query.subjectText(),
                 query.objectText(),
                 query.predicateText(),
@@ -172,6 +174,16 @@ public final class SahrAgent {
         }
         if (query.type() == QueryGoal.Type.RELATION) {
             if (isBlank(query.predicate()) || (isBlank(query.subject()) && isBlank(query.object()))) {
+                return QueryGoal.unknown();
+            }
+        }
+        if (query.type() == QueryGoal.Type.ATTRIBUTE) {
+            if (isBlank(query.subject()) || isBlank(query.attribute())) {
+                return QueryGoal.unknown();
+            }
+        }
+        if (query.type() == QueryGoal.Type.COUNT) {
+            if (isBlank(query.predicate()) || (isBlank(query.object()) && isBlank(query.subject()))) {
                 return QueryGoal.unknown();
             }
         }
@@ -296,23 +308,27 @@ public final class SahrAgent {
         }
     }
 
-    private String applyAssertion(Object payload) {
+    private ApplyResult applyAssertionResult(Object payload) {
         if (payload instanceof RelationAssertion) {
             RelationAssertion assertion = (RelationAssertion) payload;
-            addAssertionIfNew(assertion);
+            boolean added = addAssertionIfNew(assertion);
             if (PREDICATE_TYPE.equals(assertion.predicate())) {
                 upsertEntityType(assertion.subject(), assertion.object().value());
             }
-            runPropagationClosure();
+            if (added) {
+                runPropagationClosure();
+            }
             logger.fine(() -> "Applied assertion payload: " + payload);
-            return "Assertion recorded.";
+            return added ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
         }
         if (payload instanceof StatementBatch) {
             StatementBatch batch = (StatementBatch) payload;
+            boolean anyAdded = false;
             for (Statement statement : batch.statements()) {
-                applyAssertion(statement);
+                ApplyResult result = applyAssertionResult(statement);
+                anyAdded = anyAdded || result.added;
             }
-            return "Assertion recorded.";
+            return anyAdded ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
         }
         if (payload instanceof Statement) {
             Statement statement = (Statement) payload;
@@ -323,6 +339,7 @@ public final class SahrAgent {
             if (!statement.objectIsConcept()) {
                 upsertEntity(statement.object(), statement.objectTypes());
             }
+            boolean addedAny = false;
             for (SymbolId subject : subjects) {
                 RelationAssertion assertion = new RelationAssertion(
                         subject,
@@ -330,16 +347,23 @@ public final class SahrAgent {
                         statement.object(),
                         statement.confidence()
                 );
-                addAssertionIfNew(assertion);
+                boolean added = addAssertionIfNew(assertion);
+                addedAny = addedAny || added;
                 if (PREDICATE_TYPE.equals(statement.predicate())) {
                     upsertEntityType(subject, statement.object().value());
                 }
             }
-            runPropagationClosure();
+            if (addedAny) {
+                runPropagationClosure();
+            }
             logger.fine(() -> "Applied statement assertion: " + statement);
-            return "Assertion recorded.";
+            return addedAny ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
         }
-        return "Unknown assertion payload.";
+        return ApplyResult.existing("Unknown assertion payload.");
+    }
+
+    private String applyAssertion(Object payload) {
+        return applyAssertionResult(payload).message;
     }
 
     private boolean isQuestion(QueryGoal query) {
@@ -452,8 +476,10 @@ public final class SahrAgent {
             }
 
             if (CandidateType.ASSERTION.equals(winner.type())) {
-                applyCandidate(winner);
-                queue.addLast(root);
+                ApplyResult result = applyAssertionResult(winner.payload());
+                if (result.added) {
+                    queue.addLast(root);
+                }
                 workingMemory.popGoal();
                 continue;
             }
@@ -472,6 +498,24 @@ public final class SahrAgent {
         }
 
         return "No candidates produced.";
+    }
+
+    private static final class ApplyResult {
+        private final boolean added;
+        private final String message;
+
+        private ApplyResult(boolean added, String message) {
+            this.added = added;
+            this.message = message;
+        }
+
+        private static ApplyResult added(String message) {
+            return new ApplyResult(true, message);
+        }
+
+        private static ApplyResult existing(String message) {
+            return new ApplyResult(false, message);
+        }
     }
 
     private ReasoningCandidate selectPreferredCandidate(List<ReasoningCandidate> candidates) {
@@ -632,6 +676,9 @@ public final class SahrAgent {
                     workingMemory.addActiveEntity(new SymbolId("entity:" + raw));
                 }
             }
+        }
+        if (query.type() == QueryGoal.Type.ATTRIBUTE && query.subject() != null && query.subject().startsWith("entity:")) {
+            workingMemory.addActiveEntity(new SymbolId(query.subject()));
         }
     }
 

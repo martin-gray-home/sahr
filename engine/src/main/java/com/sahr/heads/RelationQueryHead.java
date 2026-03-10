@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public final class RelationQueryHead extends BaseHead {
     private final Map<String, List<String>> predicateAliases;
@@ -41,7 +42,8 @@ public final class RelationQueryHead extends BaseHead {
     @Override
     public List<ReasoningCandidate> evaluate(HeadContext context) {
         QueryGoal query = context.query();
-        if (query.type() != QueryGoal.Type.RELATION && query.type() != QueryGoal.Type.YESNO) {
+        if (query.type() != QueryGoal.Type.RELATION && query.type() != QueryGoal.Type.YESNO
+                && query.type() != QueryGoal.Type.COUNT) {
             return List.of();
         }
 
@@ -62,9 +64,23 @@ public final class RelationQueryHead extends BaseHead {
         WorkingMemory memory = context.workingMemory();
         SymbolId subject = subjectBinding == null || subjectBinding.isBlank() ? null : new SymbolId(subjectBinding);
         SymbolId object = objectBinding == null || objectBinding.isBlank() ? null : new SymbolId(objectBinding);
+        String modifier = query.modifier();
+
+        if (modifier != null && !modifier.isBlank()) {
+            if (subject != null && !entityHasAttribute(graph, subject, modifier)) {
+                return List.of();
+            }
+            if (object != null && !entityHasAttribute(graph, object, modifier)) {
+                return List.of();
+            }
+        }
 
         if (query.type() == QueryGoal.Type.YESNO) {
             return evaluateYesNo(query, graph, ontology, subject, object, predicate, expectedType);
+        }
+
+        if (query.type() == QueryGoal.Type.COUNT) {
+            return evaluateCount(query, graph, ontology, subject, object, predicate, expectedType);
         }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
@@ -114,6 +130,136 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         return candidates;
+    }
+
+    private List<ReasoningCandidate> evaluateCount(QueryGoal query,
+                                                   KnowledgeBase graph,
+                                                   OntologyService ontology,
+                                                   SymbolId subject,
+                                                   SymbolId object,
+                                                   String predicate,
+                                                   String expectedType) {
+        String modifier = query.modifier();
+        if (modifier != null && !modifier.isBlank()) {
+            if (object != null && !entityHasAttribute(graph, object, modifier)) {
+                return List.of(buildCountAnswer(0, predicate));
+            }
+            if (object == null && subject != null && !entityHasAttribute(graph, subject, modifier)) {
+                return List.of(buildCountAnswer(0, predicate));
+            }
+        }
+        List<SymbolId> matches = new ArrayList<>();
+        for (String predicateKey : expandPredicates(predicate, ontology)) {
+            for (RelationAssertion assertion : graph.findByPredicate(predicateKey)) {
+                if (object != null && !assertion.object().equals(object)) {
+                    continue;
+                }
+                if (subject != null && !assertion.subject().equals(subject)) {
+                    continue;
+                }
+                SymbolId candidate = assertion.subject();
+                if (object != null) {
+                    candidate = assertion.subject();
+                } else if (subject != null) {
+                    candidate = assertion.object();
+                }
+                if (!matchesExpectedTypeForCount(graph, ontology, candidate, expectedType)) {
+                    continue;
+                }
+                matches.add(candidate);
+            }
+        }
+        long count = matches.stream().map(SymbolId::value).distinct().count();
+        return List.of(buildCountAnswer(count, predicate));
+    }
+
+    private boolean matchesExpectedTypeForCount(KnowledgeBase graph,
+                                                OntologyService ontology,
+                                                SymbolId candidate,
+                                                String expectedType) {
+        if (expectedType == null || expectedType.isBlank()) {
+            return true;
+        }
+        String normalized = stripPrefix(expectedType).toLowerCase(java.util.Locale.ROOT);
+        if (!isIri(expectedType)) {
+            if (isPersonLike(normalized)) {
+                return isPersonLike(stripPrefix(candidate.value()))
+                        || hasTypeMatch(graph, candidate, Set.of("person", "people", "man", "woman", "boy", "girl"));
+            }
+            return stripPrefix(candidate.value()).equalsIgnoreCase(normalized)
+                    || hasTypeMatch(graph, candidate, Set.of(normalized));
+        }
+        return matchesExpectedType(graph, ontology, candidate, expectedType);
+    }
+
+    private boolean hasTypeMatch(KnowledgeBase graph, SymbolId candidate, Set<String> expected) {
+        Optional<EntityNode> entity = graph.findEntity(candidate);
+        if (entity.isEmpty()) {
+            return false;
+        }
+        for (String type : entity.get().conceptTypes()) {
+            String raw = stripPrefix(type);
+            if (expected.contains(raw.toLowerCase(java.util.Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isPersonLike(String value) {
+        if (value == null) {
+            return false;
+        }
+        return switch (value.toLowerCase(java.util.Locale.ROOT)) {
+            case "person", "people", "man", "woman", "boy", "girl" -> true;
+            default -> false;
+        };
+    }
+
+    private String stripPrefix(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.startsWith("entity:")) {
+            return value.substring("entity:".length());
+        }
+        if (value.startsWith("concept:")) {
+            return value.substring("concept:".length());
+        }
+        return value;
+    }
+
+    private ReasoningCandidate buildCountAnswer(long count, String predicate) {
+        double score = normalize(1.0, 0.8);
+        Map<String, Double> breakdown = new HashMap<>();
+        breakdown.put("query_match", 1.0);
+        breakdown.put("count", (double) count);
+        return new ReasoningCandidate(
+                CandidateType.ANSWER,
+                String.valueOf(count),
+                score,
+                getName(),
+                List.of("count:" + predicate),
+                breakdown,
+                0
+        );
+    }
+
+    private boolean entityHasAttribute(KnowledgeBase graph, SymbolId entity, String modifier) {
+        if (entity == null || modifier == null || modifier.isBlank()) {
+            return true;
+        }
+        String normalized = modifier.toLowerCase(java.util.Locale.ROOT);
+        for (RelationAssertion assertion : graph.findBySubject(entity)) {
+            if (!"hasAttribute".equals(assertion.predicate())) {
+                continue;
+            }
+            String value = assertion.object().value().replace("entity:", "").toLowerCase(java.util.Locale.ROOT);
+            if (normalized.equals(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private double memoryFocus(WorkingMemory memory, SymbolId subject, SymbolId object, SymbolId answer) {

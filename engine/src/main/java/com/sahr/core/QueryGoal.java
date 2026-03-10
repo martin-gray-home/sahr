@@ -7,6 +7,8 @@ public final class QueryGoal {
         WHERE,
         RELATION,
         YESNO,
+        ATTRIBUTE,
+        COUNT,
         UNKNOWN
     }
 
@@ -17,6 +19,8 @@ public final class QueryGoal {
     private final String expectedType;
     private final String entityType;
     private final String expectedRange;
+    private final String attribute;
+    private final String modifier;
     private final String subjectText;
     private final String objectText;
     private final String predicateText;
@@ -31,10 +35,12 @@ public final class QueryGoal {
                      String expectedType,
                      String entityType,
                      String expectedRange,
+                     String attribute,
+                     String modifier,
                      String subjectText,
                      String objectText,
                      String predicateText) {
-        this(type, subject, object, predicate, expectedType, entityType, expectedRange, subjectText, objectText, predicateText,
+        this(type, subject, object, predicate, expectedType, entityType, expectedRange, attribute, modifier, subjectText, objectText, predicateText,
                 java.util.UUID.randomUUID().toString(), null, 0);
     }
 
@@ -45,6 +51,8 @@ public final class QueryGoal {
                      String expectedType,
                      String entityType,
                      String expectedRange,
+                     String attribute,
+                     String modifier,
                      String subjectText,
                      String objectText,
                      String predicateText,
@@ -58,6 +66,8 @@ public final class QueryGoal {
         this.expectedType = expectedType;
         this.entityType = entityType;
         this.expectedRange = expectedRange;
+        this.attribute = attribute;
+        this.modifier = modifier;
         this.subjectText = subjectText;
         this.objectText = objectText;
         this.predicateText = predicateText;
@@ -67,15 +77,23 @@ public final class QueryGoal {
     }
 
     public static QueryGoal unknown() {
-        return new QueryGoal(Type.UNKNOWN, null, null, null, null, null, null, null, null, null);
+        return new QueryGoal(Type.UNKNOWN, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public static QueryGoal where(String entityType, String expectedRange) {
-        return new QueryGoal(Type.WHERE, null, null, null, null, entityType, expectedRange, null, null, null);
+        return new QueryGoal(Type.WHERE, null, null, null, null, entityType, expectedRange, null, null, null, null, null);
     }
 
     public static QueryGoal relation(String subject, String predicate, String object, String expectedType) {
-        return new QueryGoal(Type.RELATION, subject, object, predicate, expectedType, null, null, null, null, null);
+        return new QueryGoal(Type.RELATION, subject, object, predicate, expectedType, null, null, null, null, null, null, null);
+    }
+
+    public static QueryGoal relationWithModifier(String subject,
+                                                 String predicate,
+                                                 String object,
+                                                 String expectedType,
+                                                 String modifier) {
+        return new QueryGoal(Type.RELATION, subject, object, predicate, expectedType, null, null, null, modifier, null, null, null);
     }
 
     public static QueryGoal yesNo(String subject,
@@ -85,7 +103,19 @@ public final class QueryGoal {
                                   String subjectText,
                                   String objectText,
                                   String predicateText) {
-        return new QueryGoal(Type.YESNO, subject, object, predicate, expectedType, null, null, subjectText, objectText, predicateText);
+        return new QueryGoal(Type.YESNO, subject, object, predicate, expectedType, null, null, null, null, subjectText, objectText, predicateText);
+    }
+
+    public static QueryGoal attribute(String subject, String attribute) {
+        return new QueryGoal(Type.ATTRIBUTE, subject, null, "hasAttribute", null, null, null, attribute, null, null, null, null);
+    }
+
+    public static QueryGoal count(String subject,
+                                  String predicate,
+                                  String object,
+                                  String expectedType,
+                                  String modifier) {
+        return new QueryGoal(Type.COUNT, subject, object, predicate, expectedType, null, null, null, modifier, null, null, null);
     }
 
     public Type type() {
@@ -114,6 +144,14 @@ public final class QueryGoal {
 
     public String expectedRange() {
         return expectedRange;
+    }
+
+    public String attribute() {
+        return attribute;
+    }
+
+    public String modifier() {
+        return modifier;
     }
 
     public String subjectText() {
@@ -149,6 +187,8 @@ public final class QueryGoal {
                 expectedType,
                 entityType,
                 expectedRange,
+                attribute,
+                modifier,
                 subjectText,
                 objectText,
                 predicateText,

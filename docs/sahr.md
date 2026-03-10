@@ -497,7 +497,7 @@ This sets `sahr.log.level=FINE` to log config loading, ontology initialization, 
 
 # Statement Parsing
 
-`StatementParser` uses Stanford CoreNLP dependency parsing to extract subject–predicate–object structures generically (including `nmod` and `obl` prepositions). It falls back to simple pattern rules when parsing fails. Compound subjects (e.g., "man and boy") are tagged so the agent can apply multiple assertions, and multiple prepositional relations in a single sentence are surfaced as additional statements.
+`StatementParser` uses Stanford CoreNLP dependency parsing to extract subject–predicate–object structures generically (including `nmod` and `obl` prepositions). It falls back to simple pattern rules when parsing fails. Compound subjects (e.g., "man and boy") are tagged so the agent can apply multiple assertions, and multiple prepositional relations in a single sentence are surfaced as additional statements. Copular, verb-object, adjectival, appositive, relative-clause, adverbial, and clausal-complement relations can be batched into `Statement.additionalStatements` to maximize assertions per input, including phrasal verbs (`compound:prt`) like “pick up.”
 
 ---
 

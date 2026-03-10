@@ -127,6 +127,13 @@ public final class CommandProcessor {
             case YESNO -> "YESNO subject=" + safe(query.subject())
                     + " predicate=" + safe(query.predicate())
                     + " object=" + safe(query.object());
+            case ATTRIBUTE -> "ATTRIBUTE subject=" + safe(query.subject())
+                    + " attribute=" + safe(query.attribute());
+            case COUNT -> "COUNT subject=" + safe(query.subject())
+                    + " predicate=" + safe(query.predicate())
+                    + " object=" + safe(query.object())
+                    + " expectedType=" + safe(query.expectedType())
+                    + " modifier=" + safe(query.modifier());
             case UNKNOWN -> "UNKNOWN";
         };
     }
