@@ -179,6 +179,11 @@ public final class SimpleQueryParser {
                 return withQuery;
             }
 
+            Optional<QueryGoal> passiveBy = parseWhPassiveByQuery(graph);
+            if (passiveBy.isPresent()) {
+                return passiveBy;
+            }
+
             Optional<QueryGoal> whPrepObject = parseWhPrepositionObjectQuery(graph);
             if (whPrepObject.isPresent()) {
                 return whPrepObject;
@@ -438,6 +443,72 @@ public final class SimpleQueryParser {
             return Optional.of(QueryGoal.relation(null, predicate, objectToken, expectedTypeForWh(wh)));
         }
         return Optional.empty();
+    }
+
+    private Optional<QueryGoal> parseWhPassiveByQuery(SemanticGraph graph) {
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            String relation = edge.getRelation().getShortName();
+            if (!"nsubjpass".equals(relation)) {
+                continue;
+            }
+            CoreLabel subject = edge.getDependent().backingLabel();
+            String wh = normalizeToken(subject.lemma());
+            CoreLabel verb = edge.getGovernor().backingLabel();
+            String predicate = normalizeVerb(verb.lemma().toLowerCase(Locale.ROOT));
+
+            if (WH_TOKENS.contains(wh)) {
+                CoreLabel agent = findByAgent(graph, edge.getGovernor().backingLabel());
+                if (agent == null) {
+                    return Optional.of(QueryGoal.relation(null, predicate, null, expectedTypeForWh(wh)));
+                }
+                String agentToken = normalizeToken(agent.word());
+                if (agentToken.isEmpty()) {
+                    continue;
+                }
+                return Optional.of(QueryGoal.relation(agentToken, predicate, null, expectedTypeForWh(wh)));
+            }
+
+            CoreLabel agent = findByAgent(graph, edge.getGovernor().backingLabel());
+            if (agent == null) {
+                continue;
+            }
+            String agentToken = normalizeToken(agent.word());
+            if (agentToken.isEmpty()) {
+                continue;
+            }
+            String agentLemma = normalizeToken(agent.lemma());
+            if (!WH_TOKENS.contains(agentLemma)) {
+                continue;
+            }
+            String objectToken = normalizeToken(subject.word());
+            if (objectToken.isEmpty()) {
+                continue;
+            }
+            return Optional.of(QueryGoal.relation(null, predicate, objectToken, expectedTypeForWh(agentLemma)));
+        }
+        return Optional.empty();
+    }
+
+    private CoreLabel findByAgent(SemanticGraph graph, CoreLabel governor) {
+        if (graph == null || governor == null) {
+            return null;
+        }
+        var node = graph.getNodeByIndexSafe(governor.index());
+        if (node == null) {
+            return null;
+        }
+        for (SemanticGraphEdge out : graph.outgoingEdgeList(node)) {
+            String relation = out.getRelation().getShortName();
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
+                continue;
+            }
+            String specific = out.getRelation().getSpecific();
+            if (specific == null || !"by".equalsIgnoreCase(specific)) {
+                continue;
+            }
+            return out.getDependent().backingLabel();
+        }
+        return null;
     }
 
     private Optional<QueryGoal> parseWithFallback(String input) {

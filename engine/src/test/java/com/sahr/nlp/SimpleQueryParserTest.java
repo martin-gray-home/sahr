@@ -117,6 +117,36 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesPassiveByWhSubjectQuery() {
+        QueryGoal query = parser.parse("Who was eaten by the lion");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertNull(query.subject());
+        assertEquals("eat", query.predicate());
+        assertEquals("person", query.expectedType());
+    }
+
+    @Test
+    void parsesPassiveByWhObjectQuery() {
+        QueryGoal query = parser.parse("What was the man eaten by");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertNull(query.object());
+        assertEquals("eat", query.predicate());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
+    void parsesPassiveByWhSubjectWithPredicate() {
+        QueryGoal query = parser.parse("What was worn by the man");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertNull(query.subject());
+        assertEquals("wear", query.predicate());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromUnderPattern() {
         QueryGoal query = parser.parse("What is under the hat");
 
