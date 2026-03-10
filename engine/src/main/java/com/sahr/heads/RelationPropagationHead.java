@@ -7,6 +7,7 @@ import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
+import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
 
 import java.util.ArrayList;
@@ -41,11 +42,14 @@ public final class RelationPropagationHead extends BaseHead {
             return List.of();
         }
         List<RelationAssertion> locationAssertions = new ArrayList<>();
+        java.util.Map<SymbolId, List<RelationAssertion>> locationTargets = new java.util.HashMap<>();
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             if (locationPredicates.contains(assertion.predicate())) {
                 locationAssertions.add(assertion);
+                locationTargets.computeIfAbsent(assertion.object(), ignored -> new ArrayList<>()).add(assertion);
             }
         }
+        String preferredLocationPredicate = pickLocationPredicate(locationPredicates);
 
         for (RelationAssertion left : locationAssertions) {
             for (RelationAssertion right : locationAssertions) {
@@ -107,6 +111,44 @@ public final class RelationPropagationHead extends BaseHead {
             }
         }
 
+        if (preferredLocationPredicate != null && !preferredLocationPredicate.isBlank()) {
+            for (RelationAssertion relation : graph.getAllAssertions()) {
+                if (!expandedCoLocation.contains(relation.predicate())) {
+                    continue;
+                }
+                List<RelationAssertion> subjectLocations = locationTargets.get(relation.subject());
+                if (subjectLocations != null) {
+                    for (RelationAssertion location : subjectLocations) {
+                        RelationAssertion inferred = new RelationAssertion(
+                                relation.object(),
+                                preferredLocationPredicate,
+                                relation.subject(),
+                                averageConfidence(relation.confidence(), location.confidence())
+                        );
+                        if (exists(graph, inferred)) {
+                            continue;
+                        }
+                        candidates.add(buildCandidate(inferred, List.of(relation.toString(), location.toString()), 1, memory));
+                    }
+                }
+                List<RelationAssertion> objectLocations = locationTargets.get(relation.object());
+                if (objectLocations != null) {
+                    for (RelationAssertion location : objectLocations) {
+                        RelationAssertion inferred = new RelationAssertion(
+                                relation.subject(),
+                                preferredLocationPredicate,
+                                relation.object(),
+                                averageConfidence(relation.confidence(), location.confidence())
+                        );
+                        if (exists(graph, inferred)) {
+                            continue;
+                        }
+                        candidates.add(buildCandidate(inferred, List.of(relation.toString(), location.toString()), 1, memory));
+                    }
+                }
+            }
+        }
+
         return candidates;
     }
 
@@ -134,6 +176,25 @@ public final class RelationPropagationHead extends BaseHead {
                 breakdown,
                 depth
         );
+    }
+
+    private String pickLocationPredicate(Set<String> locationPredicates) {
+        if (locationPredicates == null || locationPredicates.isEmpty()) {
+            return null;
+        }
+        String preferred = null;
+        for (String predicate : locationPredicates) {
+            if (predicate == null) {
+                continue;
+            }
+            if (predicate.endsWith("locatedIn")) {
+                return predicate;
+            }
+            if (preferred == null || predicate.compareTo(preferred) < 0) {
+                preferred = predicate;
+            }
+        }
+        return preferred;
     }
 
     private double memoryFocus(WorkingMemory memory, RelationAssertion assertion) {
