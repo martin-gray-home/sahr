@@ -17,15 +17,30 @@ public final class EngineConfig {
     private final Map<String, List<String>> ontologyResources;
     private final List<String> headIds;
     private final Map<String, List<String>> predicateAliases;
+    private final boolean vectorEnabled;
+    private final String vectorModelPath;
+    private final String vectorVocabPath;
+    private final double vectorThreshold;
+    private final int vectorMaxTokens;
 
     private EngineConfig(List<String> ontologyIds,
                          Map<String, List<String>> ontologyResources,
                          List<String> headIds,
-                         Map<String, List<String>> predicateAliases) {
+                         Map<String, List<String>> predicateAliases,
+                         boolean vectorEnabled,
+                         String vectorModelPath,
+                         String vectorVocabPath,
+                         double vectorThreshold,
+                         int vectorMaxTokens) {
         this.ontologyIds = List.copyOf(ontologyIds);
         this.ontologyResources = Map.copyOf(ontologyResources);
         this.headIds = List.copyOf(headIds);
         this.predicateAliases = Map.copyOf(predicateAliases);
+        this.vectorEnabled = vectorEnabled;
+        this.vectorModelPath = vectorModelPath;
+        this.vectorVocabPath = vectorVocabPath;
+        this.vectorThreshold = vectorThreshold;
+        this.vectorMaxTokens = vectorMaxTokens;
     }
 
     public List<String> ontologyIds() {
@@ -44,6 +59,26 @@ public final class EngineConfig {
         return predicateAliases;
     }
 
+    public boolean vectorEnabled() {
+        return vectorEnabled;
+    }
+
+    public String vectorModelPath() {
+        return vectorModelPath;
+    }
+
+    public String vectorVocabPath() {
+        return vectorVocabPath;
+    }
+
+    public double vectorThreshold() {
+        return vectorThreshold;
+    }
+
+    public int vectorMaxTokens() {
+        return vectorMaxTokens;
+    }
+
     public static EngineConfig loadFromClasspath(String resourcePath) {
         Properties properties = new Properties();
         try (InputStream stream = EngineConfig.class.getClassLoader().getResourceAsStream(resourcePath)) {
@@ -58,6 +93,11 @@ public final class EngineConfig {
         List<String> ontologyIds = splitList(properties.getProperty("ontologies"));
         List<String> headIds = splitList(properties.getProperty("heads"));
         Map<String, List<String>> predicateAliases = parsePredicateAliases(properties.getProperty("predicate.aliases"));
+        boolean vectorEnabled = Boolean.parseBoolean(properties.getProperty("vector.enabled", "false"));
+        String vectorModelPath = properties.getProperty("vector.model", "");
+        String vectorVocabPath = properties.getProperty("vector.vocab", "");
+        double vectorThreshold = parseDouble(properties.getProperty("vector.threshold"), 0.6);
+        int vectorMaxTokens = parseInt(properties.getProperty("vector.maxTokens"), 32);
 
         Map<String, List<String>> ontologyResources = new LinkedHashMap<>();
         for (String id : ontologyIds) {
@@ -70,13 +110,15 @@ public final class EngineConfig {
         }
 
         logger.info(() -> "Loaded engine config: ontologies=" + ontologyIds + ", heads=" + headIds);
-        return new EngineConfig(ontologyIds, ontologyResources, headIds, predicateAliases);
+        return new EngineConfig(ontologyIds, ontologyResources, headIds, predicateAliases,
+                vectorEnabled, vectorModelPath, vectorVocabPath, vectorThreshold, vectorMaxTokens);
     }
 
     public static EngineConfig fromValues(List<String> ontologyIds,
                                           Map<String, List<String>> ontologyResources,
                                           List<String> headIds) {
-        return new EngineConfig(ontologyIds, ontologyResources, headIds, Map.of());
+        return new EngineConfig(ontologyIds, ontologyResources, headIds, Map.of(),
+                false, "", "", 0.6, 32);
     }
 
     private static List<String> splitList(String raw) {
@@ -117,5 +159,27 @@ public final class EngineConfig {
             aliases.computeIfAbsent(from, key -> new ArrayList<>()).add(to);
         }
         return aliases;
+    }
+
+    private static double parseDouble(String raw, double fallback) {
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Double.parseDouble(raw.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private static int parseInt(String raw, int fallback) {
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 }
