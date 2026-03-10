@@ -3,9 +3,11 @@ package com.sahr.config;
 import com.sahr.core.OntologyService;
 import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.CachedOntologyService;
+import com.sahr.nlp.CompositeTermMapper;
 import com.sahr.ontology.LabelLexicalMapper;
 import com.sahr.ontology.OntologyLoader;
 import com.sahr.ontology.OwlApiOntologyService;
+import com.sahr.ontology.VectorLexicalMapper;
 import org.semanticweb.owlapi.model.OWLOntology;
 
 import java.util.ArrayList;
@@ -33,7 +35,10 @@ public final class OntologyRegistry {
         OntologyService delegate = new OwlApiOntologyService(ontology);
         logger.info("Ontology loaded. Building cached view.");
         OntologyService cached = new CachedOntologyService(delegate);
-        TermMapper mapper = new LabelLexicalMapper(ontology);
+        TermMapper mapper = new CompositeTermMapper(List.of(
+                new LabelLexicalMapper(ontology),
+                new VectorLexicalMapper(ontology)
+        ));
         return new OntologyContext(cached, mapper);
     }
 }
