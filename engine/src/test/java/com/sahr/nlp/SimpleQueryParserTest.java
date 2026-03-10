@@ -85,6 +85,17 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesRelationQueryFromWhSubjectNoObject() {
+        QueryGoal query = parser.parse("Who was eating");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("eat", query.predicate());
+        assertEquals("person", query.expectedType());
+        assertNull(query.subject());
+        assertNull(query.object());
+    }
+
+    @Test
     void parsesRelationQueryFromUnderPattern() {
         QueryGoal query = parser.parse("What is under the hat");
 

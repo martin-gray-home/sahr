@@ -204,6 +204,10 @@ public final class SimpleQueryParser {
         if (whPrepFallback.isPresent()) {
             return whPrepFallback;
         }
+        Optional<QueryGoal> whVerbFallback = parseWhVerbFallback(input);
+        if (whVerbFallback.isPresent()) {
+            return whVerbFallback;
+        }
         return parsePrepositionFallback(input);
     }
 
@@ -409,19 +413,25 @@ public final class SimpleQueryParser {
             }
             CoreLabel verb = edge.getGovernor().backingLabel();
             CoreLabel object = findDependent(graph, edge.getGovernor(), "obj");
+            String predicate = verb.lemma().toLowerCase(Locale.ROOT);
+            if ("what".equals(wh) && shouldInvertPowerVerb(predicate)) {
+                String inverted = toPassivePredicate(predicate);
+                if (object == null) {
+                    return Optional.of(QueryGoal.relation(null, inverted, null, expectedTypeForWh(wh)));
+                }
+                String objectToken = normalizeToken(object.word());
+                if (objectToken.isEmpty()) {
+                    continue;
+                }
+                return Optional.of(QueryGoal.relation(objectToken, inverted, null, expectedTypeForWh(wh)));
+            }
             if (object == null) {
-                continue;
+                return Optional.of(QueryGoal.relation(null, predicate, null, expectedTypeForWh(wh)));
             }
             String objectToken = normalizeToken(object.word());
             if (objectToken.isEmpty()) {
                 continue;
             }
-            String predicate = verb.lemma().toLowerCase(Locale.ROOT);
-            if ("what".equals(wh) && shouldInvertPowerVerb(predicate)) {
-                String inverted = toPassivePredicate(predicate);
-                return Optional.of(QueryGoal.relation(objectToken, inverted, null, expectedTypeForWh(wh)));
-            }
-
             return Optional.of(QueryGoal.relation(null, predicate, objectToken, expectedTypeForWh(wh)));
         }
         return Optional.empty();
@@ -577,6 +587,44 @@ public final class SimpleQueryParser {
             return Optional.empty();
         }
         return Optional.of(QueryGoal.relationWithModifier(null, predicate, objectToken, expectedTypeForWh(wh), objectModifier.modifier));
+    }
+
+    private Optional<QueryGoal> parseWhVerbFallback(String input) {
+        String normalized = input.toLowerCase(Locale.ROOT);
+        List<String> tokens = tokenize(normalized);
+        if (tokens.isEmpty()) {
+            return Optional.empty();
+        }
+        String wh = tokens.get(0);
+        if (!WH_TOKENS.contains(wh) || tokens.size() < 2) {
+            return Optional.empty();
+        }
+        int verbIndex = 1;
+        if (YESNO_PREFIXES.contains(tokens.get(1)) && tokens.size() >= 3) {
+            verbIndex = 2;
+        }
+        if (verbIndex >= tokens.size()) {
+            return Optional.empty();
+        }
+        String verb = tokens.get(verbIndex);
+        if (verb.isBlank()) {
+            return Optional.empty();
+        }
+        String predicate = normalizeVerb(verb);
+        return Optional.of(QueryGoal.relation(null, predicate, null, expectedTypeForWh(wh)));
+    }
+
+    private String normalizeVerb(String verb) {
+        if (verb == null || verb.isBlank()) {
+            return verb;
+        }
+        if (verb.endsWith("ing") && verb.length() > 4) {
+            return verb.substring(0, verb.length() - 3);
+        }
+        if (verb.endsWith("ed") && verb.length() > 3) {
+            return verb.substring(0, verb.length() - 2);
+        }
+        return verb;
     }
 
     private String mapPrepositionPredicate(String prep) {

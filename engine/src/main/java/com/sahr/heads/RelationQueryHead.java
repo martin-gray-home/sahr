@@ -51,13 +51,11 @@ public final class RelationQueryHead extends BaseHead {
         String subjectBinding = query.subject();
         String predicate = query.predicate();
         String objectBinding = query.object();
-        if ((subjectBinding == null || subjectBinding.isBlank())
-                && (objectBinding == null || objectBinding.isBlank())) {
-            return List.of();
-        }
         if (predicate == null || predicate.isBlank()) {
             return List.of();
         }
+        boolean predicateOnly = (subjectBinding == null || subjectBinding.isBlank())
+                && (objectBinding == null || objectBinding.isBlank());
 
         String expectedType = query.expectedType();
         KnowledgeBase graph = context.graph();
@@ -93,16 +91,24 @@ public final class RelationQueryHead extends BaseHead {
                 boolean forward = subject != null && assertion.subject().equals(subject);
                 boolean inverse = subject != null && assertion.object().equals(subject);
                 boolean objectMatch = object != null && assertion.object().equals(object);
-                if (!forward && !inverse && !objectMatch) {
-                    continue;
-                }
+                SymbolId answer = null;
 
-                SymbolId answer;
-                if (forward) {
-                    answer = assertion.object();
-                } else if (inverse || objectMatch) {
-                    answer = assertion.subject();
+                if (predicateOnly) {
+                    answer = selectPredicateOnlyAnswer(graph, ontology, assertion, expectedType);
+                    if (answer == null) {
+                        continue;
+                    }
                 } else {
+                    if (!forward && !inverse && !objectMatch) {
+                        continue;
+                    }
+                    if (forward) {
+                        answer = assertion.object();
+                    } else if (inverse || objectMatch) {
+                        answer = assertion.subject();
+                    }
+                }
+                if (answer == null) {
                     continue;
                 }
                 if (!matchesExpectedType(graph, ontology, answer, expectedType)) {
@@ -134,6 +140,24 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         return candidates;
+    }
+
+    private SymbolId selectPredicateOnlyAnswer(KnowledgeBase graph,
+                                               OntologyService ontology,
+                                               RelationAssertion assertion,
+                                               String expectedType) {
+        SymbolId subject = assertion.subject();
+        SymbolId object = assertion.object();
+        if (expectedType == null || expectedType.isBlank()) {
+            return subject;
+        }
+        if (matchesExpectedType(graph, ontology, subject, expectedType)) {
+            return subject;
+        }
+        if (matchesExpectedType(graph, ontology, object, expectedType)) {
+            return object;
+        }
+        return null;
     }
 
     private List<ReasoningCandidate> evaluateCount(QueryGoal query,

@@ -30,6 +30,7 @@ public final class SahrLogging {
         }
 
         setElkLoggingLevel(System.getProperty("sahr.log.elk.level", "SEVERE"));
+        setOwlApiLoggingLevel(System.getProperty("sahr.log.owlapi.level", "WARNING"));
 
         String logFile = System.getProperty(FILE_PROPERTY);
         if (logFile != null && !logFile.isBlank()) {
@@ -61,6 +62,16 @@ public final class SahrLogging {
         }
         Logger elkRoot = Logger.getLogger(prefix);
         elkRoot.setLevel(level);
+    }
+
+    private static void setOwlApiLoggingLevel(String raw) {
+        Level level = parseLevel(raw);
+        String loggerName = "org.semanticweb.owlapi.rdf.rdfxml.parser.TripleLogger";
+        Logger logger = Logger.getLogger(loggerName);
+        logger.setLevel(level);
+        for (Handler handler : logger.getHandlers()) {
+            handler.setLevel(level);
+        }
     }
 
     private static Level parseLevel(String raw) {
