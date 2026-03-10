@@ -8,7 +8,9 @@ import com.sahr.heads.AssertionInsertionHead;
 import com.sahr.heads.ContainmentPropagationHead;
 import com.sahr.heads.GraphRetrievalHead;
 import com.sahr.heads.QueryAlignmentHead;
+import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
 import java.util.List;
@@ -30,10 +32,12 @@ class ContainmentScenarioTest {
                 new GraphRetrievalHead(),
                 new QueryAlignmentHead()
         ));
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
+        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, new NoopTermMapper());
 
         assertEquals("Assertion recorded.", agent.handle("The apple is inside the basket"));
         assertEquals("Assertion recorded.", agent.handle("The basket is in the kitchen"));
-        assertEquals("entity:apple locatedIn entity:kitchen", agent.handle("Where is the apple"));
+        assertEquals("entity:apple in entity:kitchen", agent.handle("Where is the apple"));
     }
 }

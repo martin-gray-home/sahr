@@ -9,6 +9,7 @@ import com.sahr.heads.GraphRetrievalHead;
 import com.sahr.heads.QueryAlignmentHead;
 import com.sahr.heads.SurfaceContactPropagationHead;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
@@ -52,10 +53,12 @@ class SurfaceContactScenarioTest {
                 return Optional.empty();
             }
         };
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser(), mapper);
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
+        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, mapper);
 
         assertEquals("Assertion recorded.", agent.handle("The hat is on the man"));
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
-        assertEquals("entity:hat locatedIn entity:room", agent.handle("Where is the hat"));
+        assertEquals("entity:hat in entity:room", agent.handle("Where is the hat"));
     }
 }
