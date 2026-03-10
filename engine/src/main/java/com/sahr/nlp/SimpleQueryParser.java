@@ -313,7 +313,8 @@ public final class SimpleQueryParser {
         if (relationIndex < 0) {
             return Optional.empty();
         }
-        String predicate = "in".equals(tokens.get(relationIndex)) ? "locatedIn" : "with";
+        String relationToken = tokens.get(relationIndex);
+        String predicate = "in".equals(relationToken) ? mapPrepositionPredicate(relationToken) : relationToken;
         int objectIndex = firstContentIndexAfter(tokens, relationIndex);
         if (objectIndex < 0) {
             return Optional.empty();

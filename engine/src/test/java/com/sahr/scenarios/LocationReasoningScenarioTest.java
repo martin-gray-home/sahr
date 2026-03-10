@@ -10,7 +10,9 @@ import com.sahr.heads.OntologyReasoningHead;
 import com.sahr.heads.QueryAlignmentHead;
 import com.sahr.heads.RelationPropagationHead;
 import com.sahr.heads.RelationQueryHead;
+import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
+import com.sahr.nlp.StatementParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
 import java.util.List;
@@ -31,14 +33,16 @@ class LocationReasoningScenarioTest {
                 new RelationQueryHead(),
                 new QueryAlignmentHead()
         ));
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
+        SimpleQueryParser parser = new SimpleQueryParser(true);
+        StatementParser statementParser = new StatementParser(true);
+        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, new NoopTermMapper());
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The man is wearing a hat"));
         assertEquals("Assertion recorded.", agent.handle("A woman is with the man"));
 
-        assertEquals("entity:man locatedIn entity:room", agent.handle("Where is the man"));
-        assertEquals("entity:hat locatedIn entity:room", agent.handle("Where is the hat"));
-        assertEquals("entity:woman locatedIn entity:room", agent.handle("Where is the woman"));
+        assertEquals("entity:man in entity:room", agent.handle("Where is the man"));
+        assertEquals("entity:hat in entity:room", agent.handle("Where is the hat"));
+        assertEquals("entity:woman in entity:room", agent.handle("Where is the woman"));
     }
 }

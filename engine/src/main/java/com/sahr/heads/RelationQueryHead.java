@@ -357,6 +357,11 @@ public final class RelationQueryHead extends BaseHead {
                 expanded.add(inv);
                 expanded.addAll(ontology.getSubproperties(inv));
             });
+            return expanded;
+        }
+        java.util.Set<String> locationFamily = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
+        if (locationFamily.contains(predicate)) {
+            expanded.addAll(locationFamily);
         }
         return expanded;
     }

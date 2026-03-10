@@ -50,9 +50,9 @@ class ComplexSentenceScenarioTest {
 
         assertEquals("Assertion recorded.", agent.handle("The man and the boy in the room are with the red dog."));
 
-        assertEquals("entity:man locatedIn entity:room", agent.handle("Where is the man"));
-        assertEquals("entity:boy locatedIn entity:room", agent.handle("Where is the boy"));
-        assertEquals("entity:dog locatedIn entity:room", agent.handle("Where is the dog"));
+        assertEquals("entity:man in entity:room", agent.handle("Where is the man"));
+        assertEquals("entity:boy in entity:room", agent.handle("Where is the boy"));
+        assertEquals("entity:dog in entity:room", agent.handle("Where is the dog"));
 
         String whoWithMan = agent.handle("Who is with the man");
         assertTrue(Set.of("entity:dog", "entity:red_dog", "entity:red_dog, entity:dog", "entity:dog, entity:red_dog")
