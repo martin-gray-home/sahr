@@ -11,8 +11,8 @@ import com.sahr.heads.QueryAlignmentHead;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -20,7 +20,7 @@ class ContainmentScenarioTest {
     @Test
     void answersContainmentLocationScenario() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String containment = "https://sahr.ai/ontology/relations#containment";
         String inside = "https://sahr.ai/ontology/relations#inside";
         ontology.addSubproperty(inside, containment);

@@ -8,9 +8,8 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
-import java.util.Set;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,7 +35,7 @@ class RelationPropagationHeadTest {
         List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
                 QueryGoal.where("entity", "location"),
                 graph,
-                new InMemoryOntologyService()
+                HeadOntologyTestSupport.createOntology()
         ));
 
         assertTrue(candidates.stream().anyMatch(candidate -> {
@@ -66,7 +65,7 @@ class RelationPropagationHeadTest {
         List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
                 QueryGoal.where("entity", "location"),
                 graph,
-                new InMemoryOntologyService()
+                HeadOntologyTestSupport.createOntology()
         ));
 
         assertTrue(candidates.stream().anyMatch(candidate -> {
@@ -96,7 +95,7 @@ class RelationPropagationHeadTest {
         List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
                 QueryGoal.where("entity", "location"),
                 graph,
-                new InMemoryOntologyService()
+                HeadOntologyTestSupport.createOntology()
         ));
 
         assertTrue(candidates.stream().anyMatch(candidate -> {
@@ -126,7 +125,7 @@ class RelationPropagationHeadTest {
         List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
                 QueryGoal.where("entity", "location"),
                 graph,
-                new InMemoryOntologyService()
+                HeadOntologyTestSupport.createOntology()
         ));
 
         assertTrue(candidates.stream().anyMatch(candidate -> {
@@ -156,7 +155,7 @@ class RelationPropagationHeadTest {
         List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
                 QueryGoal.where("entity", "location"),
                 graph,
-                new InMemoryOntologyService()
+                HeadOntologyTestSupport.createOntology()
         ));
 
         assertTrue(candidates.stream().anyMatch(candidate -> {
@@ -170,12 +169,8 @@ class RelationPropagationHeadTest {
     @Test
     void infersCoLocationFromOntologySubproperty() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
-        RelationPropagationHead head = new RelationPropagationHead(Set.of("https://sahr.ai/ontology/relations#colocation"));
-
-        String colocation = "https://sahr.ai/ontology/relations#colocation";
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String wear = "https://sahr.ai/ontology/relations#wear";
-        ontology.addSubproperty(wear, colocation);
 
         graph.addAssertion(new RelationAssertion(
                 new SymbolId("entity:man"),
@@ -190,7 +185,7 @@ class RelationPropagationHeadTest {
                 0.9
         ));
 
-        List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
+        List<ReasoningCandidate> candidates = this.head.evaluate(new HeadContext(
                 QueryGoal.where("entity", "location"),
                 graph,
                 ontology
@@ -207,13 +202,9 @@ class RelationPropagationHeadTest {
     @Test
     void infersCoLocationFromInverseProperty() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
-        RelationPropagationHead head = new RelationPropagationHead(Set.of("https://sahr.ai/ontology/relations#colocation"));
-
-        String colocation = "https://sahr.ai/ontology/relations#colocation";
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String wear = "https://sahr.ai/ontology/relations#wear";
         String wornBy = "https://sahr.ai/ontology/relations#wornBy";
-        ontology.addSubproperty(wear, colocation);
         ontology.addInverseProperty(wear, wornBy);
 
         graph.addAssertion(new RelationAssertion(
@@ -229,7 +220,7 @@ class RelationPropagationHeadTest {
                 0.9
         ));
 
-        List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
+        List<ReasoningCandidate> candidates = this.head.evaluate(new HeadContext(
                 QueryGoal.where("entity", "location"),
                 graph,
                 ontology
@@ -246,12 +237,8 @@ class RelationPropagationHeadTest {
     @Test
     void doesNotPropagateForNonColocationFamily() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
-        RelationPropagationHead head = new RelationPropagationHead(Set.of("https://sahr.ai/ontology/relations#colocation"));
-
-        String surfaceContact = "https://sahr.ai/ontology/relations#surfaceContact";
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String on = "https://sahr.ai/ontology/relations#on";
-        ontology.addSubproperty(on, surfaceContact);
 
         graph.addAssertion(new RelationAssertion(
                 new SymbolId("entity:hat"),
@@ -266,7 +253,7 @@ class RelationPropagationHeadTest {
                 0.9
         ));
 
-        List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
+        List<ReasoningCandidate> candidates = this.head.evaluate(new HeadContext(
                 QueryGoal.where("entity", "location"),
                 graph,
                 ontology

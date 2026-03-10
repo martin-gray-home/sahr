@@ -17,8 +17,7 @@ head:containment a owl:ObjectProperty ;
     rdfs:subPropertyOf head:locationTransfer .
 
 head:surfaceContact a owl:ObjectProperty ;
-    rdfs:label "surface contact" ;
-    rdfs:subPropertyOf head:locationTransfer .
+    rdfs:label "surface contact" .
 
 head:dependencyChain a owl:ObjectProperty ;
     rdfs:label "dependency chain" .

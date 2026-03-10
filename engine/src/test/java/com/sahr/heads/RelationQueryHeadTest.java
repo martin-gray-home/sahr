@@ -10,9 +10,9 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Set;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,7 +23,7 @@ class RelationQueryHeadTest {
     @Test
     void answersForwardRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SymbolId man = new SymbolId("entity:man");
         SymbolId hat = new SymbolId("entity:hat");
 
@@ -43,7 +43,7 @@ class RelationQueryHeadTest {
     @Test
     void answersInverseRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SymbolId man = new SymbolId("entity:man");
         SymbolId woman = new SymbolId("entity:woman");
 
@@ -63,7 +63,7 @@ class RelationQueryHeadTest {
     @Test
     void answersObjectBoundRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         SymbolId man = new SymbolId("entity:man");
         SymbolId hat = new SymbolId("entity:hat");
 
@@ -85,7 +85,7 @@ class RelationQueryHeadTest {
     @Test
     void answersSubpropertyAndInverseRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         SymbolId man = new SymbolId("entity:man");
         SymbolId hat = new SymbolId("entity:hat");
 

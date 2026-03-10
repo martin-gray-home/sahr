@@ -14,8 +14,8 @@ import com.sahr.heads.RelationQueryHead;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -23,7 +23,7 @@ class SahrAgentQueryTest {
     @Test
     void answersWhoIsWithQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new AssertionInsertionHead(),
                 new RelationQueryHead()
@@ -37,7 +37,7 @@ class SahrAgentQueryTest {
     @Test
     void answersWhoIsWearingQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new AssertionInsertionHead(),
                 new RelationQueryHead()
@@ -51,7 +51,7 @@ class SahrAgentQueryTest {
     @Test
     void answersYesNoWearQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String wear = "https://sahr.ai/ontology/relations#wear";
         String wornBy = "https://sahr.ai/ontology/relations#wornBy";
         String on = "https://sahr.ai/ontology/relations#on";
@@ -87,7 +87,7 @@ class SahrAgentQueryTest {
     @Test
     void answersYesNoOnQueryFromWear() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String wear = "https://sahr.ai/ontology/relations#wear";
         String wornBy = "https://sahr.ai/ontology/relations#wornBy";
         String on = "https://sahr.ai/ontology/relations#on";
@@ -123,7 +123,7 @@ class SahrAgentQueryTest {
     @Test
     void answersUnknownForYesNoWithoutEvidence() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new AssertionInsertionHead(),
                 new RelationQueryHead()
@@ -136,7 +136,7 @@ class SahrAgentQueryTest {
     @Test
     void answersWhereAfterOntologyAssertion() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String colocation = "https://sahr.ai/ontology/relations#colocation";
         String with = "https://sahr.ai/ontology/relations#with";
         ontology.addSubproperty(with, colocation);

@@ -9,8 +9,8 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,7 +21,7 @@ class OntologyReasoningHeadTest {
     @Test
     void infersSymmetricAssertions() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         ontology.addSymmetricProperty("relatedTo");
 
         RelationAssertion assertion = new RelationAssertion(
@@ -52,7 +52,7 @@ class OntologyReasoningHeadTest {
     @Test
     void infersInverseAssertions() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         ontology.addInverseProperty("at", "contains");
 
         RelationAssertion assertion = new RelationAssertion(
@@ -83,7 +83,7 @@ class OntologyReasoningHeadTest {
     @Test
     void infersTransitiveAssertions() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         ontology.addTransitiveProperty("locatedIn");
 
         RelationAssertion first = new RelationAssertion(

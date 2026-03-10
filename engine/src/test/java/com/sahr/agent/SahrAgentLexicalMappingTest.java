@@ -17,8 +17,8 @@ import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLObjectProperty;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -48,7 +48,7 @@ class SahrAgentLexicalMappingTest {
         LabelLexicalMapper mapper = new LabelLexicalMapper(ontology);
 
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontologyService = new InMemoryOntologyService();
+        OntologyService ontologyService = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new AssertionInsertionHead(),
                 new GraphRetrievalHead()

@@ -16,19 +16,14 @@ sahr:colocation a owl:ObjectProperty ;
     rdfs:subPropertyOf head:colocation .
 
 sahr:locationTransferRelation a owl:ObjectProperty ;
-    rdfs:label "location transfer relation" ;
-    rdfs:subPropertyOf head:locationTransfer .
-
-sahr:colocation rdfs:subPropertyOf sahr:locationTransferRelation .
+    rdfs:label "location transfer relation" .
 
 sahr:surfaceContact a owl:ObjectProperty ;
     rdfs:label "surface contact" ;
-    rdfs:subPropertyOf sahr:locationTransferRelation ;
     rdfs:subPropertyOf head:surfaceContact .
 
 sahr:containment a owl:ObjectProperty ;
     rdfs:label "containment" ;
-    rdfs:subPropertyOf sahr:locationTransferRelation ;
     rdfs:subPropertyOf head:containment .
 
 sahr:proximity a owl:ObjectProperty ;
@@ -50,7 +45,8 @@ sahr:in a owl:ObjectProperty ;
 
 sahr:at a owl:ObjectProperty ;
     rdfs:label "at" ;
-    rdfs:subPropertyOf sahr:locationTransferRelation .
+    rdfs:subPropertyOf sahr:locationTransferRelation ;
+    rdfs:subPropertyOf head:locationTransfer .
 
 sahr:above a owl:ObjectProperty ;
     rdfs:label "above" ;

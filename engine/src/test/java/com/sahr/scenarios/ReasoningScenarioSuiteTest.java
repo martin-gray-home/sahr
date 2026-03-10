@@ -18,9 +18,9 @@ import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Optional;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -28,7 +28,7 @@ class ReasoningScenarioSuiteTest {
     @Test
     void infersHatLocationViaPartOfChain() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String on = "https://sahr.ai/ontology/relations#on";
         String surface = "https://sahr.ai/ontology/relations#surfaceContact";
         ontology.addSubproperty(on, surface);
@@ -56,7 +56,7 @@ class ReasoningScenarioSuiteTest {
 
     @Test
     void infersLocationForCarriedObject() {
-        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), new InMemoryOntologyService(), null);
+        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), HeadOntologyTestSupport.createOntology(), null);
 
         assertEquals("Assertion recorded.", agent.handle("The woman is in the garden"));
         assertEquals("Assertion recorded.", agent.handle("The woman is carrying a bag"));
@@ -66,7 +66,7 @@ class ReasoningScenarioSuiteTest {
     @Test
     void infersNestedContainmentChain() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrAgent agent = newAgent(graph, ontology, null);
 
         assertEquals("Assertion recorded.", agent.handle("The book is in the bag"));
@@ -77,7 +77,7 @@ class ReasoningScenarioSuiteTest {
 
     @Test
     void answersMultiHopPowerChain() {
-        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), new InMemoryOntologyService(), null);
+        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), HeadOntologyTestSupport.createOntology(), null);
 
         assertEquals("Assertion recorded.", agent.handle("The transmitter is powered by the power bus"));
         assertEquals("Assertion recorded.", agent.handle("The power bus is powered by the battery"));
@@ -88,7 +88,7 @@ class ReasoningScenarioSuiteTest {
     @Test
     void answersInverseRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String on = "https://sahr.ai/ontology/relations#on";
         String under = "https://sahr.ai/ontology/relations#under";
         ontology.addInverseProperty(on, under);
@@ -119,7 +119,7 @@ class ReasoningScenarioSuiteTest {
 
     @Test
     void infersLocationForWithRelation() {
-        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), new InMemoryOntologyService(), null);
+        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), HeadOntologyTestSupport.createOntology(), null);
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The woman is with the man"));
@@ -128,7 +128,7 @@ class ReasoningScenarioSuiteTest {
 
     @Test
     void answersInstrumentPowerChain() {
-        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), new InMemoryOntologyService(), null);
+        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), HeadOntologyTestSupport.createOntology(), null);
 
         assertEquals("Assertion recorded.", agent.handle("Navcam is an instrument"));
         assertEquals("Assertion recorded.", agent.handle("Navcam observes the comet"));
@@ -139,7 +139,7 @@ class ReasoningScenarioSuiteTest {
 
     @Test
     void infersLocationForHeldObject() {
-        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), new InMemoryOntologyService(), null);
+        SahrAgent agent = newAgent(new InMemoryKnowledgeBase(), HeadOntologyTestSupport.createOntology(), null);
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The man is holding a key"));

@@ -2,8 +2,8 @@ package com.sahr.core;
 
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,7 +12,7 @@ class SymbolicAttentionScorerTest {
     @Test
     void prefersExpectedTypeMatchForRelationAnswers() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         SymbolicAttentionScorer scorer = new SymbolicAttentionScorer();
 
         SymbolId hat = new SymbolId("entity:hat");
@@ -51,7 +51,7 @@ class SymbolicAttentionScorerTest {
     @Test
     void usesNeutralQueryMatchForNonAnswerCandidates() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         SymbolicAttentionScorer scorer = new SymbolicAttentionScorer();
 
         QueryGoal query = QueryGoal.where("concept:hat", "concept:location");

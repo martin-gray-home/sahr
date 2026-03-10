@@ -8,8 +8,8 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,7 +17,7 @@ class SurfaceContactPropagationHeadTest {
     @Test
     void infersLocationFromSurfaceContact() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         SurfaceContactPropagationHead head = new SurfaceContactPropagationHead();
 
         String surface = "https://sahr.ai/ontology/relations#surfaceContact";
@@ -54,7 +54,7 @@ class SurfaceContactPropagationHeadTest {
     @Test
     void infersLocationFromInverseSurfaceContact() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         SurfaceContactPropagationHead head = new SurfaceContactPropagationHead();
 
         String surface = "https://sahr.ai/ontology/relations#surfaceContact";

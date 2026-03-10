@@ -2,6 +2,7 @@ package com.sahr.ontology;
 
 import com.sahr.core.OntologyService;
 import org.junit.jupiter.api.Test;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CachedOntologyServiceTest {
     @Test
     void cachesDelegateResponses() {
-        InMemoryOntologyService base = new InMemoryOntologyService();
+        InMemoryOntologyService base = HeadOntologyTestSupport.createOntology();
         base.addSubclass("child", "parent");
         base.addSymmetricProperty("relatedTo");
         base.addTransitiveProperty("locatedIn");

@@ -28,7 +28,7 @@ public final class ContainmentPropagationHead extends BaseHead {
 
     @Override
     protected String describe(HeadContext context) {
-        return "Propagates containment relations (inside/in/locatedIn) into location assertions.";
+        return "Propagates containment relations into location assertions.";
     }
 
     @Override

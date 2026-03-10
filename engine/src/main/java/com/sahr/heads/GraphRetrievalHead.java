@@ -43,13 +43,13 @@ public final class GraphRetrievalHead extends BaseHead {
         WorkingMemory memory = context.workingMemory();
         java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(query, graph);
 
-        List<ReasoningCandidate> candidates = new ArrayList<>();
-        Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph, locationPredicates);
-        java.util.Set<String> emitted = new java.util.HashSet<>();
         java.util.Set<String> locationPredicates = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
         if (locationPredicates.isEmpty()) {
             return List.of();
         }
+        List<ReasoningCandidate> candidates = new ArrayList<>();
+        Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph, locationPredicates);
+        java.util.Set<String> emitted = new java.util.HashSet<>();
         List<RelationAssertion> locationAssertions = collectLocationAssertions(graph, locationPredicates);
         java.util.Set<String> expandedCoLocation = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION);
         for (String predicate : locationPredicates) {
@@ -83,7 +83,7 @@ public final class GraphRetrievalHead extends BaseHead {
                 breakdown.put("depth_boost", depthBoost);
                 breakdown.put("working_memory_focus", memoryFocus);
 
-                String answer = assertion.subject() + " " + displayPredicate(path.get(0).predicate()) + " " + terminal;
+                String answer = assertion.subject() + " " + displayPredicate(path.get(path.size() - 1).predicate()) + " " + terminal;
 
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ANSWER,

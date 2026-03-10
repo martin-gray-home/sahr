@@ -7,8 +7,8 @@ import com.sahr.heads.AssertionInsertionHead;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,7 +17,7 @@ class SahrAgentCompoundSubjectTest {
     void appliesAssertionsForCompoundSubjects() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         SahrReasoner reasoner = new SahrReasoner(List.of(new AssertionInsertionHead()));
-        SahrAgent agent = new SahrAgent(graph, new InMemoryOntologyService(), reasoner, new SimpleQueryParser());
+        SahrAgent agent = new SahrAgent(graph, HeadOntologyTestSupport.createOntology(), reasoner, new SimpleQueryParser());
 
         agent.handle("The man and the boy sat at the table");
 

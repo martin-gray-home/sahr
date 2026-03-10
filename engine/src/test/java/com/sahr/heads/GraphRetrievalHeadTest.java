@@ -9,8 +9,8 @@ import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,7 +18,7 @@ class GraphRetrievalHeadTest {
     @Test
     void resolvesNestedLocationChain() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         GraphRetrievalHead head = new GraphRetrievalHead();
 
         graph.addAssertion(new RelationAssertion(

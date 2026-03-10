@@ -12,9 +12,9 @@ import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Optional;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -22,7 +22,7 @@ class SurfaceContactScenarioTest {
     @Test
     void answersSurfaceContactLocationScenario() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String surface = "https://sahr.ai/ontology/relations#surfaceContact";
         String on = "https://sahr.ai/ontology/relations#on";
         String under = "https://sahr.ai/ontology/relations#under";

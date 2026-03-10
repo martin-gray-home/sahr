@@ -8,8 +8,8 @@ import com.sahr.heads.GraphRetrievalHead;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -17,7 +17,7 @@ class SahrAgentIngestionTest {
     @Test
     void ingestsStatementThenAnswersWhereQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new AssertionInsertionHead(),
                 new GraphRetrievalHead()
@@ -31,7 +31,7 @@ class SahrAgentIngestionTest {
     @Test
     void appliesPropagationClosureAfterAssertion() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new AssertionInsertionHead(),
                 new GraphRetrievalHead()

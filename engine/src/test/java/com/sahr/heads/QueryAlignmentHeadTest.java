@@ -9,9 +9,9 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Set;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -30,7 +30,7 @@ class QueryAlignmentHeadTest {
                 0.8
         ));
 
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         ontology.addPropertyRange("http://example.org/test#inside", "http://example.org/test#Place");
 
         List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
@@ -40,6 +40,6 @@ class QueryAlignmentHeadTest {
         ));
 
         assertTrue(candidates.stream().anyMatch(candidate ->
-                "entity:cat http://example.org/test#inside entity:box".equals(candidate.payload())));
+                "entity:cat inside entity:box".equals(candidate.payload())));
     }
 }

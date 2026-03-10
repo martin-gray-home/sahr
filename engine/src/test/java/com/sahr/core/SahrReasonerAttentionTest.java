@@ -1,12 +1,12 @@
 package com.sahr.core;
 
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Map;
+import com.sahr.ontology.InMemoryOntologyService;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import com.sahr.ontology.InMemoryOntologyService;
 
 class SahrReasonerAttentionTest {
     @Test
@@ -42,7 +42,7 @@ class SahrReasonerAttentionTest {
         };
 
         SahrReasoner reasoner = new SahrReasoner(List.of(head));
-        HeadContext context = new HeadContext(QueryGoal.unknown(), new InMemoryKnowledgeBase(), new InMemoryOntologyService());
+        HeadContext context = new HeadContext(QueryGoal.unknown(), new InMemoryKnowledgeBase(), HeadOntologyTestSupport.createOntology());
 
         List<ReasoningCandidate> results = reasoner.reason(context);
         double sum = results.stream().mapToDouble(ReasoningCandidate::score).sum();

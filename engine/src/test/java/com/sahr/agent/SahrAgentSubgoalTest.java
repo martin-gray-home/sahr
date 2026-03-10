@@ -13,9 +13,9 @@ import com.sahr.heads.SubgoalExpansionHead;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Set;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,7 +24,7 @@ class SahrAgentSubgoalTest {
     @Test
     void resolvesWhereQueryViaSubgoalQueue() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
 
         SymbolId man = new SymbolId("entity:man");
         SymbolId hat = new SymbolId("entity:hat");

@@ -16,9 +16,9 @@ import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Optional;
+import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -26,7 +26,7 @@ class MultiHeadReasoningTest {
     @Test
     void infersLocationViaWearThenAnswersWhere() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new AssertionInsertionHead(),
                 new RelationPropagationHead(),
@@ -42,7 +42,7 @@ class MultiHeadReasoningTest {
     @Test
     void infersLocationViaWithThenAnswersWhere() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = new InMemoryOntologyService();
+        OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new AssertionInsertionHead(),
                 new RelationPropagationHead(),
@@ -58,7 +58,7 @@ class MultiHeadReasoningTest {
     @Test
     void answersYesNoAfterPropagation() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = new InMemoryOntologyService();
+        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
         String on = "https://sahr.ai/ontology/relations#on";
         String under = "https://sahr.ai/ontology/relations#under";
         String surface = "https://sahr.ai/ontology/relations#surfaceContact";
