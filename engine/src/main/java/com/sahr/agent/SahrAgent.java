@@ -12,7 +12,10 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
 import com.sahr.core.CandidateType;
+import com.sahr.core.GuardedKnowledgeBase;
 import com.sahr.core.WorkingMemory;
+import com.sahr.core.ReasoningPhase;
+import com.sahr.core.ReasoningPhaseCoordinator;
 import com.sahr.heads.RelationPropagationHead;
 import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
@@ -25,6 +28,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 public final class SahrAgent {
@@ -43,6 +47,7 @@ public final class SahrAgent {
     private final TermMapper termMapper;
     private final ReasoningTrace trace;
     private final WorkingMemory workingMemory;
+    private final ReasoningPhaseCoordinator phases;
 
     public SahrAgent(
             KnowledgeBase graph,
@@ -60,17 +65,19 @@ public final class SahrAgent {
             SimpleQueryParser parser,
             TermMapper termMapper
     ) {
-        this.graph = graph;
+        this.phases = new ReasoningPhaseCoordinator();
+        this.graph = new GuardedKnowledgeBase(graph, phases);
         this.ontology = ontology;
         this.reasoner = reasoner;
         this.parser = parser;
         this.statementParser = new StatementParser();
         this.termMapper = termMapper;
         this.trace = new ReasoningTrace();
-        this.workingMemory = new WorkingMemory();
+        this.workingMemory = new WorkingMemory(phases);
     }
 
     public String handle(String input) {
+        ReasoningPhase previousPhase = phases.enter(ReasoningPhase.UPDATE);
         Optional<Statement> statement = parser.isQuestion(input)
                 ? Optional.empty()
                 : statementParser.parse(input).map(this::mapStatement);
@@ -81,11 +88,15 @@ public final class SahrAgent {
         statement.ifPresent(this::updateWorkingMemoryFromStatement);
         updateWorkingMemoryFromQuery(query);
 
-        if (!isQuestion(query)) {
-            HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), workingMemory);
-            return handleSingle(context, query);
+        try {
+            if (!isQuestion(query)) {
+                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), workingMemory);
+                return handleSingle(context, query);
+            }
+            return handleWithSubgoals(query, statement.orElse(null));
+        } finally {
+            phases.restore(previousPhase);
         }
-        return handleWithSubgoals(query, statement.orElse(null));
     }
 
     public Optional<ReasoningTrace> trace() {
@@ -342,7 +353,7 @@ public final class SahrAgent {
     private String resolveQuestionAfterAssertion(QueryGoal query, int maxIterations) {
         for (int i = 0; i < maxIterations; i++) {
             HeadContext followUpContext = new HeadContext(query, graph, ontology, workingMemory);
-            List<ReasoningCandidate> followUp = reasoner.reason(followUpContext);
+            List<ReasoningCandidate> followUp = withReadPhase(() -> reasoner.reason(followUpContext));
             if (followUp.isEmpty()) {
                 return isYesNo(query) ? "Unknown." : "No candidates produced.";
             }
@@ -363,7 +374,7 @@ public final class SahrAgent {
     }
 
     private String handleSingle(HeadContext context, QueryGoal query) {
-        List<ReasoningCandidate> candidates = reasoner.reason(context);
+        List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         if (candidates.isEmpty()) {
             if (isYesNo(query)) {
                 return "Unknown.";
@@ -417,7 +428,7 @@ public final class SahrAgent {
                     current.goalId().equals(root.goalId()) ? statement : null,
                     workingMemory
             );
-            List<ReasoningCandidate> candidates = reasoner.reason(context);
+            List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
             if (candidates.isEmpty()) {
                 workingMemory.popGoal();
                 if (current.goalId().equals(root.goalId())) {
@@ -560,7 +571,7 @@ public final class SahrAgent {
         int totalAdded = 0;
 
         for (int i = 0; i < MAX_PROPAGATION_ITERATIONS; i++) {
-            List<ReasoningCandidate> candidates = propagationHead.evaluate(context);
+            List<ReasoningCandidate> candidates = withReadPhase(() -> propagationHead.evaluate(context));
             int addedThisRound = 0;
             for (ReasoningCandidate candidate : candidates) {
                 if (!(candidate.payload() instanceof RelationAssertion)) {
@@ -578,6 +589,15 @@ public final class SahrAgent {
             if (addedThisRound == 0) {
                 return;
             }
+        }
+    }
+
+    private <T> T withReadPhase(Supplier<T> supplier) {
+        ReasoningPhase previous = phases.enter(ReasoningPhase.READ);
+        try {
+            return supplier.get();
+        } finally {
+            phases.restore(previous);
         }
     }
 

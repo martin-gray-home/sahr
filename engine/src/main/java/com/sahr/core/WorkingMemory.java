@@ -11,12 +11,22 @@ public final class WorkingMemory {
     private static final int MAX_ACTIVE_ENTITIES = 100;
     private static final int MAX_RECENT_ASSERTIONS = 50;
 
+    private final ReasoningPhaseCoordinator phases;
     private final Set<SymbolId> activeEntities = new HashSet<>();
     private final Deque<SymbolId> activeEntityOrder = new ArrayDeque<>();
     private final Deque<RelationAssertion> recentAssertions = new ArrayDeque<>();
     private final Deque<QueryGoal> goalStack = new ArrayDeque<>();
 
+    public WorkingMemory() {
+        this(null);
+    }
+
+    public WorkingMemory(ReasoningPhaseCoordinator phases) {
+        this.phases = phases;
+    }
+
     public void addActiveEntity(SymbolId entity) {
+        assertUpdate("addActiveEntity");
         if (entity == null) {
             return;
         }
@@ -30,6 +40,7 @@ public final class WorkingMemory {
     }
 
     public void addActiveEntities(Set<SymbolId> entities) {
+        assertUpdate("addActiveEntities");
         if (entities == null || entities.isEmpty()) {
             return;
         }
@@ -47,6 +58,7 @@ public final class WorkingMemory {
     }
 
     public void recordAssertion(RelationAssertion assertion) {
+        assertUpdate("recordAssertion");
         if (assertion == null) {
             return;
         }
@@ -61,6 +73,7 @@ public final class WorkingMemory {
     }
 
     public void pushGoal(QueryGoal goal) {
+        assertUpdate("pushGoal");
         if (goal == null) {
             return;
         }
@@ -68,6 +81,7 @@ public final class WorkingMemory {
     }
 
     public void popGoal() {
+        assertUpdate("popGoal");
         if (!goalStack.isEmpty()) {
             goalStack.pop();
         }
@@ -78,6 +92,7 @@ public final class WorkingMemory {
     }
 
     public void clear() {
+        assertUpdate("clear");
         activeEntities.clear();
         activeEntityOrder.clear();
         recentAssertions.clear();
@@ -88,6 +103,12 @@ public final class WorkingMemory {
         while (activeEntityOrder.size() > MAX_ACTIVE_ENTITIES) {
             SymbolId evicted = activeEntityOrder.removeLast();
             activeEntities.remove(evicted);
+        }
+    }
+
+    private void assertUpdate(String operation) {
+        if (phases != null) {
+            phases.assertUpdatePhase(operation);
         }
     }
 }

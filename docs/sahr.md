@@ -316,6 +316,17 @@ Each head also exposes a human-readable explanation string that the
 executor logs at `FINE` level per query to make reasoning steps easier
 to trace.
 
+Head Execution Phases
+----------------------
+
+SAHR enforces a simple single-writer structure: update (mutations),
+read (head evaluation), then select (candidate ranking and application).
+The update phase owns working-memory and graph mutations, while head
+execution runs in a read-only phase and is parallelized by default
+(disable with `-Dsahr.heads.parallel=false`). The graph used by the
+agent is wrapped in `GuardedKnowledgeBase`, and `WorkingMemory` asserts
+update-only mutations, to prevent writes outside the update phase.
+
 Dependency Chain Reasoning
 ---------------------------
 
