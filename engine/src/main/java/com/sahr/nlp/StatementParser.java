@@ -40,6 +40,7 @@ public final class StatementParser {
 
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
     private static final Morphology MORPHOLOGY = new Morphology();
+    private static final DependencySemanticMapper SEMANTIC_MAPPER = new DependencySemanticMapper();
 
     private final boolean ontologyDriven;
 
@@ -200,6 +201,7 @@ public final class StatementParser {
             addStatements(collected, parseAclStatements(graph));
             addStatements(collected, parseClausalComplementStatements(graph));
             addStatements(collected, parseApposStatements(graph));
+            addStatements(collected, SEMANTIC_MAPPER.map(graph, new Helper()));
         }
         if (collected.isEmpty()) {
             return Optional.empty();
@@ -949,6 +951,39 @@ public final class StatementParser {
         for (Statement statement : statements) {
             String key = statement.subject().value() + "|" + statement.predicate() + "|" + statement.object().value();
             target.putIfAbsent(key, statement);
+        }
+    }
+
+    private final class Helper implements StatementParserHelpers {
+        @Override
+        public Statement buildStatement(String subjectToken, String objectToken, String predicate, boolean objectIsConcept) {
+            return StatementParser.this.buildStatement(subjectToken, objectToken, predicate, objectIsConcept);
+        }
+
+        @Override
+        public CoreLabel findDependent(SemanticGraph graph, edu.stanford.nlp.ling.IndexedWord governor, String relation) {
+            return StatementParser.this.findDependent(graph, governor, relation);
+        }
+
+        @Override
+        public String normalizeCompoundToken(SemanticGraph graph, CoreLabel head) {
+            return StatementParser.this.normalizeToken(composeCompoundToken(graph, head));
+        }
+
+        @Override
+        public String normalizeToken(String raw) {
+            return StatementParser.this.normalizeToken(raw);
+        }
+
+        @Override
+        public String normalizeVerb(CoreLabel verbLabel) {
+            if (verbLabel == null) {
+                return "";
+            }
+            if (verbLabel.lemma() != null && !verbLabel.lemma().isBlank()) {
+                return StatementParser.this.normalizeToken(verbLabel.lemma());
+            }
+            return StatementParser.this.normalizeToken(verbLabel.word());
         }
     }
 

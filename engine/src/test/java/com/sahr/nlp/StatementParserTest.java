@@ -178,6 +178,22 @@ class StatementParserTest {
     }
 
     @Test
+    void emitsMultipleSemanticCandidatesFromDependencies() {
+        Statement statement = parser.parse("The scientist placed the instrument inside the rover").orElseThrow();
+        List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
+        all.add(statement);
+
+        assertTrue(all.stream().anyMatch(item ->
+                "place".equals(item.predicate())
+                        && "entity:scientist".equals(item.subject().value())
+                        && "entity:instrument".equals(item.object().value())));
+        assertTrue(all.stream().anyMatch(item ->
+                "inside".equals(item.predicate())
+                        && "entity:instrument".equals(item.subject().value())
+                        && "entity:rover".equals(item.object().value())));
+    }
+
+    @Test
     void capturesCompoundNounObject() {
         Statement statement = parser.parse("The transmitter is powered by the power bus").orElseThrow();
         List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
