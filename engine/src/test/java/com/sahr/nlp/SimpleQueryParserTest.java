@@ -160,4 +160,11 @@ class SimpleQueryParserTest {
         assertEquals(QueryGoal.Type.UNKNOWN, query.type());
         assertNull(query.entityType());
     }
+
+    @Test
+    void ignoresRelativeWhoClauseInStatements() {
+        QueryGoal query = parser.parse("the man and the boy were inside the room with the mother who was wearing a red hat");
+
+        assertEquals(QueryGoal.Type.UNKNOWN, query.type());
+    }
 }

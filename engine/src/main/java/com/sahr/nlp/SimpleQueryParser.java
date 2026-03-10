@@ -72,14 +72,17 @@ public final class SimpleQueryParser {
         if (input == null) {
             return false;
         }
-        String normalized = input.toLowerCase(Locale.ROOT);
-        List<String> tokens = tokenize(normalized);
-        for (String token : tokens) {
-            if (WH_TOKENS.contains(token)) {
-                return true;
-            }
+        String trimmed = input.trim();
+        if (trimmed.endsWith("?")) {
+            return true;
         }
-        return !tokens.isEmpty() && YESNO_PREFIXES.contains(tokens.get(0));
+        String normalized = trimmed.toLowerCase(Locale.ROOT);
+        List<String> tokens = tokenize(normalized);
+        if (tokens.isEmpty()) {
+            return false;
+        }
+        String firstToken = tokens.get(0);
+        return WH_TOKENS.contains(firstToken) || YESNO_PREFIXES.contains(firstToken);
     }
 
     private String extractEntityType(String normalized) {

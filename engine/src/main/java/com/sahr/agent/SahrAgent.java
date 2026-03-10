@@ -78,9 +78,8 @@ public final class SahrAgent {
 
     public String handle(String input) {
         ReasoningPhase previousPhase = phases.enter(ReasoningPhase.UPDATE);
-        Optional<Statement> statement = parser.isQuestion(input)
-                ? Optional.empty()
-                : statementParser.parse(input).map(this::mapStatement);
+        boolean questionLike = parser.isQuestion(input);
+        Optional<Statement> statement = statementParser.parse(input).map(this::mapStatement);
         QueryGoal query = mapQuery(parser.parse(input));
         logger.fine(() -> "Input='" + input + "' statementPresent=" + statement.isPresent()
                 + " queryIntent=" + query.type());
@@ -91,9 +90,9 @@ public final class SahrAgent {
         try {
             if (!isQuestion(query)) {
                 HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), workingMemory);
-                return handleSingle(context, query);
+                return handleSingle(context, query, questionLike);
             }
-            return handleWithSubgoals(query, statement.orElse(null));
+            return handleWithSubgoals(query, statement.orElse(null), questionLike);
         } finally {
             phases.restore(previousPhase);
         }
@@ -397,8 +396,11 @@ public final class SahrAgent {
         return "Assertion recorded.";
     }
 
-    private String handleSingle(HeadContext context, QueryGoal query) {
+    private String handleSingle(HeadContext context, QueryGoal query, boolean questionLike) {
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
+        if ((isQuestion(query) || questionLike) && hasOnlyAssertionInsertion(candidates)) {
+            return isYesNo(query) ? "Unknown." : "No candidates produced.";
+        }
         if (candidates.isEmpty()) {
             if (isYesNo(query)) {
                 return "Unknown.";
@@ -406,7 +408,7 @@ public final class SahrAgent {
             return "No candidates produced.";
         }
         ReasoningCandidate winner = selectStatementCandidate(context, query, candidates)
-                .orElseGet(() -> candidates.get(0));
+                .orElse(candidates.get(0));
         trace.addEntry(new ReasoningTraceEntry(query, candidates, winner));
         logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                 + " score=" + winner.score());
@@ -435,7 +437,7 @@ public final class SahrAgent {
         return java.util.Optional.empty();
     }
 
-    private String handleWithSubgoals(QueryGoal root, Statement statement) {
+    private String handleWithSubgoals(QueryGoal root, Statement statement, boolean questionLike) {
         java.util.ArrayDeque<QueryGoal> queue = new java.util.ArrayDeque<>();
         queue.add(root);
         int processed = 0;
@@ -453,6 +455,12 @@ public final class SahrAgent {
                     workingMemory
             );
             List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
+            if (current.goalId().equals(root.goalId())
+                    && (isQuestion(root) || questionLike)
+                    && hasOnlyAssertionInsertion(candidates)) {
+                workingMemory.popGoal();
+                return isYesNo(root) ? "Unknown." : "No candidates produced.";
+            }
             if (candidates.isEmpty()) {
                 workingMemory.popGoal();
                 if (current.goalId().equals(root.goalId())) {
@@ -500,6 +508,7 @@ public final class SahrAgent {
         return "No candidates produced.";
     }
 
+
     private static final class ApplyResult {
         private final boolean added;
         private final String message;
@@ -516,6 +525,20 @@ public final class SahrAgent {
         private static ApplyResult existing(String message) {
             return new ApplyResult(false, message);
         }
+    }
+
+    private boolean hasOnlyAssertionInsertion(List<ReasoningCandidate> candidates) {
+        if (candidates.isEmpty()) {
+            return false;
+        }
+        for (ReasoningCandidate candidate : candidates) {
+            if (CandidateType.ASSERTION.equals(candidate.type())
+                    && "assertion-insertion".equals(candidate.producedBy())) {
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     private ReasoningCandidate selectPreferredCandidate(List<ReasoningCandidate> candidates) {
