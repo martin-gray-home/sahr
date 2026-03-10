@@ -138,6 +138,7 @@ public final class SahrAgent {
             return query;
         }
 
+        boolean predicateMapped = termMapper.mapPredicateToken(query.predicate()).isPresent();
         String requestedType = mapEntityType(query.entityType());
         String expectedRange = mapExpectedRange(query.expectedRange());
         String expectedType = mapExpectedType(query.expectedType());
@@ -164,8 +165,32 @@ public final class SahrAgent {
                 query.parentGoalId(),
                 query.depth()
         );
-
+        if (shouldGatePredicate(mapped, predicateMapped)) {
+            return QueryGoal.unknown();
+        }
         return normalizeQuery(mapped);
+    }
+
+    private boolean shouldGatePredicate(QueryGoal query, boolean predicateMapped) {
+        if (query == null) {
+            return false;
+        }
+        if (query.type() != QueryGoal.Type.RELATION
+                && query.type() != QueryGoal.Type.YESNO
+                && query.type() != QueryGoal.Type.COUNT) {
+            return false;
+        }
+        if (termMapper instanceof NoopTermMapper) {
+            return false;
+        }
+        String predicate = query.predicate();
+        if (predicate == null || predicate.isBlank()) {
+            return true;
+        }
+        if (isIri(predicate)) {
+            return false;
+        }
+        return !predicateMapped;
     }
 
     private QueryGoal normalizeQuery(QueryGoal query) {
@@ -199,6 +224,13 @@ public final class SahrAgent {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private boolean isIri(String value) {
+        if (value == null) {
+            return false;
+        }
+        return value.startsWith("http://") || value.startsWith("https://");
     }
 
     private String mapEntityType(String requestedType) {

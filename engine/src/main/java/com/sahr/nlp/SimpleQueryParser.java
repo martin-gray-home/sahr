@@ -9,6 +9,7 @@ import edu.stanford.nlp.semgraph.SemanticGraph;
 import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations;
 import edu.stanford.nlp.semgraph.SemanticGraphEdge;
 import edu.stanford.nlp.util.CoreMap;
+import edu.stanford.nlp.process.Morphology;
 
 import java.util.List;
 import java.util.Locale;
@@ -23,6 +24,7 @@ public final class SimpleQueryParser {
     private static final Set<String> COLOCATION_SYNONYMS = Set.of("near", "beside", "alongside", "next");
     private static final Set<String> COLOR_MODIFIERS = Set.of("red", "blue", "green", "black", "white");
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
+    private static final Morphology MORPHOLOGY = new Morphology();
 
     public QueryGoal parse(String input) {
         String normalized = input == null ? "" : input.toLowerCase(Locale.ROOT).trim();
@@ -414,6 +416,7 @@ public final class SimpleQueryParser {
             CoreLabel verb = edge.getGovernor().backingLabel();
             CoreLabel object = findDependent(graph, edge.getGovernor(), "obj");
             String predicate = verb.lemma().toLowerCase(Locale.ROOT);
+            predicate = normalizeVerb(predicate);
             if ("what".equals(wh) && shouldInvertPowerVerb(predicate)) {
                 String inverted = toPassivePredicate(predicate);
                 if (object == null) {
@@ -618,13 +621,11 @@ public final class SimpleQueryParser {
         if (verb == null || verb.isBlank()) {
             return verb;
         }
-        if (verb.endsWith("ing") && verb.length() > 4) {
-            return verb.substring(0, verb.length() - 3);
+        String lemma = MORPHOLOGY.lemma(verb, "VB");
+        if (lemma != null && !lemma.isBlank()) {
+            return lemma.toLowerCase(Locale.ROOT);
         }
-        if (verb.endsWith("ed") && verb.length() > 3) {
-            return verb.substring(0, verb.length() - 2);
-        }
-        return verb;
+        return verb.toLowerCase(Locale.ROOT);
     }
 
     private String mapPrepositionPredicate(String prep) {

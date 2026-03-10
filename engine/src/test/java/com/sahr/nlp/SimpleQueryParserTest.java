@@ -96,6 +96,27 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void lemmatizesVerbInWhSubjectNoObject() {
+        QueryGoal query = parser.parse("Who was eaten");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("eat", query.predicate());
+        assertEquals("person", query.expectedType());
+        assertNull(query.subject());
+        assertNull(query.object());
+    }
+
+    @Test
+    void lemmatizesVerbInWhPrepositionObjectPattern() {
+        QueryGoal query = parser.parse("What was the man sitting on");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("man", query.subject());
+        assertEquals("on", query.predicate());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromUnderPattern() {
         QueryGoal query = parser.parse("What is under the hat");
 

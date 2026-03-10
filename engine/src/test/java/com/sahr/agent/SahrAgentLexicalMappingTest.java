@@ -60,4 +60,32 @@ class SahrAgentLexicalMappingTest {
         assertEquals("Assertion recorded.", agent.handle("The man is wearing a hat"));
         assertEquals("entity:man locatedIn entity:room", agent.handle("Where is the doctor"));
     }
+
+    @Test
+    void dropsQueriesWithUnmappedPredicatesWhenMapperIsPresent() throws Exception {
+        OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+        IRI base = IRI.create("http://example.org/test#");
+        OWLOntology ontology = manager.createOntology(IRI.create("http://example.org/test"));
+        OWLObjectProperty wears = manager.getOWLDataFactory().getOWLObjectProperty(IRI.create(base + "wears"));
+
+        OWLAnnotation wearLabel = manager.getOWLDataFactory().getOWLAnnotation(
+                manager.getOWLDataFactory().getRDFSLabel(),
+                manager.getOWLDataFactory().getOWLLiteral("wear")
+        );
+        OWLAnnotationAssertionAxiom wearAxiom = manager.getOWLDataFactory().getOWLAnnotationAssertionAxiom(wears.getIRI(), wearLabel);
+        manager.addAxiom(ontology, wearAxiom);
+
+        LabelLexicalMapper mapper = new LabelLexicalMapper(ontology);
+
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        OntologyService ontologyService = HeadOntologyTestSupport.createOntology();
+        SahrReasoner reasoner = new SahrReasoner(List.of(
+                new AssertionInsertionHead(),
+                new GraphRetrievalHead()
+        ));
+        SahrAgent agent = new SahrAgent(graph, ontologyService, reasoner, new SimpleQueryParser(), mapper);
+
+        assertEquals("Assertion recorded.", agent.handle("The man is with a woman"));
+        assertEquals("No candidates produced.", agent.handle("Who is with the man"));
+    }
 }
