@@ -5,17 +5,21 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 public final class WorkingMemory {
     private static final int MAX_ACTIVE_ENTITIES = 100;
     private static final int MAX_RECENT_ASSERTIONS = 50;
+    private static final int MAX_ANSWER_HISTORY = 50;
 
     private final ReasoningPhaseCoordinator phases;
     private final Set<SymbolId> activeEntities = new HashSet<>();
     private final Deque<SymbolId> activeEntityOrder = new ArrayDeque<>();
     private final Deque<RelationAssertion> recentAssertions = new ArrayDeque<>();
     private final Deque<QueryGoal> goalStack = new ArrayDeque<>();
+    private final Map<QueryKey, Deque<String>> answerHistory = new HashMap<>();
 
     public WorkingMemory() {
         this(null);
@@ -97,6 +101,31 @@ public final class WorkingMemory {
         activeEntityOrder.clear();
         recentAssertions.clear();
         goalStack.clear();
+        answerHistory.clear();
+    }
+
+    public void recordAnswer(QueryKey key, String answer) {
+        assertUpdate("recordAnswer");
+        if (key == null || answer == null || answer.isBlank()) {
+            return;
+        }
+        Deque<String> history = answerHistory.computeIfAbsent(key, ignored -> new ArrayDeque<>());
+        history.remove(answer);
+        history.addFirst(answer);
+        while (history.size() > MAX_ANSWER_HISTORY) {
+            history.removeLast();
+        }
+    }
+
+    public List<String> answerHistory(QueryKey key) {
+        if (key == null) {
+            return List.of();
+        }
+        Deque<String> history = answerHistory.get(key);
+        if (history == null) {
+            return List.of();
+        }
+        return List.copyOf(history);
     }
 
     private void trimActiveEntities() {

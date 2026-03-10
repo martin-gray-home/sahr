@@ -9,13 +9,15 @@ import java.util.Optional;
 final class CandidateSelector {
     private static final String ONTOLOGY_SUPPORT_KEY = "ontology_support";
 
-    List<ReasoningCandidate> rank(List<ReasoningCandidate> candidates) {
-        List<ReasoningCandidate> normalized = applySoftmax(candidates);
+    List<ReasoningCandidate> rank(HeadContext context, List<ReasoningCandidate> candidates) {
+        List<ReasoningCandidate> filtered = filterDiscourseExclusions(context, candidates);
+        List<ReasoningCandidate> normalized = applySoftmax(filtered);
         normalized.sort(candidateComparator());
         return normalized;
     }
 
-    Optional<ReasoningCandidate> selectWinner(List<ReasoningCandidate> candidates) {
+    Optional<ReasoningCandidate> selectWinner(HeadContext context, List<ReasoningCandidate> candidates) {
+        candidates = filterDiscourseExclusions(context, candidates);
         if (candidates.isEmpty()) {
             return Optional.empty();
         }
@@ -55,6 +57,44 @@ final class CandidateSelector {
             normalized.add(candidate.withAttentionScores(candidate.queryMatchScore(), weight, extra));
         }
         return normalized;
+    }
+
+    private List<ReasoningCandidate> filterDiscourseExclusions(HeadContext context,
+                                                               List<ReasoningCandidate> candidates) {
+        if (context == null || candidates.isEmpty()) {
+            return candidates;
+        }
+        QueryGoal query = context.query();
+        if (query == null || query.discourseModifier() == null || query.discourseModifier().isBlank()) {
+            return candidates;
+        }
+        String discourse = query.discourseModifier().toLowerCase(java.util.Locale.ROOT);
+        if (!"else".equals(discourse) && !"other".equals(discourse) && !"another".equals(discourse)) {
+            return candidates;
+        }
+        WorkingMemory memory = context.workingMemory();
+        QueryKey key = QueryKey.from(query);
+        List<String> history = memory.answerHistory(key);
+        if (history.isEmpty()) {
+            return candidates;
+        }
+        List<ReasoningCandidate> filtered = new ArrayList<>(candidates.size());
+        for (ReasoningCandidate candidate : candidates) {
+            if (CandidateType.ANSWER.equals(candidate.type())) {
+                Object payload = candidate.payload();
+                String value = null;
+                if (payload instanceof String) {
+                    value = payload.toString();
+                } else if (payload instanceof SymbolId) {
+                    value = ((SymbolId) payload).value();
+                }
+                if (value != null && history.contains(value)) {
+                    continue;
+                }
+            }
+            filtered.add(candidate);
+        }
+        return filtered;
     }
 
     private double clamp(double value) {

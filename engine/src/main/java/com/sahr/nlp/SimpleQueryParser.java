@@ -35,15 +35,16 @@ public final class SimpleQueryParser {
             return QueryGoal.unknown();
         }
 
+        String discourse = findDiscourseModifier(tokenize(normalized));
         Optional<QueryGoal> attribute = parseAttributeQuery(normalized);
         if (attribute.isPresent()) {
-            return attribute.get();
+            return applyDiscourseModifier(attribute.get(), discourse);
         }
 
         if (normalized.startsWith("how many")) {
             Optional<QueryGoal> count = parseCountQuery(normalized);
             if (count.isPresent()) {
-                return count.get();
+                return applyDiscourseModifier(count.get(), discourse);
             }
         }
 
@@ -52,17 +53,17 @@ public final class SimpleQueryParser {
             if (type == null || type.isBlank()) {
                 return QueryGoal.unknown();
             }
-            return QueryGoal.where(type, "concept:location");
+            return applyDiscourseModifier(QueryGoal.where(type, "concept:location"), discourse);
         }
 
         Optional<QueryGoal> yesNo = parseYesNoQuery(input);
         if (yesNo.isPresent()) {
-            return yesNo.get();
+            return applyDiscourseModifier(yesNo.get(), discourse);
         }
 
         Optional<QueryGoal> relation = parseRelationQuery(input);
         if (relation.isPresent()) {
-            return relation.get();
+            return applyDiscourseModifier(relation.get(), discourse);
         }
 
         return QueryGoal.unknown();
@@ -654,6 +655,22 @@ public final class SimpleQueryParser {
             }
         }
         return new SubjectModifier(candidate, null);
+    }
+
+    private String findDiscourseModifier(List<String> tokens) {
+        for (String token : tokens) {
+            if ("else".equals(token) || "other".equals(token) || "another".equals(token)) {
+                return token;
+            }
+        }
+        return null;
+    }
+
+    private QueryGoal applyDiscourseModifier(QueryGoal query, String discourse) {
+        if (query == null || discourse == null || discourse.isBlank()) {
+            return query;
+        }
+        return query.withDiscourseModifier(discourse);
     }
 
     private static final class SubjectModifier {

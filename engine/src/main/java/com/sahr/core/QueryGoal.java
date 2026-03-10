@@ -21,6 +21,7 @@ public final class QueryGoal {
     private final String expectedRange;
     private final String attribute;
     private final String modifier;
+    private final String discourseModifier;
     private final String subjectText;
     private final String objectText;
     private final String predicateText;
@@ -37,10 +38,12 @@ public final class QueryGoal {
                      String expectedRange,
                      String attribute,
                      String modifier,
+                     String discourseModifier,
                      String subjectText,
                      String objectText,
                      String predicateText) {
-        this(type, subject, object, predicate, expectedType, entityType, expectedRange, attribute, modifier, subjectText, objectText, predicateText,
+        this(type, subject, object, predicate, expectedType, entityType, expectedRange, attribute, modifier, discourseModifier,
+                subjectText, objectText, predicateText,
                 java.util.UUID.randomUUID().toString(), null, 0);
     }
 
@@ -53,6 +56,7 @@ public final class QueryGoal {
                      String expectedRange,
                      String attribute,
                      String modifier,
+                     String discourseModifier,
                      String subjectText,
                      String objectText,
                      String predicateText,
@@ -68,6 +72,7 @@ public final class QueryGoal {
         this.expectedRange = expectedRange;
         this.attribute = attribute;
         this.modifier = modifier;
+        this.discourseModifier = discourseModifier;
         this.subjectText = subjectText;
         this.objectText = objectText;
         this.predicateText = predicateText;
@@ -77,15 +82,15 @@ public final class QueryGoal {
     }
 
     public static QueryGoal unknown() {
-        return new QueryGoal(Type.UNKNOWN, null, null, null, null, null, null, null, null, null, null, null);
+        return new QueryGoal(Type.UNKNOWN, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public static QueryGoal where(String entityType, String expectedRange) {
-        return new QueryGoal(Type.WHERE, null, null, null, null, entityType, expectedRange, null, null, null, null, null);
+        return new QueryGoal(Type.WHERE, null, null, null, null, entityType, expectedRange, null, null, null, null, null, null);
     }
 
     public static QueryGoal relation(String subject, String predicate, String object, String expectedType) {
-        return new QueryGoal(Type.RELATION, subject, object, predicate, expectedType, null, null, null, null, null, null, null);
+        return new QueryGoal(Type.RELATION, subject, object, predicate, expectedType, null, null, null, null, null, null, null, null);
     }
 
     public static QueryGoal relationWithModifier(String subject,
@@ -93,7 +98,7 @@ public final class QueryGoal {
                                                  String object,
                                                  String expectedType,
                                                  String modifier) {
-        return new QueryGoal(Type.RELATION, subject, object, predicate, expectedType, null, null, null, modifier, null, null, null);
+        return new QueryGoal(Type.RELATION, subject, object, predicate, expectedType, null, null, null, modifier, null, null, null, null);
     }
 
     public static QueryGoal yesNo(String subject,
@@ -103,11 +108,11 @@ public final class QueryGoal {
                                   String subjectText,
                                   String objectText,
                                   String predicateText) {
-        return new QueryGoal(Type.YESNO, subject, object, predicate, expectedType, null, null, null, null, subjectText, objectText, predicateText);
+        return new QueryGoal(Type.YESNO, subject, object, predicate, expectedType, null, null, null, null, null, subjectText, objectText, predicateText);
     }
 
     public static QueryGoal attribute(String subject, String attribute) {
-        return new QueryGoal(Type.ATTRIBUTE, subject, null, "hasAttribute", null, null, null, attribute, null, null, null, null);
+        return new QueryGoal(Type.ATTRIBUTE, subject, null, "hasAttribute", null, null, null, attribute, null, null, null, null, null);
     }
 
     public static QueryGoal count(String subject,
@@ -115,7 +120,7 @@ public final class QueryGoal {
                                   String object,
                                   String expectedType,
                                   String modifier) {
-        return new QueryGoal(Type.COUNT, subject, object, predicate, expectedType, null, null, null, modifier, null, null, null);
+        return new QueryGoal(Type.COUNT, subject, object, predicate, expectedType, null, null, null, modifier, null, null, null, null);
     }
 
     public Type type() {
@@ -154,6 +159,10 @@ public final class QueryGoal {
         return modifier;
     }
 
+    public String discourseModifier() {
+        return discourseModifier;
+    }
+
     public String subjectText() {
         return subjectText;
     }
@@ -189,10 +198,32 @@ public final class QueryGoal {
                 expectedRange,
                 attribute,
                 modifier,
+                discourseModifier,
                 subjectText,
                 objectText,
                 predicateText,
                 java.util.UUID.randomUUID().toString(),
+                parentGoalId,
+                depth
+        );
+    }
+
+    public QueryGoal withDiscourseModifier(String discourseModifier) {
+        return new QueryGoal(
+                type,
+                subject,
+                object,
+                predicate,
+                expectedType,
+                entityType,
+                expectedRange,
+                attribute,
+                modifier,
+                discourseModifier,
+                subjectText,
+                objectText,
+                predicateText,
+                goalId,
                 parentGoalId,
                 depth
         );

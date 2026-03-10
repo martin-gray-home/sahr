@@ -66,6 +66,9 @@ public final class RelationQueryHead extends BaseHead {
         SymbolId subject = subjectBinding == null || subjectBinding.isBlank() ? null : new SymbolId(subjectBinding);
         SymbolId object = objectBinding == null || objectBinding.isBlank() ? null : new SymbolId(objectBinding);
         String modifier = query.modifier();
+        if (isDiscourseModifier(query.discourseModifier())) {
+            modifier = null;
+        }
 
         if (modifier != null && !modifier.isBlank()) {
             if (subject != null && !entityHasAttribute(graph, ontology, subject, modifier)) {
@@ -141,6 +144,9 @@ public final class RelationQueryHead extends BaseHead {
                                                    String predicate,
                                                    String expectedType) {
         String modifier = query.modifier();
+        if (isDiscourseModifier(query.discourseModifier())) {
+            modifier = null;
+        }
         if (modifier != null && !modifier.isBlank()) {
             if (object != null && !entityHasAttribute(graph, ontology, object, modifier)) {
                 return List.of(buildCountAnswer(0, predicate));
@@ -265,6 +271,14 @@ public final class RelationQueryHead extends BaseHead {
             }
         }
         return false;
+    }
+
+    private boolean isDiscourseModifier(String modifier) {
+        if (modifier == null || modifier.isBlank()) {
+            return false;
+        }
+        String normalized = modifier.toLowerCase(java.util.Locale.ROOT);
+        return "else".equals(normalized) || "other".equals(normalized) || "another".equals(normalized);
     }
 
     private double memoryFocus(WorkingMemory memory, SymbolId subject, SymbolId object, SymbolId answer) {

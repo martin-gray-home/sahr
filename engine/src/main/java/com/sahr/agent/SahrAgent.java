@@ -4,6 +4,7 @@ import com.sahr.core.EntityNode;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
+import com.sahr.core.QueryKey;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.ReasoningTrace;
@@ -143,6 +144,7 @@ public final class SahrAgent {
         String subject = mapEntity(query.subject());
         String object = mapEntity(query.object());
         String predicate = mapPredicate(query.predicate());
+        String discourse = query.discourseModifier();
 
         QueryGoal mapped = new QueryGoal(
                 query.type(),
@@ -154,6 +156,7 @@ public final class SahrAgent {
                 expectedRange,
                 query.attribute(),
                 query.modifier(),
+                discourse,
                 query.subjectText(),
                 query.objectText(),
                 query.predicateText(),
@@ -386,9 +389,11 @@ public final class SahrAgent {
                 logger.fine(() -> "Follow-up winner type=" + winner.type()
                         + " producedBy=" + winner.producedBy()
                         + " score=" + winner.score());
+                recordAnswerIfPossible(query, winner.payload());
                 return winner.payload().toString();
             }
             if (!CandidateType.ASSERTION.equals(winner.type())) {
+                recordAnswerIfPossible(query, winner.payload());
                 return winner.payload() == null ? "No payload." : winner.payload().toString();
             }
             applyCandidate(winner);
@@ -415,6 +420,9 @@ public final class SahrAgent {
         String result = applyCandidate(winner);
         if (CandidateType.ASSERTION.equals(winner.type()) && isQuestion(query)) {
             return resolveQuestionAfterAssertion(query, 2);
+        }
+        if (CandidateType.ANSWER.equals(winner.type())) {
+            recordAnswerIfPossible(query, winner.payload());
         }
         return result;
     }
@@ -499,6 +507,7 @@ public final class SahrAgent {
                     workingMemory.popGoal();
                     continue;
                 }
+                recordAnswerIfPossible(root, winner.payload());
                 workingMemory.popGoal();
                 return winner.payload() == null ? "No payload." : winner.payload().toString();
             }
@@ -574,6 +583,31 @@ public final class SahrAgent {
                 0.8
         );
         addAssertionIfNew(assertion);
+    }
+
+    private void recordAnswerIfPossible(QueryGoal query, Object payload) {
+        if (query == null || payload == null) {
+            return;
+        }
+        String answer;
+        if (payload instanceof SymbolId) {
+            answer = ((SymbolId) payload).value();
+        } else if (payload instanceof String) {
+            answer = ((String) payload).trim();
+        } else {
+            return;
+        }
+        if (answer.isEmpty()) {
+            return;
+        }
+        if (!answer.startsWith("entity:") && !answer.startsWith("concept:")) {
+            return;
+        }
+        QueryKey key = QueryKey.from(query);
+        if (key == null) {
+            return;
+        }
+        workingMemory.recordAnswer(key, answer);
     }
 
     private void upsertEntity(SymbolId id, Set<String> types) {

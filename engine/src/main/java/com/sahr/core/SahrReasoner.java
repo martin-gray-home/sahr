@@ -21,12 +21,12 @@ public final class SahrReasoner {
 
     public List<ReasoningCandidate> reason(HeadContext context) {
         List<ReasoningCandidate> results = headExecutor.execute(context);
-        return candidateSelector.rank(results);
+        return candidateSelector.rank(context, results);
     }
 
     public Optional<ReasoningCandidate> selectWinner(HeadContext context) {
         List<ReasoningCandidate> results = reason(context);
-        return candidateSelector.selectWinner(results);
+        return candidateSelector.selectWinner(context, results);
     }
 
     public List<SymbolicAttentionHead> heads() {
