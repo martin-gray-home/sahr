@@ -1,6 +1,7 @@
 package com.sahr.nlp;
 
 import edu.stanford.nlp.pipeline.Annotation;
+import edu.stanford.nlp.process.Morphology;
 import edu.stanford.nlp.pipeline.StanfordCoreNLP;
 import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.ling.CoreLabel;
@@ -38,6 +39,7 @@ public final class StatementParser {
     );
 
     private static final StanfordCoreNLP PIPELINE = buildPipeline();
+    private static final Morphology MORPHOLOGY = new Morphology();
 
     public Optional<Statement> parse(String input) {
         if (input == null) {
@@ -104,24 +106,70 @@ public final class StatementParser {
     }
 
     private Optional<Statement> parsePassiveBy(String normalized) {
-        int verbIndex = normalized.indexOf(" is ");
+        CopulaMatch copula = findPassiveCopula(normalized);
         int byIndex = normalized.indexOf(" by ");
-        if (verbIndex < 0 || byIndex < 0 || byIndex <= verbIndex + 4) {
+        if (copula == null || byIndex < 0 || byIndex <= copula.index + copula.length) {
             return Optional.empty();
         }
-        String subjectPart = normalized.substring(0, verbIndex).trim();
-        String verbPart = normalized.substring(verbIndex + 4, byIndex).trim();
+        String subjectPart = normalized.substring(0, copula.index).trim();
+        String verbPart = normalized.substring(copula.index + copula.length, byIndex).trim();
         String objectPart = normalized.substring(byIndex + 4).trim();
         if (subjectPart.isBlank() || verbPart.isBlank() || objectPart.isBlank()) {
             return Optional.empty();
         }
-        String subjectToken = normalizeToken(subjectPart);
-        String objectToken = normalizeToken(objectPart);
-        if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+        String patientToken = normalizeToken(subjectPart);
+        String agentToken = normalizeToken(objectPart);
+        if (patientToken.isEmpty() || agentToken.isEmpty()) {
             return Optional.empty();
         }
-        String predicate = verbPart.replaceAll("\\s+", "_") + "By";
-        return Optional.of(buildStatement(subjectToken, objectToken, predicate, false));
+        String passivePredicate = verbPart.replaceAll("\\s+", "_") + "By";
+        Statement passive = buildStatement(patientToken, agentToken, passivePredicate, false);
+        Statement active = buildStatement(agentToken, patientToken, normalizePassiveVerb(verbPart), false);
+        return Optional.of(new Statement(
+                passive.subject(),
+                passive.object(),
+                passive.predicate(),
+                passive.subjectTypes(),
+                passive.objectTypes(),
+                passive.objectIsConcept(),
+                passive.confidence(),
+                java.util.List.of(active)
+        ));
+    }
+
+    private static CopulaMatch findPassiveCopula(String normalized) {
+        String[] candidates = {" is ", " was ", " were ", " are ", " be "};
+        for (String candidate : candidates) {
+            int index = normalized.indexOf(candidate);
+            if (index >= 0) {
+                return new CopulaMatch(index, candidate.length());
+            }
+        }
+        return null;
+    }
+
+    private static final class CopulaMatch {
+        private final int index;
+        private final int length;
+
+        private CopulaMatch(int index, int length) {
+            this.index = index;
+            this.length = length;
+        }
+    }
+
+    private String normalizePassiveVerb(String verbPart) {
+        String[] parts = verbPart.trim().split("\\s+");
+        if (parts.length == 0) {
+            return "";
+        }
+        String lemma = MORPHOLOGY.lemma(parts[0], "V");
+        String head = (lemma == null || lemma.isBlank()) ? parts[0] : lemma;
+        StringBuilder normalized = new StringBuilder(head.toLowerCase(Locale.ROOT));
+        for (int i = 1; i < parts.length; i++) {
+            normalized.append('_').append(parts[i].toLowerCase(Locale.ROOT));
+        }
+        return normalized.toString();
     }
 
     private Optional<Statement> parseWithCoreNlp(String input) {
