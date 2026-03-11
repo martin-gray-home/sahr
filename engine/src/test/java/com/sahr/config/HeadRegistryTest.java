@@ -14,9 +14,8 @@ class HeadRegistryTest {
         OntologyContext context = OntologyRegistry.loadOntologyContext(config);
         List<SymbolicAttentionHead> heads = HeadRegistry.buildHeads(config, context);
 
-        assertEquals(2, heads.size());
-        assertEquals("graph-retrieval", heads.get(0).getName());
-        assertEquals("ontology-defined", heads.get(1).getName());
+        assertEquals(1, heads.size());
+        assertEquals("ontology-defined", heads.get(0).getName());
     }
 
     @Test

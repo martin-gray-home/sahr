@@ -3,10 +3,8 @@ package com.sahr.agent;
 import com.sahr.core.InMemoryKnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.SahrReasoner;
-import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.GraphRetrievalHead;
+import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.nlp.SimpleQueryParser;
-import com.sahr.ontology.InMemoryOntologyService;
 import com.sahr.ontology.LabelLexicalMapper;
 import org.junit.jupiter.api.Test;
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -19,6 +17,7 @@ import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
 import java.util.List;
 import com.sahr.support.HeadOntologyTestSupport;
+import com.sahr.support.OwlOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -50,8 +49,7 @@ class SahrAgentLexicalMappingTest {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         OntologyService ontologyService = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new GraphRetrievalHead()
+                new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
         SahrAgent agent = new SahrAgent(graph, ontologyService, reasoner, new SimpleQueryParser(), mapper);
 
@@ -80,8 +78,7 @@ class SahrAgentLexicalMappingTest {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         OntologyService ontologyService = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new GraphRetrievalHead()
+                new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
         SahrAgent agent = new SahrAgent(graph, ontologyService, reasoner, new SimpleQueryParser(), mapper);
 

@@ -6,14 +6,14 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
-import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.RelationQueryHead;
+import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.ontology.InMemoryOntologyService;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
 import com.sahr.support.HeadOntologyTestSupport;
+import com.sahr.support.OwlOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -35,8 +35,7 @@ class SahrAgentWorkingMemoryTest {
         graph.addAssertion(new RelationAssertion(woman, "wear", hat, 0.9));
 
         SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new RelationQueryHead()
+                new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
 
         SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());

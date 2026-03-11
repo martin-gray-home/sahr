@@ -31,11 +31,13 @@ public final class OntologyHeadCompiler {
     private static final String VARIABLE = NS + "Variable";
     private static final String CONSTANT = NS + "Constant";
     private static final String ADD_ASSERTION = NS + "AddAssertion";
+    private static final String EXECUTOR_PARAM = NS + "ExecutorParam";
 
     private static final String HAS_PATTERN = NS + "hasPattern";
     private static final String HAS_TRIPLE = NS + "hasTriple";
     private static final String HAS_ACTION = NS + "hasAction";
     private static final String HAS_SCORE_POLICY = NS + "hasScorePolicy";
+    private static final String HAS_EXECUTOR_PARAM = NS + "hasExecutorParam";
     private static final String SUBJECT = NS + "subject";
     private static final String PREDICATE = NS + "predicate";
     private static final String OBJECT = NS + "object";
@@ -43,6 +45,9 @@ public final class OntologyHeadCompiler {
     private static final String VAR_NAME = NS + "varName";
     private static final String VALUE = NS + "value";
     private static final String BASE_WEIGHT = NS + "baseWeight";
+    private static final String EXECUTOR_TYPE = NS + "executorType";
+    private static final String PARAM_KEY = NS + "paramKey";
+    private static final String PARAM_VALUE = NS + "paramValue";
     private static final double META_TRANSITIVE_WEIGHT = 0.75;
     private static final double META_SYMMETRIC_WEIGHT = 0.65;
     private static final double META_INVERSE_WEIGHT = 0.7;
@@ -61,11 +66,13 @@ public final class OntologyHeadCompiler {
         OWLClass variableClass = factory.getOWLClass(IRI.create(VARIABLE));
         OWLClass constantClass = factory.getOWLClass(IRI.create(CONSTANT));
         OWLClass addAssertionClass = factory.getOWLClass(IRI.create(ADD_ASSERTION));
+        OWLClass executorParamClass = factory.getOWLClass(IRI.create(EXECUTOR_PARAM));
 
         OWLObjectProperty hasPattern = factory.getOWLObjectProperty(IRI.create(HAS_PATTERN));
         OWLObjectProperty hasTriple = factory.getOWLObjectProperty(IRI.create(HAS_TRIPLE));
         OWLObjectProperty hasAction = factory.getOWLObjectProperty(IRI.create(HAS_ACTION));
         OWLObjectProperty hasScorePolicy = factory.getOWLObjectProperty(IRI.create(HAS_SCORE_POLICY));
+        OWLObjectProperty hasExecutorParam = factory.getOWLObjectProperty(IRI.create(HAS_EXECUTOR_PARAM));
         OWLObjectProperty subjectProp = factory.getOWLObjectProperty(IRI.create(SUBJECT));
         OWLObjectProperty predicateProp = factory.getOWLObjectProperty(IRI.create(PREDICATE));
         OWLObjectProperty objectProp = factory.getOWLObjectProperty(IRI.create(OBJECT));
@@ -74,6 +81,9 @@ public final class OntologyHeadCompiler {
         OWLDataProperty varNameProp = factory.getOWLDataProperty(IRI.create(VAR_NAME));
         OWLDataProperty valueProp = factory.getOWLDataProperty(IRI.create(VALUE));
         OWLDataProperty baseWeightProp = factory.getOWLDataProperty(IRI.create(BASE_WEIGHT));
+        OWLDataProperty executorTypeProp = factory.getOWLDataProperty(IRI.create(EXECUTOR_TYPE));
+        OWLDataProperty paramKeyProp = factory.getOWLDataProperty(IRI.create(PARAM_KEY));
+        OWLDataProperty paramValueProp = factory.getOWLDataProperty(IRI.create(PARAM_VALUE));
 
         List<OntologyHeadDefinition> definitions = new ArrayList<>();
         Set<String> signature = new HashSet<>();
@@ -81,6 +91,17 @@ public final class OntologyHeadCompiler {
         for (OWLNamedIndividual head : heads) {
             String name = dataPropertyValue(ontology, head, nameProp)
                     .orElse(head.getIRI().getShortForm());
+            String executorType = dataPropertyValue(ontology, head, executorTypeProp)
+                    .orElse(OntologyHeadDefinition.EXECUTOR_PATTERN_MATCH)
+                    .toUpperCase(Locale.ROOT);
+            java.util.Map<String, String> executorParams = loadExecutorParams(
+                    ontology,
+                    head,
+                    hasExecutorParam,
+                    executorParamClass,
+                    paramKeyProp,
+                    paramValueProp
+            );
             List<OntologyHeadDefinition.TriplePattern> patterns = new ArrayList<>();
             for (OWLNamedIndividual pattern : objectPropertyValues(ontology, head, hasPattern)) {
                 if (!isInstanceOf(ontology, pattern, patternClass)) {
@@ -104,7 +125,8 @@ public final class OntologyHeadCompiler {
                     parsed.ifPresent(patterns::add);
                 }
             }
-            if (patterns.isEmpty()) {
+            boolean isPatternHead = OntologyHeadDefinition.EXECUTOR_PATTERN_MATCH.equals(executorType);
+            if (patterns.isEmpty() && isPatternHead) {
                 continue;
             }
 
@@ -113,22 +135,21 @@ public final class OntologyHeadCompiler {
                     .filter(action -> isInstanceOf(ontology, action, addAssertionClass))
                     .findFirst()
                     .orElse(null);
-            if (actionNode == null) {
-                continue;
+            Optional<OntologyHeadDefinition.TriplePattern> action = Optional.empty();
+            if (actionNode != null) {
+                action = parseTriple(
+                        ontology,
+                        actionNode,
+                        subjectProp,
+                        predicateProp,
+                        objectProp,
+                        variableClass,
+                        constantClass,
+                        varNameProp,
+                        valueProp
+                );
             }
-
-            Optional<OntologyHeadDefinition.TriplePattern> action = parseTriple(
-                    ontology,
-                    actionNode,
-                    subjectProp,
-                    predicateProp,
-                    objectProp,
-                    variableClass,
-                    constantClass,
-                    varNameProp,
-                    valueProp
-            );
-            if (action.isEmpty()) {
+            if (isPatternHead && action.isEmpty()) {
                 continue;
             }
 
@@ -140,7 +161,14 @@ public final class OntologyHeadCompiler {
                     .findFirst()
                     .orElse(0.7);
 
-            OntologyHeadDefinition definition = new OntologyHeadDefinition(name, patterns, action.get(), baseWeight);
+            OntologyHeadDefinition definition = new OntologyHeadDefinition(
+                    name,
+                    patterns,
+                    action.orElse(null),
+                    baseWeight,
+                    executorType,
+                    executorParams
+            );
             if (signature.add(signature(definition))) {
                 definitions.add(definition);
             }
@@ -363,11 +391,22 @@ public final class OntologyHeadCompiler {
 
     private static String signature(OntologyHeadDefinition definition) {
         StringBuilder builder = new StringBuilder();
+        builder.append(definition.executorType()).append(':');
+        if (!definition.executorParams().isEmpty()) {
+            definition.executorParams().entrySet().stream()
+                    .sorted(java.util.Map.Entry.comparingByKey())
+                    .forEach(entry -> builder.append(entry.getKey())
+                            .append('=')
+                            .append(entry.getValue())
+                            .append(','));
+        }
         for (OntologyHeadDefinition.TriplePattern pattern : definition.patterns()) {
             appendPattern(builder, pattern);
         }
         builder.append("->");
-        appendPattern(builder, definition.action());
+        if (definition.action() != null) {
+            appendPattern(builder, definition.action());
+        }
         return builder.toString();
     }
 
@@ -385,5 +424,25 @@ public final class OntologyHeadCompiler {
             return "null";
         }
         return (term.isVariable() ? "?" : "") + term.value();
+    }
+
+    private static java.util.Map<String, String> loadExecutorParams(OWLOntology ontology,
+                                                                    OWLNamedIndividual head,
+                                                                    OWLObjectProperty hasExecutorParam,
+                                                                    OWLClass executorParamClass,
+                                                                    OWLDataProperty paramKeyProp,
+                                                                    OWLDataProperty paramValueProp) {
+        java.util.Map<String, String> params = new java.util.HashMap<>();
+        for (OWLNamedIndividual param : objectPropertyValues(ontology, head, hasExecutorParam)) {
+            if (!isInstanceOf(ontology, param, executorParamClass)) {
+                continue;
+            }
+            Optional<String> key = dataPropertyValue(ontology, param, paramKeyProp);
+            Optional<String> value = dataPropertyValue(ontology, param, paramValueProp);
+            if (key.isPresent() && value.isPresent()) {
+                params.put(key.get(), value.get());
+            }
+        }
+        return params;
     }
 }

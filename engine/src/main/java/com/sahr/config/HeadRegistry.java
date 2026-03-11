@@ -1,11 +1,6 @@
 package com.sahr.config;
 
 import com.sahr.core.SymbolicAttentionHead;
-import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.GraphRetrievalHead;
-import com.sahr.heads.QueryAlignmentHead;
-import com.sahr.heads.RelationQueryHead;
-import com.sahr.heads.SubgoalExpansionHead;
 import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.ontology.OntologyHeadCompiler;
 
@@ -34,21 +29,11 @@ public final class HeadRegistry {
 
     private static SymbolicAttentionHead createHead(String id, EngineConfig config, OntologyContext context) {
         switch (id) {
-            case "graph-retrieval":
-                return new GraphRetrievalHead();
-            case "assertion-insertion":
-                return new AssertionInsertionHead();
-            case "subgoal-expansion":
-                return new SubgoalExpansionHead();
-            case "relation-query":
-                return new RelationQueryHead(config.predicateAliases());
-            case "query-alignment":
-                return new QueryAlignmentHead();
             case "ontology-defined":
                 if (context == null || context.ontology() == null) {
                     throw new IllegalArgumentException("Ontology-defined heads require an ontology context.");
                 }
-                return new OntologyDefinedHead(OntologyHeadCompiler.compile(context.ontology()));
+                return new OntologyDefinedHead(OntologyHeadCompiler.compile(context.ontology()), config.predicateAliases());
             default:
                 throw new IllegalArgumentException("Unknown head id: " + id);
         }

@@ -3,10 +3,9 @@ package com.sahr.agent;
 import com.sahr.core.InMemoryKnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.SahrReasoner;
-import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.GraphRetrievalHead;
+import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.nlp.SimpleQueryParser;
-import com.sahr.ontology.InMemoryOntologyService;
+import com.sahr.support.OwlOntologyTestSupport;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import com.sahr.support.HeadOntologyTestSupport;
@@ -19,8 +18,7 @@ class SahrAgentIngestionTest {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new GraphRetrievalHead()
+                new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
         SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
 
@@ -33,8 +31,7 @@ class SahrAgentIngestionTest {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         OntologyService ontology = HeadOntologyTestSupport.createOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new GraphRetrievalHead()
+                new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
         SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
 

@@ -10,11 +10,13 @@ headr:Variable a owl:Class .
 headr:Constant a owl:Class .
 headr:AddAssertion a owl:Class .
 headr:ScorePolicy a owl:Class .
+headr:ExecutorParam a owl:Class .
 
 headr:hasPattern a owl:ObjectProperty .
 headr:hasTriple a owl:ObjectProperty .
 headr:hasAction a owl:ObjectProperty .
 headr:hasScorePolicy a owl:ObjectProperty .
+headr:hasExecutorParam a owl:ObjectProperty .
 headr:subject a owl:ObjectProperty .
 headr:predicate a owl:ObjectProperty .
 headr:object a owl:ObjectProperty .
@@ -23,6 +25,9 @@ headr:name a owl:DatatypeProperty .
 headr:varName a owl:DatatypeProperty .
 headr:value a owl:DatatypeProperty .
 headr:baseWeight a owl:DatatypeProperty .
+headr:executorType a owl:DatatypeProperty .
+headr:paramKey a owl:DatatypeProperty .
+headr:paramValue a owl:DatatypeProperty .
 
 headr:varA a headr:Variable ;
     headr:varName "a" .
@@ -107,6 +112,51 @@ headr:scoreSurface a headr:ScorePolicy ;
 
 headr:scoreDependency a headr:ScorePolicy ;
     headr:baseWeight "0.74"^^xsd:double .
+
+headr:scoreAssertionInsertion a headr:ScorePolicy ;
+    headr:baseWeight "1.0"^^xsd:double .
+
+headr:scoreRelationQuery a headr:ScorePolicy ;
+    headr:baseWeight "1.0"^^xsd:double .
+
+headr:scoreGraphRetrieval a headr:ScorePolicy ;
+    headr:baseWeight "1.0"^^xsd:double .
+
+headr:scoreQueryAlignment a headr:ScorePolicy ;
+    headr:baseWeight "1.0"^^xsd:double .
+
+headr:scoreSubgoalExpansion a headr:ScorePolicy ;
+    headr:baseWeight "1.0"^^xsd:double .
+
+headr:paramGraphRetrievalDepth a headr:ExecutorParam ;
+    headr:paramKey "maxLocationDepth" ;
+    headr:paramValue "6" .
+
+headr:AssertionInsertionHead a headr:ReasoningHead ;
+    headr:name "assertion-insertion" ;
+    headr:executorType "ASSERTION_INSERTION" ;
+    headr:hasScorePolicy headr:scoreAssertionInsertion .
+
+headr:RelationQueryHead a headr:ReasoningHead ;
+    headr:name "relation-query" ;
+    headr:executorType "RELATION_QUERY" ;
+    headr:hasScorePolicy headr:scoreRelationQuery .
+
+headr:GraphRetrievalHead a headr:ReasoningHead ;
+    headr:name "graph-retrieval" ;
+    headr:executorType "GRAPH_RETRIEVAL" ;
+    headr:hasExecutorParam headr:paramGraphRetrievalDepth ;
+    headr:hasScorePolicy headr:scoreGraphRetrieval .
+
+headr:QueryAlignmentHead a headr:ReasoningHead ;
+    headr:name "query-alignment" ;
+    headr:executorType "QUERY_ALIGNMENT" ;
+    headr:hasScorePolicy headr:scoreQueryAlignment .
+
+headr:SubgoalExpansionHead a headr:ReasoningHead ;
+    headr:name "subgoal-expansion" ;
+    headr:executorType "SUBGOAL_EXPANSION" ;
+    headr:hasScorePolicy headr:scoreSubgoalExpansion .
 
 headr:tpInLeft a headr:TriplePattern ;
     headr:subject headr:varA ;

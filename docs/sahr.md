@@ -252,11 +252,12 @@ Propagation Closure
 
 After assertions are inserted, SAHR can run a bounded propagation pass to
 add derived facts (for example, co-location transfer) so future queries
-answer immediately. Dedicated containment and surface-contact propagation
-heads infer location transfer for relations like `inside` and `on`.
-`GraphRetrievalHead` now follows short location chains (e.g., `inside` →
-`locatedIn`) and can answer colocation-based location queries directly
-when the derived assertion is not yet materialized.
+answer immediately. Containment and surface-contact propagation are now
+defined in OWL as declarative heads rather than hard-coded heads.
+Graph retrieval is an OWL-declared executor that follows short location
+chains (e.g., `inside` → `locatedIn`) and can answer colocation-based
+location queries directly when the derived assertion is not yet
+materialized.
 For non-question inputs, the agent always prefers the
 `assertion-insertion` candidate so statement ingestion cannot be
 pre-empted by propagation heads.
@@ -437,16 +438,18 @@ The `applications` module will package the ontology into the classpath, and the 
 
 # How To Add Heads (Ordered List)
 
-Heads are listed in `applications/src/main/resources/sahr/engine.properties` and are loaded in order.
+Heads are declared in OWL and executed by `OntologyDefinedHead`, which is the only head listed in
+`applications/src/main/resources/sahr/engine.properties`.
 
 Steps:
-1. Add a new head class under `engine/src/main/java/com/sahr/heads/`.
-2. Register its id in `engine/src/main/java/com/sahr/config/HeadRegistry.java`.
-3. Add the head id to the `heads` list in `applications/src/main/resources/sahr/engine.properties`.
+1. Define a new head individual in `applications/src/main/resources/ontology/reasoning-heads.ttl`.
+2. For declarative heads, provide patterns + an action; for algorithmic heads, set `executorType`
+   and optional parameters.
+3. Keep `heads=ontology-defined` in `applications/src/main/resources/sahr/engine.properties`.
 
 Example:
 ```
-heads=graph-retrieval,ontology-reasoning,relation-propagation
+heads=ontology-defined
 ```
 
 ---

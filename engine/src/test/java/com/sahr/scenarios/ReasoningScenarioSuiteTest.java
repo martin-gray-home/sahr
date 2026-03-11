@@ -3,11 +3,6 @@ package com.sahr.scenarios;
 import com.sahr.agent.SahrAgent;
 import com.sahr.core.InMemoryKnowledgeBase;
 import com.sahr.core.SahrReasoner;
-import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.GraphRetrievalHead;
-import com.sahr.heads.QueryAlignmentHead;
-import com.sahr.heads.RelationQueryHead;
-import com.sahr.heads.SubgoalExpansionHead;
 import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.heads.OntologyHeadDefinition;
 import com.sahr.nlp.SimpleQueryParser;
@@ -130,11 +125,6 @@ class ReasoningScenarioSuiteTest {
     private SahrAgent newAgent(InMemoryKnowledgeBase graph) {
         List<OntologyHeadDefinition> definitions = OwlOntologyTestSupport.buildHeadDefinitions();
         SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new SubgoalExpansionHead(),
-                new GraphRetrievalHead(),
-                new RelationQueryHead(),
-                new QueryAlignmentHead(),
                 new OntologyDefinedHead(definitions)
         ));
         SimpleQueryParser parser = new SimpleQueryParser(true);

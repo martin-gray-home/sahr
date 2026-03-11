@@ -18,7 +18,16 @@ import java.util.List;
 import java.util.Map;
 
 public final class GraphRetrievalHead extends BaseHead {
-    private static final int MAX_LOCATION_DEPTH = 6;
+    private static final int DEFAULT_MAX_LOCATION_DEPTH = 6;
+    private final int maxLocationDepth;
+
+    public GraphRetrievalHead() {
+        this(DEFAULT_MAX_LOCATION_DEPTH);
+    }
+
+    public GraphRetrievalHead(int maxLocationDepth) {
+        this.maxLocationDepth = Math.max(1, maxLocationDepth);
+    }
 
     @Override
     public String getName() {
@@ -173,7 +182,7 @@ public final class GraphRetrievalHead extends BaseHead {
         java.util.Set<SymbolId> visited = new java.util.HashSet<>();
         visited.add(current);
         SymbolId cursor = current;
-        for (int depth = 0; depth < MAX_LOCATION_DEPTH; depth++) {
+        for (int depth = 0; depth < maxLocationDepth; depth++) {
             List<RelationAssertion> nextEdges = adjacency.getOrDefault(cursor, List.of());
             if (nextEdges.isEmpty()) {
                 break;

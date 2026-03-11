@@ -7,8 +7,7 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
-import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.QueryAlignmentHead;
+import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
@@ -18,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import com.sahr.support.HeadOntologyTestSupport;
+import com.sahr.support.OwlOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -31,8 +31,7 @@ class QueryAlignmentScenarioTest {
         ontology.addPropertyRange(inside, place);
 
         SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new QueryAlignmentHead()
+                new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
         TermMapper mapper = new TermMapper() {
             @Override

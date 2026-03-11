@@ -3,13 +3,8 @@ package com.sahr.support;
 import com.sahr.agent.SahrAgent;
 import com.sahr.core.InMemoryKnowledgeBase;
 import com.sahr.core.SahrReasoner;
-import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.GraphRetrievalHead;
 import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.heads.OntologyHeadDefinition;
-import com.sahr.heads.QueryAlignmentHead;
-import com.sahr.heads.RelationQueryHead;
-import com.sahr.heads.SubgoalExpansionHead;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
@@ -30,11 +25,6 @@ public final class SahrTestAgentFactory {
                                                com.sahr.core.SymbolicAttentionHead... extraHeads) {
         List<OntologyHeadDefinition> definitions = OwlOntologyTestSupport.buildHeadDefinitions();
         List<com.sahr.core.SymbolicAttentionHead> heads = new ArrayList<>(List.of(
-                new AssertionInsertionHead(),
-                new SubgoalExpansionHead(),
-                new GraphRetrievalHead(),
-                new RelationQueryHead(),
-                new QueryAlignmentHead(),
                 new OntologyDefinedHead(definitions)
         ));
         if (extraHeads != null) {
