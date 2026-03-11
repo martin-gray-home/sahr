@@ -341,6 +341,9 @@ unavailable, propellant available) and maps them into dependency queries
 by selecting a resource-backed predicate (e.g., `poweredBy`) plus the
 resource object so rule/fact binding can surface affected or surviving
 systems. The normalized condition bundle is logged at `FINE`.
+When direct relation matching is used as a fallback, it returns all
+matching subjects/objects (comma-separated) rather than only the first
+match to avoid losing candidate sets in multi-entity queries.
 
 Working Memory
 ---------------

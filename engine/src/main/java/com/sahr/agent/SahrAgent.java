@@ -900,9 +900,12 @@ public final class SahrAgent {
             }
         }
         if (answers.isEmpty()) {
-            String direct = directRelationMatch(goal);
-            if (direct != null) {
-                return direct;
+            java.util.List<String> directMatches = directRelationMatches(goal);
+            if (!directMatches.isEmpty()) {
+                if (directMatches.size() == 1) {
+                    return directMatches.get(0);
+                }
+                return String.join(", ", directMatches);
             }
             String ruleMatch = directRuleMatch(goal);
             if (ruleMatch != null) {
@@ -924,29 +927,32 @@ public final class SahrAgent {
         return winner.payload() == null ? "No payload." : winner.payload().toString();
     }
 
-    private String directRelationMatch(QueryGoal goal) {
+    private java.util.List<String> directRelationMatches(QueryGoal goal) {
         String predicate = localName(goal.predicate());
         if (predicate.isBlank()) {
-            return null;
+            return java.util.List.of();
         }
         SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
         SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
+        java.util.List<String> matches = new java.util.ArrayList<>();
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String assertionPredicate = localName(assertion.predicate());
             if (!predicate.equals(assertionPredicate)) {
                 continue;
             }
             if (subject != null && assertion.subject().equals(subject)) {
-                return assertion.object().value();
+                matches.add(assertion.object().value());
+                continue;
             }
             if (object != null && assertion.object().equals(object)) {
-                return assertion.subject().value();
+                matches.add(assertion.subject().value());
+                continue;
             }
             if (subject == null && object == null) {
-                return assertion.subject().value();
+                matches.add(assertion.subject().value());
             }
         }
-        return null;
+        return matches;
     }
 
     private String directRuleMatch(QueryGoal goal) {
@@ -1082,9 +1088,12 @@ public final class SahrAgent {
         if ("before".equals(predicate) || "after".equals(predicate) || "during".equals(predicate)) {
             return directTemporalMatch(predicate, goal);
         }
-        String baseMatch = directRelationMatch(goal);
-        if (baseMatch != null) {
-            return baseMatch;
+        java.util.List<String> baseMatches = directRelationMatches(goal);
+        if (!baseMatches.isEmpty()) {
+            if (baseMatches.size() == 1) {
+                return baseMatches.get(0);
+            }
+            return String.join(", ", baseMatches);
         }
         return "No candidates produced.";
     }
