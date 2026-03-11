@@ -368,6 +368,9 @@ cause-chain executor will also emit explanation sentences derived from
 matching predicate assertions or rule consequents, so “why” can be
 answered with rule-backed evidence even when no explicit `cause` facts
 exist.
+Explanation sentences now render boolean predicates in a human-friendly
+form (e.g., `fail true` → “fails”, `operate false` → “does not operate”)
+and prefer more specific entities when multiple candidate clauses exist.
 
 Working Memory
 ---------------

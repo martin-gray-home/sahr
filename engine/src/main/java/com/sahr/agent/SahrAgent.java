@@ -1209,6 +1209,7 @@ public final class SahrAgent {
         }
         SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
         SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
+        java.util.List<RelationAssertion> assertionMatches = new java.util.ArrayList<>();
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             if (!predicate.equals(localName(assertion.predicate()))) {
                 continue;
@@ -1219,12 +1220,20 @@ public final class SahrAgent {
             if (object != null && !assertion.object().equals(object)) {
                 continue;
             }
-            sentences.add(displayValue(assertion.subject()) + " " + displayPredicate(assertion.predicate()) + " "
-                    + displayValue(assertion.object()) + ".");
+            assertionMatches.add(assertion);
+        }
+        assertionMatches.sort((left, right) -> Double.compare(
+                assertionSpecificity(right),
+                assertionSpecificity(left)
+        ));
+        for (RelationAssertion assertion : assertionMatches) {
+            sentences.add(formatAssertionSentence(assertion));
             if (sentences.size() >= limit) {
                 return sentences;
             }
         }
+
+        java.util.List<RuleAssertion> ruleMatches = new java.util.ArrayList<>();
         for (RuleAssertion rule : graph.getAllRules()) {
             RelationAssertion consequent = rule.consequent();
             if (!predicate.equals(localName(consequent.predicate()))) {
@@ -1236,6 +1245,13 @@ public final class SahrAgent {
             if (object != null && !consequent.object().equals(object)) {
                 continue;
             }
+            ruleMatches.add(rule);
+        }
+        ruleMatches.sort((left, right) -> Double.compare(
+                ruleSpecificity(right),
+                ruleSpecificity(left)
+        ));
+        for (RuleAssertion rule : ruleMatches) {
             sentences.add(formatRuleSentence(rule));
             if (sentences.size() >= limit) {
                 return sentences;
@@ -1364,9 +1380,7 @@ public final class SahrAgent {
     private String formatRuleSentence(RuleAssertion rule) {
         RelationAssertion antecedent = rule.antecedent();
         RelationAssertion consequent = rule.consequent();
-        return "If " + displayValue(antecedent.subject()) + " " + displayPredicate(antecedent.predicate()) + " "
-                + displayValue(antecedent.object()) + ", then " + displayValue(consequent.subject()) + " "
-                + displayPredicate(consequent.predicate()) + " " + displayValue(consequent.object()) + ".";
+        return "If " + formatAssertionClause(antecedent) + ", then " + formatAssertionClause(consequent) + ".";
     }
 
     private String ruleChainFallback(SymbolId target) {
@@ -1553,6 +1567,84 @@ public final class SahrAgent {
                     "information", "data", "component" -> true;
             default -> false;
         };
+    }
+
+    private double assertionSpecificity(RelationAssertion assertion) {
+        if (assertion == null) {
+            return 0.0;
+        }
+        return Math.max(specificityScore(assertion.subject().value()),
+                specificityScore(assertion.object().value()));
+    }
+
+    private double ruleSpecificity(RuleAssertion rule) {
+        if (rule == null) {
+            return 0.0;
+        }
+        RelationAssertion consequent = rule.consequent();
+        if (consequent == null) {
+            return 0.0;
+        }
+        return Math.max(specificityScore(consequent.subject().value()),
+                specificityScore(consequent.object().value()));
+    }
+
+    private String formatAssertionSentence(RelationAssertion assertion) {
+        return formatAssertionClause(assertion) + ".";
+    }
+
+    private String formatAssertionClause(RelationAssertion assertion) {
+        if (assertion == null) {
+            return "unknown";
+        }
+        SymbolId subject = assertion.subject();
+        SymbolId object = assertion.object();
+        String predicate = localName(assertion.predicate());
+        Boolean booleanValue = booleanConcept(object);
+        String subjectText = displayValue(subject);
+        if (booleanValue != null) {
+            if ("fail".equals(predicate)) {
+                return subjectText + (booleanValue ? " fails" : " does not fail");
+            }
+            if ("operate".equals(predicate) || "function".equals(predicate)
+                    || "work".equals(predicate) || "respond".equals(predicate)
+                    || "stop_responding".equals(predicate) || "stop".equals(predicate)) {
+                return subjectText + (booleanValue ? " operates" : " does not operate");
+            }
+            if ("become_unstable".equals(predicate) || "unstable".equals(predicate)) {
+                return subjectText + (booleanValue ? " becomes unstable" : " remains stable");
+            }
+            return subjectText + (booleanValue ? " " + displayPredicate(assertion.predicate())
+                    : " does not " + displayPredicate(assertion.predicate()));
+        }
+        if ("backupfor".equals(predicate) || "backup_for".equals(predicate)) {
+            return subjectText + " is a backup for " + displayValue(object);
+        }
+        if ("poweredby".equals(predicate) || "powered_by".equals(predicate)) {
+            return subjectText + " is powered by " + displayValue(object);
+        }
+        if ("restore".equals(predicate)) {
+            return subjectText + " restores " + displayValue(object);
+        }
+        return subjectText + " " + displayPredicate(assertion.predicate()) + " " + displayValue(object);
+    }
+
+    private Boolean booleanConcept(SymbolId id) {
+        if (id == null || id.value() == null) {
+            return null;
+        }
+        String value = id.value();
+        if (value.startsWith("concept:")) {
+            value = value.substring("concept:".length());
+        }
+        value = value.toLowerCase(java.util.Locale.ROOT);
+        if ("true".equals(value)) {
+            return Boolean.TRUE;
+        }
+        if ("false".equals(value)) {
+            return Boolean.FALSE;
+        }
+        return null;
     }
 
     private String displayValue(SymbolId id) {

@@ -166,8 +166,28 @@ class SahrAgentQueryTest {
             assertTrue(answer.contains("If"));
             assertTrue(answer.contains("thrusters"));
             assertTrue(answer.contains("backup"));
+            assertTrue(answer.contains("fails"));
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed to invoke executeCauseChain", e);
+        }
+    }
+
+    @Test
+    void formatsBooleanFailureInExplanation() {
+        RelationAssertion assertion = new RelationAssertion(
+                new SymbolId("entity:wheel_motor"),
+                "https://sahr.ai/ontology/relations#fail",
+                new SymbolId("concept:true"),
+                0.9
+        );
+        try {
+            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("formatAssertionClause", RelationAssertion.class);
+            method.setAccessible(true);
+            String clause = (String) method.invoke(SahrTestAgentFactory.newAgent(new InMemoryKnowledgeBase()), assertion);
+            assertTrue(clause.contains("wheel motor"));
+            assertTrue(clause.contains("fails"));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed to invoke formatAssertionClause", e);
         }
     }
 }
