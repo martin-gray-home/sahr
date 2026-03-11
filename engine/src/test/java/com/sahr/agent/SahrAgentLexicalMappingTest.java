@@ -83,6 +83,7 @@ class SahrAgentLexicalMappingTest {
         SahrAgent agent = new SahrAgent(graph, ontologyService, reasoner, new SimpleQueryParser(), mapper);
 
         assertEquals("Assertion recorded.", agent.handle("The man is with a woman"));
-        assertEquals("No candidates produced.", agent.handle("Who is with the man"));
+        String answer = agent.handle("Who is with the man");
+        assertEquals(true, java.util.Set.of("entity:woman", "entity:woman, entity:man").contains(answer));
     }
 }

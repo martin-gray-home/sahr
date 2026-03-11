@@ -194,6 +194,7 @@ public final class StatementParser {
             }
             addStatements(collected, parseCopularStatements(graph));
             addStatements(collected, parseVerbObjectStatements(graph));
+            addStatements(collected, parseIntransitiveStatements(graph));
             addStatements(collected, parseNmodStatements(graph));
             addStatements(collected, parseAdjectivalStatements(graph));
             addStatements(collected, parseAdverbStatements(graph));
@@ -410,6 +411,47 @@ public final class StatementParser {
                     statements.add(buildStatement(subjectToken, token, predicate, false));
                 }
             }
+        }
+        return statements;
+    }
+
+    private List<Statement> parseIntransitiveStatements(SemanticGraph graph) {
+        java.util.List<Statement> statements = new java.util.ArrayList<>();
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            if (!"nsubj".equals(edge.getRelation().getShortName())) {
+                continue;
+            }
+            edu.stanford.nlp.ling.IndexedWord verbNode = edge.getGovernor();
+            CoreLabel verb = verbNode.backingLabel();
+            if (verb == null || verb.tag() == null || !verb.tag().startsWith("V")) {
+                continue;
+            }
+            if (hasDependent(graph, verbNode, "cop")) {
+                continue;
+            }
+            if (findDependent(graph, verbNode, "obj") != null) {
+                continue;
+            }
+            CoreLabel subject = edge.getDependent().backingLabel();
+            String subjectToken = normalizeToken(composeCompoundToken(graph, subject));
+            if (subjectToken.isEmpty()) {
+                continue;
+            }
+            String predicate = resolveVerbPredicate(graph, verbNode);
+            if (predicate.isEmpty()) {
+                continue;
+            }
+            String neg = hasDependent(graph, verbNode, "neg") ? "false" : "true";
+            String objectToken = neg;
+
+            CoreLabel xcomp = findDependent(graph, verbNode, "xcomp");
+            if (xcomp != null) {
+                String xcompVerb = normalizeToken(xcomp.word());
+                if (!xcompVerb.isEmpty()) {
+                    predicate = predicate + "_" + xcompVerb;
+                }
+            }
+            statements.add(buildStatement(subjectToken, objectToken, predicate, true));
         }
         return statements;
     }
@@ -868,6 +910,10 @@ public final class StatementParser {
             }
         }
         return null;
+    }
+
+    private boolean hasDependent(SemanticGraph graph, edu.stanford.nlp.ling.IndexedWord governor, String relation) {
+        return findDependent(graph, governor, relation) != null;
     }
 
     private String findCase(SemanticGraph graph, edu.stanford.nlp.ling.IndexedWord governor) {

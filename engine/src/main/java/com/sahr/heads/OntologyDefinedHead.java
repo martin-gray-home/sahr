@@ -186,6 +186,9 @@ public final class OntologyDefinedHead extends BaseHead {
         register(map, new GraphRetrievalExecutor());
         register(map, new QueryAlignmentExecutor());
         register(map, new SubgoalExpansionExecutor());
+        register(map, new RuleInsertionExecutor());
+        register(map, new RuleForwardChainExecutor());
+        register(map, new IntentClassifierExecutor());
         return map;
     }
 
@@ -329,6 +332,203 @@ public final class OntologyDefinedHead extends BaseHead {
         @Override
         public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
             return delegate.evaluate(context);
+        }
+    }
+
+    private static final class RuleInsertionExecutor implements OntologyHeadExecutor {
+        @Override
+        public String type() {
+            return OntologyHeadDefinition.EXECUTOR_RULE_INSERTION;
+        }
+
+        @Override
+        public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
+            return context.rule()
+                    .map(rule -> {
+                        Map<String, Double> breakdown = new HashMap<>();
+                        breakdown.put("rule_confidence", rule.confidence());
+                        double score = Math.min(1.0, rule.confidence());
+                        return List.of(new ReasoningCandidate(
+                                CandidateType.ASSERTION,
+                                rule,
+                                score,
+                                definition.name(),
+                                List.of(rule.toString()),
+                                breakdown,
+                                0
+                        ));
+                    })
+                    .orElseGet(List::of);
+        }
+    }
+
+    private static final class RuleForwardChainExecutor implements OntologyHeadExecutor {
+        @Override
+        public String type() {
+            return OntologyHeadDefinition.EXECUTOR_RULE_FORWARD_CHAIN;
+        }
+
+        @Override
+        public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
+            KnowledgeBase graph = context.graph();
+            if (graph.getAllRules().isEmpty() || graph.getAllAssertions().isEmpty()) {
+                return List.of();
+            }
+            List<ReasoningCandidate> candidates = new ArrayList<>();
+            for (com.sahr.core.RuleAssertion rule : graph.getAllRules()) {
+                RelationAssertion antecedent = rule.antecedent();
+                boolean matched = graph.findByPredicate(antecedent.predicate()).stream()
+                        .anyMatch(assertion -> assertion.subject().equals(antecedent.subject())
+                                && assertion.object().equals(antecedent.object()));
+                if (!matched) {
+                    continue;
+                }
+                RelationAssertion consequent = rule.consequent();
+                boolean alreadyPresent = graph.findByPredicate(consequent.predicate()).stream()
+                        .anyMatch(assertion -> assertion.subject().equals(consequent.subject())
+                                && assertion.object().equals(consequent.object()));
+                if (alreadyPresent) {
+                    continue;
+                }
+                Map<String, Double> breakdown = new HashMap<>();
+                breakdown.put("rule_confidence", rule.confidence());
+                breakdown.put("evidence_confidence", antecedent.confidence());
+                double score = Math.min(1.0, (rule.confidence() + antecedent.confidence()) / 2.0);
+                candidates.add(new ReasoningCandidate(
+                        CandidateType.ASSERTION,
+                        new RelationAssertion(consequent.subject(), consequent.predicate(), consequent.object(), score),
+                        score,
+                        definition.name(),
+                        List.of(antecedent.toString(), rule.toString()),
+                        breakdown,
+                        1
+                ));
+            }
+            return candidates;
+        }
+    }
+
+    private static final class IntentClassifierExecutor implements OntologyHeadExecutor {
+        @Override
+        public String type() {
+            return OntologyHeadDefinition.EXECUTOR_INTENT_CLASSIFIER;
+        }
+
+        @Override
+        public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
+            var featuresOpt = context.inputFeatures();
+            if (featuresOpt.isEmpty()) {
+                return List.of();
+            }
+            String intentRaw = definition.executorParam("intent");
+            if (intentRaw == null || intentRaw.isBlank()) {
+                return List.of();
+            }
+            com.sahr.core.IntentType intent = parseIntent(intentRaw);
+            if (intent == com.sahr.core.IntentType.UNKNOWN) {
+                return List.of();
+            }
+
+            Set<String> required = splitParams(definition.executorParam("require"));
+            Set<String> any = splitParams(definition.executorParam("any"));
+            Set<String> forbid = splitParams(definition.executorParam("forbid"));
+            Set<String> boost = splitParams(definition.executorParam("boost"));
+            Set<String> penalty = splitParams(definition.executorParam("penalize"));
+
+            com.sahr.nlp.InputFeatures features = featuresOpt.get();
+            if (!required.isEmpty() && !hasAll(features, required)) {
+                return List.of();
+            }
+            if (!any.isEmpty() && !hasAny(features, any)) {
+                return List.of();
+            }
+            if (!forbid.isEmpty() && hasAny(features, forbid)) {
+                return List.of();
+            }
+
+            double score = 0.6;
+            score += boostCount(features, boost) * 0.08;
+            score -= boostCount(features, penalty) * 0.08;
+            score = clamp(score, 0.0, 1.0);
+
+            List<String> evidence = new java.util.ArrayList<>();
+            evidence.add("intent=" + intent.name().toLowerCase(java.util.Locale.ROOT));
+            evidence.addAll(features.features());
+
+            com.sahr.core.IntentDecision decision = new com.sahr.core.IntentDecision(intent, score, evidence);
+            return List.of(new ReasoningCandidate(
+                    CandidateType.INTENT,
+                    decision,
+                    score,
+                    definition.name(),
+                    evidence,
+                    java.util.Map.of("intent_score", score),
+                    0
+            ));
+        }
+
+        private com.sahr.core.IntentType parseIntent(String raw) {
+            String value = raw.trim().toLowerCase(java.util.Locale.ROOT);
+            return switch (value) {
+                case "question" -> com.sahr.core.IntentType.QUESTION;
+                case "rule" -> com.sahr.core.IntentType.RULE;
+                case "assertion" -> com.sahr.core.IntentType.ASSERTION;
+                case "condition_query", "condition" -> com.sahr.core.IntentType.CONDITION_QUERY;
+                default -> com.sahr.core.IntentType.UNKNOWN;
+            };
+        }
+
+        private Set<String> splitParams(String raw) {
+            if (raw == null || raw.isBlank()) {
+                return Set.of();
+            }
+            String[] parts = raw.split(",");
+            Set<String> values = new java.util.HashSet<>();
+            for (String part : parts) {
+                String trimmed = part.trim();
+                if (!trimmed.isEmpty()) {
+                    values.add(trimmed);
+                }
+            }
+            return values;
+        }
+
+        private boolean hasAll(com.sahr.nlp.InputFeatures features, Set<String> required) {
+            for (String feature : required) {
+                if (!features.has(feature)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private boolean hasAny(com.sahr.nlp.InputFeatures features, Set<String> candidates) {
+            for (String feature : candidates) {
+                if (features.has(feature)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private int boostCount(com.sahr.nlp.InputFeatures features, Set<String> candidates) {
+            int count = 0;
+            for (String feature : candidates) {
+                if (features.has(feature)) {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private double clamp(double value, double min, double max) {
+            if (value < min) {
+                return min;
+            }
+            if (value > max) {
+                return max;
+            }
+            return value;
         }
     }
 

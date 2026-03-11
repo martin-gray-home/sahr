@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 public final class InMemoryKnowledgeBase implements KnowledgeBase {
     private final Map<SymbolId, EntityNode> entities = new ConcurrentHashMap<>();
     private final List<RelationAssertion> assertions = new ArrayList<>();
+    private final List<RuleAssertion> rules = new ArrayList<>();
 
     @Override
     public void addEntity(EntityNode entity) {
@@ -19,6 +20,11 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
     @Override
     public void addAssertion(RelationAssertion assertion) {
         assertions.add(assertion);
+    }
+
+    @Override
+    public void addRule(RuleAssertion rule) {
+        rules.add(rule);
     }
 
     @Override
@@ -45,6 +51,11 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
     @Override
     public List<RelationAssertion> getAllAssertions() {
         return new ArrayList<>(assertions);
+    }
+
+    @Override
+    public List<RuleAssertion> getAllRules() {
+        return new ArrayList<>(rules);
     }
 
     @Override

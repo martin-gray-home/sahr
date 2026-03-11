@@ -128,9 +128,105 @@ headr:scoreQueryAlignment a headr:ScorePolicy ;
 headr:scoreSubgoalExpansion a headr:ScorePolicy ;
     headr:baseWeight "1.0"^^xsd:double .
 
+headr:scoreRuleInsertion a headr:ScorePolicy ;
+    headr:baseWeight "1.0"^^xsd:double .
+
+headr:scoreRuleForwardChain a headr:ScorePolicy ;
+    headr:baseWeight "0.8"^^xsd:double .
+
 headr:paramGraphRetrievalDepth a headr:ExecutorParam ;
     headr:paramKey "maxLocationDepth" ;
     headr:paramValue "6" .
+
+headr:paramIntentQuestionIntent a headr:ExecutorParam ;
+    headr:paramKey "intent" ;
+    headr:paramValue "question" .
+
+headr:paramIntentQuestionAny a headr:ExecutorParam ;
+    headr:paramKey "any" ;
+    headr:paramValue "has_question_mark,has_wh,has_aux" .
+
+headr:paramIntentQuestionBoost a headr:ExecutorParam ;
+    headr:paramKey "boost" ;
+    headr:paramValue "has_wh,has_why,has_what,has_which,has_how" .
+
+headr:paramIntentRuleIntent a headr:ExecutorParam ;
+    headr:paramKey "intent" ;
+    headr:paramValue "rule" .
+
+headr:paramIntentRuleRequire a headr:ExecutorParam ;
+    headr:paramKey "require" ;
+    headr:paramValue "has_if" .
+
+headr:paramIntentRuleAny a headr:ExecutorParam ;
+    headr:paramKey "any" ;
+    headr:paramValue "has_then,has_comma" .
+
+headr:paramIntentRuleForbid a headr:ExecutorParam ;
+    headr:paramKey "forbid" ;
+    headr:paramValue "has_question_mark,has_wh" .
+
+headr:paramIntentAssertionIntent a headr:ExecutorParam ;
+    headr:paramKey "intent" ;
+    headr:paramValue "assertion" .
+
+headr:paramIntentAssertionForbid a headr:ExecutorParam ;
+    headr:paramKey "forbid" ;
+    headr:paramValue "has_question_mark,has_wh,has_if" .
+
+headr:paramIntentConditionIntent a headr:ExecutorParam ;
+    headr:paramKey "intent" ;
+    headr:paramValue "condition_query" .
+
+headr:paramIntentConditionRequire a headr:ExecutorParam ;
+    headr:paramKey "require" ;
+    headr:paramValue "has_if,has_wh" .
+
+headr:paramIntentConditionBoost a headr:ExecutorParam ;
+    headr:paramKey "boost" ;
+    headr:paramValue "has_modal,has_which,has_what" .
+
+headr:RuleInsertionHead a headr:ReasoningHead ;
+    headr:name "rule-insertion" ;
+    headr:executorType "RULE_INSERTION" ;
+    headr:hasScorePolicy headr:scoreRuleInsertion .
+
+headr:RuleForwardChainHead a headr:ReasoningHead ;
+    headr:name "rule-forward-chain" ;
+    headr:executorType "RULE_FORWARD_CHAIN" ;
+    headr:hasScorePolicy headr:scoreRuleForwardChain .
+
+headr:QuestionIntentHead a headr:ReasoningHead ;
+    headr:name "question-intent" ;
+    headr:executorType "INTENT_CLASSIFIER" ;
+    headr:hasExecutorParam headr:paramIntentQuestionIntent ;
+    headr:hasExecutorParam headr:paramIntentQuestionAny ;
+    headr:hasExecutorParam headr:paramIntentQuestionBoost ;
+    headr:hasScorePolicy headr:scoreRuleInsertion .
+
+headr:RuleIntentHead a headr:ReasoningHead ;
+    headr:name "rule-intent" ;
+    headr:executorType "INTENT_CLASSIFIER" ;
+    headr:hasExecutorParam headr:paramIntentRuleIntent ;
+    headr:hasExecutorParam headr:paramIntentRuleRequire ;
+    headr:hasExecutorParam headr:paramIntentRuleAny ;
+    headr:hasExecutorParam headr:paramIntentRuleForbid ;
+    headr:hasScorePolicy headr:scoreRuleInsertion .
+
+headr:AssertionIntentHead a headr:ReasoningHead ;
+    headr:name "assertion-intent" ;
+    headr:executorType "INTENT_CLASSIFIER" ;
+    headr:hasExecutorParam headr:paramIntentAssertionIntent ;
+    headr:hasExecutorParam headr:paramIntentAssertionForbid ;
+    headr:hasScorePolicy headr:scoreRuleInsertion .
+
+headr:ConditionQueryIntentHead a headr:ReasoningHead ;
+    headr:name "condition-query-intent" ;
+    headr:executorType "INTENT_CLASSIFIER" ;
+    headr:hasExecutorParam headr:paramIntentConditionIntent ;
+    headr:hasExecutorParam headr:paramIntentConditionRequire ;
+    headr:hasExecutorParam headr:paramIntentConditionBoost ;
+    headr:hasScorePolicy headr:scoreRuleInsertion .
 
 headr:AssertionInsertionHead a headr:ReasoningHead ;
     headr:name "assertion-insertion" ;

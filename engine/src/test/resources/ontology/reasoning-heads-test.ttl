@@ -7,20 +7,27 @@ headr:ReasoningHead a owl:Class .
 headr:Pattern a owl:Class .
 headr:TriplePattern a owl:Class .
 headr:Variable a owl:Class .
+headr:Constant a owl:Class .
 headr:AddAssertion a owl:Class .
 headr:ScorePolicy a owl:Class .
+headr:ExecutorParam a owl:Class .
 
 headr:hasPattern a owl:ObjectProperty .
 headr:hasTriple a owl:ObjectProperty .
 headr:hasAction a owl:ObjectProperty .
 headr:hasScorePolicy a owl:ObjectProperty .
+headr:hasExecutorParam a owl:ObjectProperty .
 headr:subject a owl:ObjectProperty .
 headr:predicate a owl:ObjectProperty .
 headr:object a owl:ObjectProperty .
 
 headr:name a owl:DatatypeProperty .
 headr:varName a owl:DatatypeProperty .
+headr:value a owl:DatatypeProperty .
 headr:baseWeight a owl:DatatypeProperty .
+headr:executorType a owl:DatatypeProperty .
+headr:paramKey a owl:DatatypeProperty .
+headr:paramValue a owl:DatatypeProperty .
 
 headr:varX a headr:Variable ;
     headr:varName "x" .
@@ -31,14 +38,17 @@ headr:varY a headr:Variable ;
 headr:varZ a headr:Variable ;
     headr:varName "z" .
 
+headr:constLocatedIn a headr:Constant ;
+    headr:value "http://example.org/test#locatedIn" .
+
 headr:tpLeft a headr:TriplePattern ;
     headr:subject headr:varX ;
-    headr:predicate test:locatedIn ;
+    headr:predicate headr:constLocatedIn ;
     headr:object headr:varY .
 
 headr:tpRight a headr:TriplePattern ;
     headr:subject headr:varY ;
-    headr:predicate test:locatedIn ;
+    headr:predicate headr:constLocatedIn ;
     headr:object headr:varZ .
 
 headr:patternTransitive a headr:Pattern ;
@@ -46,7 +56,7 @@ headr:patternTransitive a headr:Pattern ;
 
 headr:actionTransitive a headr:AddAssertion ;
     headr:subject headr:varX ;
-    headr:predicate test:locatedIn ;
+    headr:predicate headr:constLocatedIn ;
     headr:object headr:varZ .
 
 headr:scoreTransitive a headr:ScorePolicy ;
@@ -57,3 +67,11 @@ headr:TransitiveLocatedInHead a headr:ReasoningHead ;
     headr:hasPattern headr:patternTransitive ;
     headr:hasAction headr:actionTransitive ;
     headr:hasScorePolicy headr:scoreTransitive .
+
+headr:scoreRuleForwardChain a headr:ScorePolicy ;
+    headr:baseWeight "0.6"^^xsd:double .
+
+headr:RuleForwardChainHead a headr:ReasoningHead ;
+    headr:name "rule-forward-chain-test" ;
+    headr:executorType "RULE_FORWARD_CHAIN" ;
+    headr:hasScorePolicy headr:scoreRuleForwardChain .

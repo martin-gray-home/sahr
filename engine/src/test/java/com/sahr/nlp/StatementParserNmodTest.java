@@ -34,7 +34,6 @@ class StatementParserNmodTest {
 
         assertEquals("at", statement.predicate());
         assertEquals("entity:table", statement.object().value());
-        assertEquals(1, statement.additionalStatements().size());
-        assertEquals("opposite", statement.additionalStatements().get(0).predicate());
+        assertTrue(statement.additionalStatements().stream().anyMatch(extra -> "opposite".equals(extra.predicate())));
     }
 }

@@ -24,3 +24,9 @@ head:dependencyChain a owl:ObjectProperty ;
 
 head:attributeRelation a owl:ObjectProperty ;
     rdfs:label "attribute relation" .
+
+head:temporalRelation a owl:ObjectProperty ;
+    rdfs:label "temporal relation" .
+
+head:causalRelation a owl:ObjectProperty ;
+    rdfs:label "causal relation" .

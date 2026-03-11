@@ -30,6 +30,13 @@ public final class DependencySemanticMapper {
             "next_to",
             "next-to"
     );
+    private static final Set<String> TEMPORAL_PREPS = Set.of(
+            "before",
+            "after",
+            "during",
+            "while",
+            "within"
+    );
 
     List<Statement> map(SemanticGraph graph, StatementParserHelpers helpers) {
         if (graph == null) {
@@ -38,6 +45,7 @@ public final class DependencySemanticMapper {
         List<Statement> candidates = new ArrayList<>();
         addVerbObjectCandidates(graph, helpers, candidates);
         addPrepositionCandidates(graph, helpers, candidates);
+        addTemporalCandidates(graph, helpers, candidates);
         addPossessiveCandidates(graph, helpers, candidates);
         addAdjectiveCandidates(graph, helpers, candidates);
         addAdverbCandidates(graph, helpers, candidates);
@@ -80,6 +88,37 @@ public final class DependencySemanticMapper {
             }
             String prep = normalizePrep(specific);
             if (!LOCATION_PREPS.contains(prep)) {
+                continue;
+            }
+            var verbNode = edge.getGovernor();
+            CoreLabel object = edge.getDependent().backingLabel();
+            CoreLabel subject = helpers.findDependent(graph, verbNode, "nsubj");
+            CoreLabel directObject = helpers.findDependent(graph, verbNode, "obj");
+            CoreLabel anchor = directObject != null ? directObject : subject;
+            if (anchor == null) {
+                continue;
+            }
+            String subjectToken = helpers.normalizeCompoundToken(graph, anchor);
+            String objectToken = helpers.normalizeCompoundToken(graph, object);
+            if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+                continue;
+            }
+            out.add(helpers.buildStatement(subjectToken, objectToken, prep, false));
+        }
+    }
+
+    private void addTemporalCandidates(SemanticGraph graph, StatementParserHelpers helpers, List<Statement> out) {
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            String relation = edge.getRelation().getShortName();
+            if (!"nmod".equals(relation) && !"obl".equals(relation)) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific == null) {
+                continue;
+            }
+            String prep = normalizePrep(specific);
+            if (!TEMPORAL_PREPS.contains(prep)) {
                 continue;
             }
             var verbNode = edge.getGovernor();

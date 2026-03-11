@@ -5,6 +5,9 @@ import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.ReasoningTraceEntry;
 import com.sahr.core.RelationAssertion;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -43,6 +46,7 @@ public final class CommandProcessor {
                 yield new CommandResult(false, "Working memory reset.");
             }
             case "explain" -> explain(args);
+            case "load" -> loadDataset(args);
             default -> new CommandResult(false, "Unknown command. Type :help for a list of commands.");
         };
     }
@@ -164,6 +168,42 @@ public final class CommandProcessor {
         return sb.toString();
     }
 
+    private CommandResult loadDataset(List<String> args) {
+        if (args.isEmpty()) {
+            return new CommandResult(false, "Usage: :load path/to/dataset.txt");
+        }
+        Path path = Path.of(args.get(0));
+        if (!Files.exists(path)) {
+            return new CommandResult(false, "Dataset not found: " + path);
+        }
+        try {
+            Dataset dataset = DatasetLoader.load(path);
+            int facts = 0;
+            int rules = 0;
+            StringBuilder sb = new StringBuilder();
+            for (String statement : dataset.statements()) {
+                String result = agent.handle(statement);
+                if ("Rule recorded.".equals(result)) {
+                    rules++;
+                } else if ("Assertion recorded.".equals(result)) {
+                    facts++;
+                }
+            }
+            sb.append("Loaded statements: ").append(dataset.statements().size())
+                    .append(" (facts ").append(facts)
+                    .append(", rules ").append(rules).append(")\n");
+            for (int i = 0; i < dataset.questions().size(); i++) {
+                String question = dataset.questions().get(i);
+                String answer = agent.handle(question);
+                sb.append("Q").append(i + 1).append(": ").append(question).append('\n');
+                sb.append("A").append(i + 1).append(": ").append(answer).append('\n');
+            }
+            return new CommandResult(false, sb.toString().trim());
+        } catch (IOException e) {
+            return new CommandResult(false, "Failed to load dataset: " + e.getMessage());
+        }
+    }
+
     private String formatEntities(List<?> entities) {
         if (entities == null || entities.isEmpty()) {
             return "none";
@@ -271,11 +311,13 @@ public final class CommandProcessor {
                 ":exit | :quit",
                 ":reset",
                 ":explain [--depth N] [--verbose] [--memory] [--heads]",
+                ":load path/to/dataset.txt",
                 "",
                 "Examples:",
                 ":explain",
                 ":explain --depth 5 --verbose",
-                ":explain --memory --heads"
+                ":explain --memory --heads",
+                ":load /tmp/sahr_dataset.txt"
         );
     }
 

@@ -137,3 +137,47 @@ sahr:chargedBy a owl:ObjectProperty ;
     rdfs:label "chargedBy" ;
     rdfs:label "charged by" ;
     rdfs:subPropertyOf head:dependencyChain .
+
+sahr:causalRelation a owl:ObjectProperty ;
+    rdfs:label "causal relation" ;
+    rdfs:subPropertyOf head:causalRelation .
+
+sahr:cause a owl:ObjectProperty ;
+    rdfs:label "cause" ;
+    rdfs:label "causes" ;
+    rdfs:label "can cause" ;
+    rdfs:label "may cause" ;
+    rdfs:label "lead to" ;
+    rdfs:label "result in" ;
+    a owl:TransitiveProperty ;
+    owl:inverseOf sahr:causedBy ;
+    rdfs:subPropertyOf sahr:causalRelation .
+
+sahr:causedBy a owl:ObjectProperty ;
+    rdfs:label "caused by" ;
+    owl:inverseOf sahr:cause ;
+    rdfs:subPropertyOf sahr:causalRelation .
+
+sahr:temporalRelation a owl:ObjectProperty ;
+    rdfs:label "temporal relation" ;
+    rdfs:subPropertyOf head:temporalRelation .
+
+sahr:before a owl:ObjectProperty ;
+    rdfs:label "before" ;
+    rdfs:label "prior to" ;
+    rdfs:label "earlier than" ;
+    a owl:TransitiveProperty ;
+    owl:inverseOf sahr:after ;
+    rdfs:subPropertyOf sahr:temporalRelation .
+
+sahr:after a owl:ObjectProperty ;
+    rdfs:label "after" ;
+    rdfs:label "following" ;
+    a owl:TransitiveProperty ;
+    rdfs:subPropertyOf sahr:temporalRelation .
+
+sahr:during a owl:ObjectProperty ;
+    rdfs:label "during" ;
+    rdfs:label "while" ;
+    rdfs:label "within" ;
+    rdfs:subPropertyOf sahr:temporalRelation .

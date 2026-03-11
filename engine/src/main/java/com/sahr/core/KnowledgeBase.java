@@ -8,6 +8,8 @@ public interface KnowledgeBase {
 
     void addAssertion(RelationAssertion assertion);
 
+    void addRule(RuleAssertion rule);
+
     List<RelationAssertion> findBySubject(SymbolId subject);
 
     List<RelationAssertion> findByPredicate(String predicate);
@@ -15,6 +17,8 @@ public interface KnowledgeBase {
     List<RelationAssertion> findByObject(SymbolId object);
 
     List<RelationAssertion> getAllAssertions();
+
+    List<RuleAssertion> getAllRules();
 
     Optional<EntityNode> findEntity(SymbolId id);
 

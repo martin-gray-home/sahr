@@ -10,6 +10,9 @@ public final class OntologyHeadDefinition {
     public static final String EXECUTOR_GRAPH_RETRIEVAL = "GRAPH_RETRIEVAL";
     public static final String EXECUTOR_QUERY_ALIGNMENT = "QUERY_ALIGNMENT";
     public static final String EXECUTOR_SUBGOAL_EXPANSION = "SUBGOAL_EXPANSION";
+    public static final String EXECUTOR_RULE_INSERTION = "RULE_INSERTION";
+    public static final String EXECUTOR_RULE_FORWARD_CHAIN = "RULE_FORWARD_CHAIN";
+    public static final String EXECUTOR_INTENT_CLASSIFIER = "INTENT_CLASSIFIER";
 
     private final String name;
     private final List<TriplePattern> patterns;

@@ -258,6 +258,9 @@ Graph retrieval is an OWL-declared executor that follows short location
 chains (e.g., `inside` → `locatedIn`) and can answer colocation-based
 location queries directly when the derived assertion is not yet
 materialized.
+Conditional inputs (`if ... then ...`) are stored as rule assertions, and
+an OWL-declared rule-forward-chaining executor can apply them when the
+antecedent assertions are present.
 For non-question inputs, the agent always prefers the
 `assertion-insertion` candidate so statement ingestion cannot be
 pre-empted by propagation heads.
@@ -295,7 +298,8 @@ new conversation.
 In the REPL, use `:reset` to clear working memory explicitly. Use
 `:explain` to inspect the last reasoning trace (supports `--depth`,
 `--verbose`, `--memory`, and `--heads`), and `:help` for the full
-command list.
+command list. Use `:load path/to/dataset.txt` to load a batch of
+statements and questions and print answers with evidence chains.
 
 Symbolic Attention Scoring
 ---------------------------
@@ -336,6 +340,10 @@ defined in OWL and executed through the generic `OntologyDefinedHead`.
 Meta heads generated from ontology axioms (`TransitiveProperty`,
 `SymmetricProperty`, `InverseObjectProperty`) also provide additional
 reasoning behavior without hard-coded head implementations.
+Intent classification is also OWL-defined: intent heads use a shallow
+feature extractor (question marks, WH tokens, IF/THEN, modals) and the
+`INTENT_CLASSIFIER` executor to score question/rule/assertion/condition
+interpretations before deeper reasoning runs.
 
 Attention Trace Debugging
 --------------------------

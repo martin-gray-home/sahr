@@ -2,6 +2,8 @@ package com.sahr.agent;
 
 import com.sahr.core.EntityNode;
 import com.sahr.core.HeadContext;
+import com.sahr.core.IntentDecision;
+import com.sahr.core.IntentType;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.QueryKey;
@@ -10,6 +12,7 @@ import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.ReasoningTrace;
 import com.sahr.core.ReasoningTraceEntry;
 import com.sahr.core.RelationAssertion;
+import com.sahr.core.RuleAssertion;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
 import com.sahr.core.CandidateType;
@@ -18,12 +21,17 @@ import com.sahr.core.WorkingMemory;
 import com.sahr.core.ReasoningPhase;
 import com.sahr.core.ReasoningPhaseCoordinator;
 import com.sahr.nlp.NoopTermMapper;
+import com.sahr.nlp.InputFeatureExtractor;
+import com.sahr.nlp.InputFeatures;
+import com.sahr.nlp.RuleParser;
+import com.sahr.nlp.RuleStatement;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.Statement;
 import com.sahr.nlp.StatementBatch;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +52,7 @@ public final class SahrAgent {
     private final SahrReasoner reasoner;
     private final SimpleQueryParser parser;
     private final StatementParser statementParser;
+    private final RuleParser ruleParser;
     private final TermMapper termMapper;
     private final ReasoningTrace trace;
     private final WorkingMemory workingMemory;
@@ -82,6 +91,7 @@ public final class SahrAgent {
         this.reasoner = reasoner;
         this.parser = parser;
         this.statementParser = statementParser;
+        this.ruleParser = new RuleParser(statementParser);
         this.termMapper = termMapper;
         this.trace = new ReasoningTrace();
         this.workingMemory = new WorkingMemory(phases);
@@ -89,9 +99,17 @@ public final class SahrAgent {
 
     public String handle(String input) {
         ReasoningPhase previousPhase = phases.enter(ReasoningPhase.UPDATE);
-        boolean questionLike = parser.isQuestion(input);
-        Optional<Statement> statement = statementParser.parse(input).map(this::mapStatement);
+        InputFeatures features = InputFeatureExtractor.extract(input);
+        IntentDecision intentDecision = selectIntent(features);
+        boolean questionLike = parser.isQuestion(input) || isQuestionIntent(intentDecision);
         QueryGoal query = mapQuery(parser.parse(input));
+        Optional<RuleStatement> ruleStatement = (!questionLike || isRuleIntent(intentDecision))
+                ? ruleParser.parse(input).map(this::mapRuleStatement)
+                : Optional.empty();
+        Optional<RuleAssertion> rule = ruleStatement.map(this::toRuleAssertion);
+        Optional<Statement> statement = (questionLike || rule.isPresent())
+                ? Optional.empty()
+                : statementParser.parse(input).map(this::mapStatement);
         logger.fine(() -> "Input='" + input + "' statementPresent=" + statement.isPresent()
                 + " queryIntent=" + query.type());
 
@@ -100,10 +118,10 @@ public final class SahrAgent {
 
         try {
             if (!isQuestion(query)) {
-                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), workingMemory);
+                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), rule.orElse(null), workingMemory, features);
                 return handleSingle(context, query, questionLike);
             }
-            return handleWithSubgoals(query, statement.orElse(null), questionLike);
+            return handleWithSubgoals(query, statement.orElse(null), questionLike, rule.orElse(null), features);
         } finally {
             phases.restore(previousPhase);
         }
@@ -133,7 +151,7 @@ public final class SahrAgent {
         if (query == null) {
             return List.of();
         }
-        HeadContext context = new HeadContext(query, graph, ontology, null, workingMemory);
+        HeadContext context = new HeadContext(query, graph, ontology, null, null, workingMemory);
         return reasoner.heads().stream()
                 .map(head -> head.explain(context))
                 .toList();
@@ -200,7 +218,7 @@ public final class SahrAgent {
         if (isIri(predicate)) {
             return false;
         }
-        return !predicateMapped;
+        return false;
     }
 
     private QueryGoal normalizeQuery(QueryGoal query) {
@@ -353,6 +371,12 @@ public final class SahrAgent {
     }
 
     private ApplyResult applyAssertionResult(Object payload) {
+        if (payload instanceof RuleAssertion) {
+            RuleAssertion rule = (RuleAssertion) payload;
+            boolean added = addRuleIfNew(rule);
+            logger.fine(() -> "Applied rule payload: " + rule);
+            return added ? ApplyResult.added("Rule recorded.") : ApplyResult.existing("Rule already known.");
+        }
         if (payload instanceof RelationAssertion) {
             RelationAssertion assertion = (RelationAssertion) payload;
             boolean added = addAssertionIfNew(assertion);
@@ -434,10 +458,10 @@ public final class SahrAgent {
                 String multiAnswer = buildMultiAnswer(query, followUp);
                 if (multiAnswer != null) {
                     recordAnswerValues(query, extractAnswerValues(followUp));
-                    return multiAnswer;
+                    return formatAnswerWithEvidence(multiAnswer, followUp, winner);
                 }
                 recordAnswerIfPossible(query, winner.payload());
-                return winner.payload().toString();
+                return formatAnswerWithEvidence(winner.payload().toString(), followUp, winner);
             }
             if (!CandidateType.ASSERTION.equals(winner.type())) {
                 recordAnswerIfPossible(query, winner.payload());
@@ -452,7 +476,7 @@ public final class SahrAgent {
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         boolean question = isQuestion(query) || questionLike;
         if (question) {
-            List<ReasoningCandidate> questionCandidates = filterQuestionCandidates(candidates);
+            List<ReasoningCandidate> questionCandidates = filterQuestionCandidates(candidates, query.type() != QueryGoal.Type.UNKNOWN);
             if (questionCandidates.isEmpty()) {
                 return isYesNo(query) ? "Unknown." : "No candidates produced.";
             }
@@ -473,7 +497,7 @@ public final class SahrAgent {
             String multiAnswer = buildMultiAnswer(query, candidates);
             if (multiAnswer != null) {
                 recordAnswerValues(query, extractAnswerValues(candidates));
-                return multiAnswer;
+                return formatAnswerWithEvidence(multiAnswer, candidates, winner);
             }
         }
         String result = applyCandidate(winner);
@@ -482,6 +506,7 @@ public final class SahrAgent {
         }
         if (CandidateType.ANSWER.equals(winner.type())) {
             recordAnswerIfPossible(query, winner.payload());
+            return formatAnswerWithEvidence(result, candidates, winner);
         }
         return result;
     }
@@ -504,7 +529,11 @@ public final class SahrAgent {
         return java.util.Optional.empty();
     }
 
-    private String handleWithSubgoals(QueryGoal root, Statement statement, boolean questionLike) {
+    private String handleWithSubgoals(QueryGoal root,
+                                      Statement statement,
+                                      boolean questionLike,
+                                      RuleAssertion rule,
+                                      InputFeatures features) {
         java.util.ArrayDeque<QueryGoal> queue = new java.util.ArrayDeque<>();
         queue.add(root);
         int processed = 0;
@@ -520,12 +549,14 @@ public final class SahrAgent {
                     graph,
                     ontology,
                     current.goalId().equals(root.goalId()) ? statement : null,
-                    workingMemory
+                    current.goalId().equals(root.goalId()) ? rule : null,
+                    workingMemory,
+                    features
             );
             List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
             if (current.goalId().equals(root.goalId())
                     && question) {
-                List<ReasoningCandidate> questionCandidates = filterQuestionCandidates(candidates);
+                List<ReasoningCandidate> questionCandidates = filterQuestionCandidates(candidates, current.type() != QueryGoal.Type.UNKNOWN);
                 if (questionCandidates.isEmpty()) {
                     workingMemory.popGoal();
                     return isYesNo(root) ? "Unknown." : "No candidates produced.";
@@ -619,7 +650,8 @@ public final class SahrAgent {
         return true;
     }
 
-    private List<ReasoningCandidate> filterQuestionCandidates(List<ReasoningCandidate> candidates) {
+    private List<ReasoningCandidate> filterQuestionCandidates(List<ReasoningCandidate> candidates,
+                                                              boolean allowAssertions) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -630,7 +662,8 @@ public final class SahrAgent {
                 allowed.add(candidate);
                 continue;
             }
-            if (CandidateType.ASSERTION.equals(candidate.type())
+            if (allowAssertions
+                    && CandidateType.ASSERTION.equals(candidate.type())
                     && !"assertion-insertion".equals(candidate.producedBy())) {
                 allowed.add(candidate);
             }
@@ -698,6 +731,63 @@ public final class SahrAgent {
         workingMemory.recordAnswer(key, answer);
     }
 
+    private RuleStatement mapRuleStatement(RuleStatement rule) {
+        Statement antecedent = mapStatement(rule.antecedent());
+        Statement consequent = mapStatement(rule.consequent());
+        return new RuleStatement(antecedent, consequent, rule.confidence());
+    }
+
+    private RuleAssertion toRuleAssertion(RuleStatement rule) {
+        RelationAssertion antecedent = statementToAssertion(rule.antecedent());
+        RelationAssertion consequent = statementToAssertion(rule.consequent());
+        double confidence = averageConfidence(antecedent.confidence(), consequent.confidence());
+        return new RuleAssertion(antecedent, consequent, confidence);
+    }
+
+    private RelationAssertion statementToAssertion(Statement statement) {
+        return new RelationAssertion(statement.subject(), statement.predicate(), statement.object(), statement.confidence());
+    }
+
+    private boolean addRuleIfNew(RuleAssertion rule) {
+        if (rule == null) {
+            return false;
+        }
+        for (RuleAssertion existing : graph.getAllRules()) {
+            if (rulesEqual(existing, rule)) {
+                return false;
+            }
+        }
+        graph.addRule(rule);
+        return true;
+    }
+
+    private boolean rulesEqual(RuleAssertion left, RuleAssertion right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        return assertionsEqual(left.antecedent(), right.antecedent())
+                && assertionsEqual(left.consequent(), right.consequent());
+    }
+
+    private boolean assertionsEqual(RelationAssertion left, RelationAssertion right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        return left.subject().equals(right.subject())
+                && left.predicate().equals(right.predicate())
+                && left.object().equals(right.object());
+    }
+
+    private double averageConfidence(double left, double right) {
+        return Math.min(1.0, (left + right) / 2.0);
+    }
+
     private void recordAnswerValues(QueryGoal query, java.util.List<String> answers) {
         if (query == null || answers == null || answers.isEmpty()) {
             return;
@@ -746,6 +836,55 @@ public final class SahrAgent {
             }
         }
         return new java.util.ArrayList<>(values);
+    }
+
+    private String formatAnswerWithEvidence(String answer,
+                                            List<ReasoningCandidate> candidates,
+                                            ReasoningCandidate winner) {
+        if (answer == null || answer.isBlank()) {
+            return answer;
+        }
+        List<String> evidence = collectEvidence(candidates, winner, 3);
+        if (evidence.isEmpty()) {
+            return answer;
+        }
+        return answer + "\nEvidence: " + String.join(" | ", evidence);
+    }
+
+    private List<String> collectEvidence(List<ReasoningCandidate> candidates,
+                                         ReasoningCandidate winner,
+                                         int limit) {
+        java.util.LinkedHashSet<String> evidence = new java.util.LinkedHashSet<>();
+        if (winner != null && winner.evidence() != null) {
+            evidence.addAll(winner.evidence());
+        }
+        if (candidates != null) {
+            for (ReasoningCandidate candidate : candidates) {
+                if (!CandidateType.ANSWER.equals(candidate.type())) {
+                    continue;
+                }
+                if (candidate.evidence() != null) {
+                    evidence.addAll(candidate.evidence());
+                }
+                if (evidence.size() >= limit) {
+                    break;
+                }
+            }
+        }
+        if (evidence.isEmpty()) {
+            return List.of();
+        }
+        List<String> trimmed = new ArrayList<>();
+        for (String entry : evidence) {
+            if (entry == null || entry.isBlank()) {
+                continue;
+            }
+            trimmed.add(entry);
+            if (trimmed.size() >= limit) {
+                break;
+            }
+        }
+        return trimmed;
     }
 
     private void upsertEntity(SymbolId id, Set<String> types) {
@@ -837,6 +976,44 @@ public final class SahrAgent {
         } finally {
             phases.restore(previous);
         }
+    }
+
+    private IntentDecision selectIntent(InputFeatures features) {
+        if (features == null) {
+            return new IntentDecision(IntentType.UNKNOWN, 0.0, List.of());
+        }
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, workingMemory, features);
+        List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
+        IntentDecision winner = null;
+        double bestScore = -1.0;
+        for (ReasoningCandidate candidate : candidates) {
+            if (candidate.type() != CandidateType.INTENT) {
+                continue;
+            }
+            if (!(candidate.payload() instanceof IntentDecision)) {
+                continue;
+            }
+            if (candidate.score() > bestScore) {
+                bestScore = candidate.score();
+                winner = (IntentDecision) candidate.payload();
+            }
+        }
+        return winner == null ? new IntentDecision(IntentType.UNKNOWN, 0.0, List.of()) : winner;
+    }
+
+    private boolean isQuestionIntent(IntentDecision decision) {
+        if (decision == null) {
+            return false;
+        }
+        return decision.type() == IntentType.QUESTION
+                || decision.type() == IntentType.CONDITION_QUERY;
+    }
+
+    private boolean isRuleIntent(IntentDecision decision) {
+        if (decision == null) {
+            return false;
+        }
+        return decision.type() == IntentType.RULE;
     }
 
     private void updateWorkingMemoryFromStatement(Statement statement) {

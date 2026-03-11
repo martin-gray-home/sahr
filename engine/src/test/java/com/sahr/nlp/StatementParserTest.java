@@ -240,6 +240,18 @@ class StatementParserTest {
     }
 
     @Test
+    void capturesTemporalPrepositions() {
+        Statement statement = parser.parse("The alert happened before the shutdown").orElseThrow();
+        List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
+        all.add(statement);
+
+        assertTrue(all.stream().anyMatch(item ->
+                "before".equals(item.predicate())
+                        && "entity:alert".equals(item.subject().value())
+                        && "entity:shutdown".equals(item.object().value())));
+    }
+
+    @Test
     void capturesAdjectiveNounObject() {
         Statement statement = parser.parse("The man is in the red room").orElseThrow();
         List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
