@@ -290,9 +290,9 @@ Graph retrieval is an OWL-declared executor that follows short location
 chains (e.g., `inside` → `locatedIn`) and can answer colocation-based
 location queries directly when the derived assertion is not yet
 materialized.
-Conditional inputs (`if ... then ...`) are stored as rule assertions, and
-an OWL-declared rule-forward-chaining executor can apply them when the
-antecedent assertions are present.
+Conditional inputs (`if ... then ...` or trailing `... if ...`) are stored
+as rule assertions, and an OWL-declared rule-forward-chaining executor
+can apply them when the antecedent assertions are present.
 For non-question inputs, the agent always prefers the
 `assertion-insertion` candidate so statement ingestion cannot be
 pre-empted by propagation heads.
@@ -548,7 +548,7 @@ This sets `sahr.log.level=FINE` to log config loading, ontology initialization, 
 
 # Statement Parsing
 
-`StatementParser` uses Stanford CoreNLP dependency parsing to extract subject–predicate–object structures generically (including `nmod` and `obl` prepositions). It falls back to simple pattern rules when parsing fails. Compound subjects (e.g., "man and boy") are tagged so the agent can apply multiple assertions, and multiple prepositional relations in a single sentence are surfaced as additional statements. Copular, verb-object, adjectival, appositive, relative-clause, adverbial, and clausal-complement relations can be batched into `Statement.additionalStatements` to maximize assertions per input, including phrasal verbs (`compound:prt`) like “pick up.”
+`StatementParser` uses Stanford CoreNLP dependency parsing to extract subject–predicate–object structures generically (including `nmod` and `obl` prepositions). It falls back to simple pattern rules when parsing fails, and prioritizes explicit “used as/used to” patterns before CoreNLP so the surface predicate stays `use` for later canonicalization into `backupFor` or `control`. Unary failure clauses like “actuators fail” are handled as a compact `fail` predicate with a boolean concept object. Compound subjects (e.g., "man and boy") are tagged so the agent can apply multiple assertions, and multiple prepositional relations in a single sentence are surfaced as additional statements. Copular, verb-object, adjectival, appositive, relative-clause, adverbial, and clausal-complement relations can be batched into `Statement.additionalStatements` to maximize assertions per input, including phrasal verbs (`compound:prt`) like “pick up.”
 
 ---
 

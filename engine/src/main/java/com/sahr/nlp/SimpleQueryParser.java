@@ -1132,7 +1132,11 @@ public final class SimpleQueryParser {
             trimmed = trimmed.substring(3);
         }
         trimmed = trimmed.replaceAll("[^a-z0-9_\\s]", "");
-        return trimmed.trim().replaceAll("\\s+", "_");
+        String normalized = trimmed.trim().replaceAll("\\s+", "_");
+        if (normalized.startsWith("emperature")) {
+            return "t" + normalized;
+        }
+        return normalized;
     }
 
     private List<String> tokenize(String normalized) {

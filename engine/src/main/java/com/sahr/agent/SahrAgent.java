@@ -102,10 +102,16 @@ public final class SahrAgent {
         InputFeatures features = InputFeatureExtractor.extract(input);
         IntentDecision intentDecision = selectIntent(features);
         boolean questionLike = parser.isQuestion(input) || isQuestionIntent(intentDecision);
+        boolean allowRuleParse = features.has("has_if")
+                && !features.has("has_question_mark")
+                && !features.has("has_wh");
         QueryGoal query = mapQuery(parser.parse(input));
-        Optional<RuleStatement> ruleStatement = (!questionLike || isRuleIntent(intentDecision))
+        Optional<RuleStatement> ruleStatement = (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
                 ? ruleParser.parse(input).map(this::mapRuleStatement)
                 : Optional.empty();
+        if (ruleStatement.isPresent()) {
+            questionLike = false;
+        }
         Optional<RuleAssertion> rule = ruleStatement.map(this::toRuleAssertion);
         Optional<Statement> statement = (questionLike || rule.isPresent())
                 ? Optional.empty()
@@ -376,6 +382,15 @@ public final class SahrAgent {
         }
         String rawObject = stripPrefix(statement.object().value());
         if (!NEGATED_OBJECTS.contains(rawObject)) {
+            String loweredPredicate = predicate.toLowerCase(java.util.Locale.ROOT);
+            if ("use".equals(loweredPredicate) || "used".equals(loweredPredicate)) {
+                if (rawObject.contains("backup")) {
+                    return new NormalizedPredicate("backupFor", null, null);
+                }
+                if (rawObject.contains("control")) {
+                    return new NormalizedPredicate("control", null, null);
+                }
+            }
             return new NormalizedPredicate(predicate, null, null);
         }
         String normalized = predicate.toLowerCase(java.util.Locale.ROOT);

@@ -20,7 +20,26 @@ public final class RuleParser {
         }
         String lower = trimmed.toLowerCase(Locale.ROOT);
         if (!lower.startsWith("if ")) {
-            return Optional.empty();
+            ClauseSplit trailing = splitTrailingConditional(trimmed);
+            if (trailing == null) {
+                return Optional.empty();
+            }
+            Optional<Statement> antecedent = statementParser.parse(trailing.antecedent);
+            Optional<Statement> consequent = statementParser.parse(trailing.consequent);
+            if (antecedent.isEmpty() || consequent.isEmpty()) {
+                String normalizedAntecedent = stripModals(trailing.antecedent);
+                String normalizedConsequent = stripModals(trailing.consequent);
+                if (!normalizedAntecedent.equals(trailing.antecedent)) {
+                    antecedent = antecedent.isPresent() ? antecedent : statementParser.parse(normalizedAntecedent);
+                }
+                if (!normalizedConsequent.equals(trailing.consequent)) {
+                    consequent = consequent.isPresent() ? consequent : statementParser.parse(normalizedConsequent);
+                }
+            }
+            if (antecedent.isEmpty() || consequent.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(new RuleStatement(antecedent.get(), consequent.get(), 0.8));
         }
 
         ClauseSplit split = splitConditional(trimmed);
@@ -65,6 +84,21 @@ public final class RuleParser {
             }
         }
         return null;
+    }
+
+    private ClauseSplit splitTrailingConditional(String input) {
+        String trimmed = input.trim();
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        int ifIdx = lower.indexOf(" if ");
+        if (ifIdx <= 0 || ifIdx + 4 >= trimmed.length()) {
+            return null;
+        }
+        String consequent = trimmed.substring(0, ifIdx).trim();
+        String antecedent = trimmed.substring(ifIdx + 4).trim();
+        if (antecedent.isEmpty() || consequent.isEmpty()) {
+            return null;
+        }
+        return new ClauseSplit(antecedent, consequent);
     }
 
     private static final class ClauseSplit {

@@ -62,6 +62,10 @@ public final class StatementParser {
         }
 
         String normalized = trimmed.toLowerCase(Locale.ROOT);
+        Optional<Statement> usage = parseUsagePattern(normalized);
+        if (usage.isPresent()) {
+            return usage;
+        }
         Optional<Statement> coreNlp = parseWithCoreNlp(trimmed);
         Optional<Statement> passive = parsePassiveBy(normalized);
         if (coreNlp.isPresent() && passive.isPresent()) {
@@ -112,8 +116,86 @@ public final class StatementParser {
         if (normalized.contains(" is a ") || normalized.contains(" is an ")) {
             return parseBinary(normalized, normalized.contains(" is a ") ? "is a" : "is an", PREDICATE_TYPE, true);
         }
+        Optional<Statement> unaryFailure = parseUnaryFailure(normalized);
+        if (unaryFailure.isPresent()) {
+            return unaryFailure;
+        }
+        Optional<Statement> usageFallback = parseUsagePattern(normalized);
+        if (usageFallback.isPresent()) {
+            return usageFallback;
+        }
 
         return Optional.empty();
+    }
+
+    private Optional<Statement> parseUsagePattern(String normalized) {
+        if (normalized.contains(" can be used as ")) {
+            return parseBinary(normalized, "can be used as", "use", true);
+        }
+        if (normalized.contains(" can be used to ")) {
+            return parseBinary(normalized, "can be used to", "use", true);
+        }
+        if (normalized.contains(" is used as ")) {
+            return parseBinary(normalized, "is used as", "use", true);
+        }
+        if (normalized.contains(" are used as ")) {
+            return parseBinary(normalized, "are used as", "use", true);
+        }
+        if (normalized.contains(" was used as ")) {
+            return parseBinary(normalized, "was used as", "use", true);
+        }
+        if (normalized.contains(" were used as ")) {
+            return parseBinary(normalized, "were used as", "use", true);
+        }
+        if (normalized.contains(" be used as ")) {
+            return parseBinary(normalized, "be used as", "use", true);
+        }
+        if (normalized.contains(" is used to ")) {
+            return parseBinary(normalized, "is used to", "use", true);
+        }
+        if (normalized.contains(" are used to ")) {
+            return parseBinary(normalized, "are used to", "use", true);
+        }
+        if (normalized.contains(" was used to ")) {
+            return parseBinary(normalized, "was used to", "use", true);
+        }
+        if (normalized.contains(" were used to ")) {
+            return parseBinary(normalized, "were used to", "use", true);
+        }
+        if (normalized.contains(" be used to ")) {
+            return parseBinary(normalized, "be used to", "use", true);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Statement> parseUnaryFailure(String normalized) {
+        String cleaned = normalized.replaceAll("[^a-z0-9_\\s]", "").trim();
+        Optional<String> subject = stripUnarySuffix(cleaned, " fail");
+        if (subject.isEmpty()) {
+            subject = stripUnarySuffix(cleaned, " fails");
+        }
+        if (subject.isEmpty()) {
+            subject = stripUnarySuffix(cleaned, " failed");
+        }
+        if (subject.isEmpty()) {
+            return Optional.empty();
+        }
+        String subjectToken = normalizeToken(subject.get());
+        if (subjectToken.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(buildStatement(subjectToken, "true", "fail", false));
+    }
+
+    private Optional<String> stripUnarySuffix(String normalized, String suffix) {
+        if (!normalized.endsWith(suffix)) {
+            return Optional.empty();
+        }
+        String subject = normalized.substring(0, normalized.length() - suffix.length()).trim();
+        if (subject.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(subject);
     }
 
     private Optional<Statement> parsePassiveBy(String normalized) {
@@ -1104,6 +1186,9 @@ public final class StatementParser {
     private String correctCommonTypos(String token) {
         if ("able".equals(token)) {
             return "table";
+        }
+        if (token.startsWith("emperature")) {
+            return "t" + token;
         }
         return token;
     }

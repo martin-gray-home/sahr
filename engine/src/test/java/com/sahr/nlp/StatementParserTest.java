@@ -48,6 +48,15 @@ class StatementParserTest {
     }
 
     @Test
+    void parsesUnaryFailureStatement() {
+        Statement statement = parser.parse("Primary attitude control actuators fail.").orElseThrow();
+
+        assertEquals("entity:attitude_control_actuators", statement.subject().value());
+        assertEquals("concept:true", statement.object().value());
+        assertEquals("fail", statement.predicate());
+    }
+
+    @Test
     void parsesWithHoldingAndCarryingStatements() {
         Statement with = parser.parse("The woman is with the man").orElseThrow();
         assertEquals("entity:woman", with.subject().value());
