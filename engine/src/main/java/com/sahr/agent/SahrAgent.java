@@ -1167,7 +1167,22 @@ public final class SahrAgent {
         if (ruleFallback != null) {
             return ruleFallback;
         }
+        String ruleChain = ruleChainFallback(target);
+        if (ruleChain != null) {
+            return ruleChain;
+        }
         return "No candidates produced.";
+    }
+
+    private String ruleChainFallback(SymbolId target) {
+        for (RuleAssertion rule : graph.getAllRules()) {
+            RelationAssertion consequent = rule.consequent();
+            RelationAssertion antecedent = rule.antecedent();
+            if (consequent.subject().equals(target) || consequent.object().equals(target)) {
+                return antecedent.subject().value();
+            }
+        }
+        return null;
     }
 
     private String localName(String predicate) {

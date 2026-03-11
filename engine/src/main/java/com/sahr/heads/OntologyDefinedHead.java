@@ -713,7 +713,11 @@ public final class OntologyDefinedHead extends BaseHead {
                         || "is".equals(normalizedPredicate)
                         || "are".equals(normalizedPredicate)
                         || "was".equals(normalizedPredicate)
-                        || "were".equals(normalizedPredicate)) {
+                        || "were".equals(normalizedPredicate)
+                        || "telemetry".equals(normalizedPredicate)
+                        || "signal".equals(normalizedPredicate)
+                        || "signals".equals(normalizedPredicate)
+                        || "evidence".equals(normalizedPredicate)) {
                     predicate = "";
                 }
             }
@@ -876,6 +880,13 @@ public final class OntologyDefinedHead extends BaseHead {
             if (hasBackup && hasSystem && hasFor && predicates.contains("backupfor")) {
                 return new PredicateSelection("backupfor", "backup system for", java.util.List.of("system"));
             }
+            boolean hasIndicate = tokens.contains("indicate") || tokens.contains("indicated")
+                    || tokens.contains("suggest") || tokens.contains("suggested")
+                    || tokens.contains("signal") || tokens.contains("signals")
+                    || tokens.contains("evidence");
+            if (hasIndicate && predicates.contains("indicate")) {
+                return new PredicateSelection("indicate", "telemetry indicate", java.util.List.of());
+            }
             boolean hasStop = tokens.contains("stop") || tokens.contains("stops") || tokens.contains("stopped");
             boolean hasFunction = tokens.contains("function") || tokens.contains("functioning");
             if (hasStop && hasFunction) {
@@ -930,6 +941,14 @@ public final class OntologyDefinedHead extends BaseHead {
                 }
                 if (hasOrientation && entityMap.containsKey("spacecraft_orientation")) {
                     return entityMap.get("spacecraft_orientation");
+                }
+            }
+            if ("indicate".equals(normalizedPredicate)) {
+                if (tokens.contains("failure") && entityMap.containsKey("motor_failure")) {
+                    return entityMap.get("motor_failure");
+                }
+                if (tokens.contains("instability") && entityMap.containsKey("spacecraft_instability")) {
+                    return entityMap.get("spacecraft_instability");
                 }
             }
             return null;
@@ -1171,7 +1190,9 @@ public final class OntologyDefinedHead extends BaseHead {
             }
             String normalized = normalizeToken(stripPrefix(value));
             return "system".equals(normalized) || "systems".equals(normalized)
-                    || "component".equals(normalized) || "components".equals(normalized);
+                    || "component".equals(normalized) || "components".equals(normalized)
+                    || "earlier".equals(normalized) || "most".equals(normalized)
+                    || "possible".equals(normalized);
         }
 
         private static final class PlanSelection {

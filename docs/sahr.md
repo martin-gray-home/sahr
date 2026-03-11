@@ -344,6 +344,12 @@ systems. The normalized condition bundle is logged at `FINE`.
 When direct relation matching is used as a fallback, it returns all
 matching subjects/objects (comma-separated) rather than only the first
 match to avoid losing candidate sets in multi-entity queries.
+For evidence-style questions, the planner can select `indicate` based on
+phrases like “suggested/signal/evidence,” and it will ground common
+objects such as `motor_failure` when the question references a failure.
+Cause-chain execution now falls back to matching rule consequents against
+the target event to surface antecedent causes when explicit `cause`
+assertions are missing.
 
 Working Memory
 ---------------
