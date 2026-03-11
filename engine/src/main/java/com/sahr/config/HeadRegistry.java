@@ -2,15 +2,10 @@ package com.sahr.config;
 
 import com.sahr.core.SymbolicAttentionHead;
 import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.ContainmentPropagationHead;
-import com.sahr.heads.DependencyChainHead;
 import com.sahr.heads.GraphRetrievalHead;
-import com.sahr.heads.OntologyReasoningHead;
 import com.sahr.heads.QueryAlignmentHead;
-import com.sahr.heads.RelationPropagationHead;
 import com.sahr.heads.RelationQueryHead;
 import com.sahr.heads.SubgoalExpansionHead;
-import com.sahr.heads.SurfaceContactPropagationHead;
 import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.ontology.OntologyHeadCompiler;
 
@@ -41,22 +36,12 @@ public final class HeadRegistry {
         switch (id) {
             case "graph-retrieval":
                 return new GraphRetrievalHead();
-            case "ontology-reasoning":
-                return new OntologyReasoningHead();
             case "assertion-insertion":
                 return new AssertionInsertionHead();
-            case "relation-propagation":
-                return new RelationPropagationHead();
             case "subgoal-expansion":
                 return new SubgoalExpansionHead();
-            case "containment-propagation":
-                return new ContainmentPropagationHead();
-            case "surface-contact-propagation":
-                return new SurfaceContactPropagationHead();
             case "relation-query":
                 return new RelationQueryHead(config.predicateAliases());
-            case "dependency-chain":
-                return new DependencyChainHead();
             case "query-alignment":
                 return new QueryAlignmentHead();
             case "ontology-defined":

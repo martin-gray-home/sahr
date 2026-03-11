@@ -17,7 +17,6 @@ import com.sahr.core.GuardedKnowledgeBase;
 import com.sahr.core.WorkingMemory;
 import com.sahr.core.ReasoningPhase;
 import com.sahr.core.ReasoningPhaseCoordinator;
-import com.sahr.heads.RelationPropagationHead;
 import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.Statement;
@@ -807,11 +806,10 @@ public final class SahrAgent {
 
     private void runPropagationClosure() {
         HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, workingMemory);
-        RelationPropagationHead propagationHead = new RelationPropagationHead();
         int totalAdded = 0;
 
         for (int i = 0; i < MAX_PROPAGATION_ITERATIONS; i++) {
-            List<ReasoningCandidate> candidates = withReadPhase(() -> propagationHead.evaluate(context));
+            List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
             int addedThisRound = 0;
             for (ReasoningCandidate candidate : candidates) {
                 if (!(candidate.payload() instanceof RelationAssertion)) {

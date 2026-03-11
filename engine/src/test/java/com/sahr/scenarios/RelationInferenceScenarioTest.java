@@ -2,17 +2,9 @@ package com.sahr.scenarios;
 
 import com.sahr.agent.SahrAgent;
 import com.sahr.core.InMemoryKnowledgeBase;
-import com.sahr.core.OntologyService;
-import com.sahr.core.SahrReasoner;
-import com.sahr.heads.AssertionInsertionHead;
-import com.sahr.heads.RelationQueryHead;
 import com.sahr.nlp.NoopTermMapper;
-import com.sahr.nlp.SimpleQueryParser;
-import com.sahr.nlp.StatementParser;
-import com.sahr.ontology.InMemoryOntologyService;
+import com.sahr.support.SahrTestAgentFactory;
 import org.junit.jupiter.api.Test;
-import java.util.List;
-import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -20,14 +12,7 @@ class RelationInferenceScenarioTest {
     @Test
     void answersRelationQueriesEndToEnd() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = HeadOntologyTestSupport.createOntology();
-        SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new RelationQueryHead()
-        ));
-        SimpleQueryParser parser = new SimpleQueryParser(true);
-        StatementParser statementParser = new StatementParser(true);
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, new NoopTermMapper());
+        SahrAgent agent = SahrTestAgentFactory.newAgentWithMapper(graph, new NoopTermMapper());
 
         assertEquals("Assertion recorded.", agent.handle("The man is wearing a hat"));
         assertEquals("entity:man", agent.handle("Who is wearing a hat"));
@@ -36,14 +21,7 @@ class RelationInferenceScenarioTest {
     @Test
     void answersDativeAndPassiveQueriesEndToEnd() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = HeadOntologyTestSupport.createOntology();
-        SahrReasoner reasoner = new SahrReasoner(List.of(
-                new AssertionInsertionHead(),
-                new RelationQueryHead()
-        ));
-        SimpleQueryParser parser = new SimpleQueryParser(true);
-        StatementParser statementParser = new StatementParser(true);
-        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, new NoopTermMapper());
+        SahrAgent agent = SahrTestAgentFactory.newAgentWithMapper(graph, new NoopTermMapper());
 
         assertEquals("Assertion recorded.", agent.handle("The man gave the book to the boy"));
         assertEquals("entity:book, entity:boy", agent.handle("Who did the man give the book to"));

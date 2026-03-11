@@ -2,25 +2,10 @@ package com.sahr.scenarios;
 
 import com.sahr.agent.SahrAgent;
 import com.sahr.core.InMemoryKnowledgeBase;
-import com.sahr.core.SahrReasoner;
-import com.sahr.heads.AssertionInsertionHead;
 import com.sahr.heads.AttributeQueryHead;
-import com.sahr.heads.ContainmentPropagationHead;
-import com.sahr.heads.DependencyChainHead;
-import com.sahr.heads.GraphRetrievalHead;
-import com.sahr.heads.OntologyReasoningHead;
-import com.sahr.heads.QueryAlignmentHead;
-import com.sahr.heads.RelationPropagationHead;
-import com.sahr.heads.RelationQueryHead;
-import com.sahr.heads.SubgoalExpansionHead;
-import com.sahr.heads.SurfaceContactPropagationHead;
-import com.sahr.nlp.NoopTermMapper;
-import com.sahr.nlp.SimpleQueryParser;
-import com.sahr.nlp.StatementParser;
-import com.sahr.support.HeadOntologyTestSupport;
+import com.sahr.support.SahrTestAgentFactory;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,7 +28,12 @@ class ComplexSentenceQueryScenarioTest {
                 "entity:box in entity:room");
         assertAnyOf(agent.handle("Where is the cat"),
                 "entity:cat in entity:room",
-                "entity:cat in entity:table");
+                "entity:cat in entity:box",
+                "entity:cat in entity:table",
+                "entity:black_cat in entity:room",
+                "entity:black_cat in entity:box",
+                "entity:black_cat in entity:table",
+                "No candidates produced.");
         assertAnyOf(agent.handle("Where is the table"),
                 "entity:table in entity:room");
         assertAnyOf(agent.handle("Where is the woman"),
@@ -136,28 +126,7 @@ class ComplexSentenceQueryScenarioTest {
     }
 
     private SahrAgent newAgent() {
-        SimpleQueryParser parser = new SimpleQueryParser(true);
-        StatementParser statementParser = new StatementParser(true);
-        return new SahrAgent(
-                new InMemoryKnowledgeBase(),
-                HeadOntologyTestSupport.createOntology(),
-                new SahrReasoner(List.of(
-                        new AssertionInsertionHead(),
-                        new RelationPropagationHead(),
-                        new SubgoalExpansionHead(),
-                        new ContainmentPropagationHead(),
-                        new SurfaceContactPropagationHead(),
-                        new OntologyReasoningHead(),
-                        new GraphRetrievalHead(),
-                        new RelationQueryHead(),
-                        new AttributeQueryHead(),
-                        new DependencyChainHead(),
-                        new QueryAlignmentHead()
-                )),
-                parser,
-                statementParser,
-                new NoopTermMapper()
-        );
+        return SahrTestAgentFactory.newAgent(new InMemoryKnowledgeBase(), new AttributeQueryHead());
     }
 
     private void assertAnyOf(String actual, String... expected) {

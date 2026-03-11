@@ -327,12 +327,14 @@ execution runs in a read-only phase and is parallelized by default
 agent is wrapped in `GuardedKnowledgeBase`, and `WorkingMemory` asserts
 update-only mutations, to prevent writes outside the update phase.
 
-Dependency Chain Reasoning
+Ontology-Defined Reasoning
 ---------------------------
 
-`DependencyChainHead` answers multi-hop dependency queries such as
-power chains (e.g., `poweredBy` followed by `chargedBy`) by walking a
-bounded chain and returning the furthest dependency as the answer.
+Multi-hop dependency reasoning (e.g., `poweredBy` → `chargedBy`) is now
+defined in OWL and executed through the generic `OntologyDefinedHead`.
+Meta heads generated from ontology axioms (`TransitiveProperty`,
+`SymmetricProperty`, `InverseObjectProperty`) also provide additional
+reasoning behavior without hard-coded head implementations.
 
 Attention Trace Debugging
 --------------------------
