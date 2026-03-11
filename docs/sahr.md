@@ -178,6 +178,10 @@ treated as unknown and do not return arbitrary graph answers.
 Questions are represented as a structured `QueryGoal` (type, subject,
 predicate, object, expected answer type, and optional surface text),
 so heads reason over a consistent semantic goal rather than raw text.
+During query and subgoal execution, only query-compatible candidate types
+(answers/subgoals/clarifications) are allowed to win; generic inference
+heads are filtered out to prevent unrelated assertions from hijacking
+query resolution.
 
 Yes/No Questions
 ----------------
