@@ -355,6 +355,14 @@ consequents so multi-hop causal ancestry can be surfaced instead of only
 single-hop matches.
 Cause-chain planning normalizes verb forms so predicates like `caused`
 and `causes` route to the same causal plan as `cause`.
+Answer selection now prefers more specific entities by applying a
+lightweight specificity ranking (penalizing generic containers such as
+`system`/`spacecraft`) when multiple candidates are available.
+Answer ranking also drops echo responses (returning the subject/object
+from the query itself) when other candidates exist, so self-loops do not
+dominate answers.
+Cause-chain answers now assemble short, human-readable explanation
+sentences from causal assertions or rules when possible.
 
 Working Memory
 ---------------

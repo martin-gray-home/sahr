@@ -899,9 +899,15 @@ public final class SahrAgent {
                 answers.add(candidate);
             }
         }
+        List<ReasoningCandidate> filteredAnswers = filterEchoAnswers(answers, goal);
+        if (!filteredAnswers.isEmpty()) {
+            answers = filteredAnswers;
+        }
         if (answers.isEmpty()) {
             java.util.List<String> directMatches = directRelationMatches(goal);
             if (!directMatches.isEmpty()) {
+                directMatches = filterEchoValues(directMatches, goal);
+                directMatches = rankAnswerValues(directMatches);
                 if (directMatches.size() == 1) {
                     return directMatches.get(0);
                 }
@@ -917,12 +923,7 @@ public final class SahrAgent {
             }
             return isYesNo(goal) ? "Unknown." : "No candidates produced.";
         }
-        ReasoningCandidate winner = answers.get(0);
-        for (ReasoningCandidate candidate : answers) {
-            if (candidate.score() > winner.score()) {
-                winner = candidate;
-            }
-        }
+        ReasoningCandidate winner = selectBestAnswerCandidate(answers);
         recordAnswerIfPossible(goal, winner.payload());
         return winner.payload() == null ? "No payload." : winner.payload().toString();
     }
@@ -962,6 +963,7 @@ public final class SahrAgent {
         }
         SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
         SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
+        java.util.List<String> matches = new java.util.ArrayList<>();
         for (RuleAssertion rule : graph.getAllRules()) {
             RelationAssertion consequent = rule.consequent();
             RelationAssertion antecedent = rule.antecedent();
@@ -971,19 +973,25 @@ public final class SahrAgent {
             if (predicate.equals(consequentPredicate)) {
                 String match = ruleMatchValue("consequent", subject, object, consequent);
                 if (match != null) {
-                    return match;
+                    matches.add(match);
+                } else {
+                    logRuleReject(rule, predicate, subject, object, "consequent");
                 }
-                logRuleReject(rule, predicate, subject, object, "consequent");
             }
             if (predicate.equals(antecedentPredicate)) {
                 String match = ruleMatchValue("antecedent", subject, object, antecedent);
                 if (match != null) {
-                    return match;
+                    matches.add(match);
+                } else {
+                    logRuleReject(rule, predicate, subject, object, "antecedent");
                 }
-                logRuleReject(rule, predicate, subject, object, "antecedent");
             }
         }
-        return null;
+        matches = filterEchoValues(matches, goal);
+        if (matches.isEmpty()) {
+            return null;
+        }
+        return rankAnswerValues(matches).get(0);
     }
 
     private String ruleMatchValue(String side, SymbolId subject, SymbolId object, RelationAssertion assertion) {
@@ -1090,6 +1098,8 @@ public final class SahrAgent {
         }
         java.util.List<String> baseMatches = directRelationMatches(goal);
         if (!baseMatches.isEmpty()) {
+            baseMatches = filterEchoValues(baseMatches, goal);
+            baseMatches = rankAnswerValues(baseMatches);
             if (baseMatches.size() == 1) {
                 return baseMatches.get(0);
             }
@@ -1101,22 +1111,29 @@ public final class SahrAgent {
     private String directTemporalMatch(String predicate, QueryGoal goal) {
         SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
         SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
+        java.util.List<String> matches = new java.util.ArrayList<>();
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String assertionPredicate = localName(assertion.predicate());
             if (!predicate.equals(assertionPredicate)) {
                 continue;
             }
             if (subject != null && assertion.subject().equals(subject)) {
-                return assertion.object().value();
+                matches.add(assertion.object().value());
+                continue;
             }
             if (object != null && assertion.object().equals(object)) {
-                return assertion.subject().value();
+                matches.add(assertion.subject().value());
+                continue;
             }
             if (subject == null && object == null) {
-                return assertion.subject().value();
+                matches.add(assertion.subject().value());
             }
         }
-        return "No candidates produced.";
+        matches = filterEchoValues(matches, goal);
+        if (matches.isEmpty()) {
+            return "No candidates produced.";
+        }
+        return rankAnswerValues(matches).get(0);
     }
 
     private String executeCauseChain(QueryGoal goal) {
@@ -1126,6 +1143,10 @@ public final class SahrAgent {
         }
         if (target == null) {
             return "No candidates produced.";
+        }
+        java.util.List<String> explanation = buildExplanationChain(target, 4);
+        if (!explanation.isEmpty()) {
+            return String.join("\n", explanation);
         }
         java.util.Set<SymbolId> visited = new java.util.HashSet<>();
         java.util.ArrayDeque<SymbolId> queue = new java.util.ArrayDeque<>();
@@ -1172,6 +1193,131 @@ public final class SahrAgent {
             return ruleChain;
         }
         return "No candidates produced.";
+    }
+
+    private java.util.List<String> buildExplanationChain(SymbolId target, int maxDepth) {
+        java.util.List<String> sentences = new java.util.ArrayList<>();
+        if (target == null) {
+            return sentences;
+        }
+        java.util.Set<SymbolId> visited = new java.util.HashSet<>();
+        SymbolId current = target;
+        visited.add(current);
+        for (int depth = 0; depth < maxDepth; depth++) {
+            RelationAssertion causeAssertion = selectBestCauseAssertion(current);
+            if (causeAssertion != null) {
+                SymbolId cause = causeFromAssertion(causeAssertion, current);
+                if (cause == null) {
+                    break;
+                }
+                sentences.add(formatCausalSentence(causeAssertion, cause, current));
+                if (!visited.add(cause)) {
+                    break;
+                }
+                current = cause;
+                continue;
+            }
+            RuleAssertion rule = selectBestRuleForConsequent(current);
+            if (rule != null) {
+                sentences.add(formatRuleSentence(rule));
+                SymbolId cause = selectCauseNode(rule.antecedent());
+                if (cause == null || !visited.add(cause)) {
+                    break;
+                }
+                current = cause;
+                continue;
+            }
+            break;
+        }
+        return sentences;
+    }
+
+    private RelationAssertion selectBestCauseAssertion(SymbolId effect) {
+        java.util.List<RelationAssertion> candidates = new java.util.ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"cause".equals(predicate) && !"causedby".equals(predicate)) {
+                continue;
+            }
+            if ("causedby".equals(predicate)) {
+                if (assertion.subject().equals(effect)) {
+                    candidates.add(assertion);
+                }
+                continue;
+            }
+            if (assertion.object().equals(effect)) {
+                candidates.add(assertion);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        RelationAssertion best = candidates.get(0);
+        double bestScore = specificityScore(causeFromAssertion(best, effect).value());
+        for (RelationAssertion candidate : candidates) {
+            SymbolId cause = causeFromAssertion(candidate, effect);
+            if (cause == null) {
+                continue;
+            }
+            double score = specificityScore(cause.value());
+            if (score > bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private SymbolId causeFromAssertion(RelationAssertion assertion, SymbolId effect) {
+        if (assertion == null || effect == null) {
+            return null;
+        }
+        String predicate = localName(assertion.predicate());
+        if ("causedby".equals(predicate)) {
+            return assertion.object();
+        }
+        return assertion.subject();
+    }
+
+    private RuleAssertion selectBestRuleForConsequent(SymbolId effect) {
+        java.util.List<RuleAssertion> candidates = new java.util.ArrayList<>();
+        for (RuleAssertion rule : graph.getAllRules()) {
+            RelationAssertion consequent = rule.consequent();
+            if (consequent.subject().equals(effect) || consequent.object().equals(effect)) {
+                candidates.add(rule);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        RuleAssertion best = candidates.get(0);
+        SymbolId bestCause = selectCauseNode(best.antecedent());
+        double bestScore = bestCause == null ? 0.0 : specificityScore(bestCause.value());
+        for (RuleAssertion candidate : candidates) {
+            SymbolId cause = selectCauseNode(candidate.antecedent());
+            double score = cause == null ? 0.0 : specificityScore(cause.value());
+            if (score > bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private String formatCausalSentence(RelationAssertion assertion, SymbolId cause, SymbolId effect) {
+        String predicate = localName(assertion.predicate());
+        if ("causedby".equals(predicate)) {
+            return displayValue(effect) + " is caused by " + displayValue(cause) + ".";
+        }
+        return displayValue(cause) + " causes " + displayValue(effect) + ".";
+    }
+
+    private String formatRuleSentence(RuleAssertion rule) {
+        RelationAssertion antecedent = rule.antecedent();
+        RelationAssertion consequent = rule.consequent();
+        return "If " + displayValue(antecedent.subject()) + " " + displayPredicate(antecedent.predicate()) + " "
+                + displayValue(antecedent.object()) + ", then " + displayValue(consequent.subject()) + " "
+                + displayPredicate(consequent.predicate()) + " " + displayValue(consequent.object()) + ".";
     }
 
     private String ruleChainFallback(SymbolId target) {
@@ -1236,6 +1382,149 @@ public final class SahrAgent {
         int idx = Math.max(hashIdx, slashIdx);
         String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
         return local.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private ReasoningCandidate selectBestAnswerCandidate(List<ReasoningCandidate> candidates) {
+        ReasoningCandidate winner = candidates.get(0);
+        double winnerScore = candidateScore(winner);
+        for (ReasoningCandidate candidate : candidates) {
+            double score = candidateScore(candidate);
+            if (score > winnerScore) {
+                winner = candidate;
+                winnerScore = score;
+            }
+        }
+        return winner;
+    }
+
+    private double candidateScore(ReasoningCandidate candidate) {
+        if (candidate == null) {
+            return 0.0;
+        }
+        double base = candidate.score();
+        Object payload = candidate.payload();
+        if (payload instanceof SymbolId) {
+            base += specificityScore(((SymbolId) payload).value()) * 0.05;
+        } else if (payload instanceof String) {
+            base += specificityScore(payload.toString()) * 0.05;
+        }
+        return base;
+    }
+
+    private java.util.List<ReasoningCandidate> filterEchoAnswers(java.util.List<ReasoningCandidate> answers, QueryGoal query) {
+        if (answers == null || answers.isEmpty() || query == null) {
+            return answers == null ? java.util.List.of() : answers;
+        }
+        String subject = query.subject();
+        String object = query.object();
+        if ((subject == null || subject.isBlank()) && (object == null || object.isBlank())) {
+            return answers;
+        }
+        java.util.List<ReasoningCandidate> filtered = new java.util.ArrayList<>();
+        for (ReasoningCandidate candidate : answers) {
+            Object payload = candidate.payload();
+            String value = null;
+            if (payload instanceof SymbolId) {
+                value = ((SymbolId) payload).value();
+            } else if (payload instanceof String) {
+                value = payload.toString();
+            }
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            if (value.equals(subject) || value.equals(object)) {
+                continue;
+            }
+            filtered.add(candidate);
+        }
+        return filtered.isEmpty() ? answers : filtered;
+    }
+
+    private java.util.List<String> filterEchoValues(java.util.List<String> values, QueryGoal query) {
+        if (values == null || values.isEmpty() || query == null) {
+            return values == null ? java.util.List.of() : values;
+        }
+        String subject = query.subject();
+        String object = query.object();
+        if ((subject == null || subject.isBlank()) && (object == null || object.isBlank())) {
+            return values;
+        }
+        java.util.List<String> filtered = new java.util.ArrayList<>();
+        for (String value : values) {
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            if (value.equals(subject) || value.equals(object)) {
+                continue;
+            }
+            filtered.add(value);
+        }
+        return filtered.isEmpty() ? values : filtered;
+    }
+
+    private java.util.List<String> rankAnswerValues(java.util.List<String> values) {
+        if (values == null || values.size() <= 1) {
+            return values == null ? java.util.List.of() : values;
+        }
+        java.util.List<String> ranked = new java.util.ArrayList<>(values);
+        ranked.sort((left, right) -> Double.compare(specificityScore(right), specificityScore(left)));
+        return ranked;
+    }
+
+    private double specificityScore(String value) {
+        if (value == null || value.isBlank()) {
+            return 0.0;
+        }
+        double score = 0.0;
+        if (value.startsWith("entity:")) {
+            score += 1.0;
+        } else if (value.startsWith("concept:")) {
+            score += 0.5;
+        }
+        String normalized = value.toLowerCase(java.util.Locale.ROOT);
+        normalized = normalized.replace("entity:", "").replace("concept:", "");
+        normalized = normalized.replaceAll("[^a-z0-9_ ]", "");
+        String[] tokens = normalized.split("[_\\s]+");
+        score += Math.min(0.4, tokens.length * 0.05);
+        for (String token : tokens) {
+            if (isContainerToken(token)) {
+                score -= 0.35;
+            }
+        }
+        return score;
+    }
+
+    private boolean isContainerToken(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        return switch (token) {
+            case "spacecraft", "system", "mechanism", "device", "entity",
+                    "object", "thing", "relationship", "process", "event",
+                    "information", "data", "component" -> true;
+            default -> false;
+        };
+    }
+
+    private String displayValue(SymbolId id) {
+        if (id == null || id.value() == null) {
+            return "unknown";
+        }
+        String value = id.value();
+        if (value.startsWith("entity:")) {
+            value = value.substring("entity:".length());
+        } else if (value.startsWith("concept:")) {
+            value = value.substring("concept:".length());
+        }
+        return value.replace('_', ' ');
+    }
+
+    private String displayPredicate(String predicate) {
+        String local = localName(predicate);
+        if (local.isBlank()) {
+            return "related to";
+        }
+        return local.replace('_', ' ');
     }
 
     private void applyAnswerAsAssertion(Object payload) {
@@ -1358,7 +1647,7 @@ public final class SahrAgent {
         if (query == null || query.discourseModifier() != null || query.type() != QueryGoal.Type.RELATION) {
             return null;
         }
-        java.util.List<String> values = extractAnswerValues(candidates);
+        java.util.List<String> values = rankAnswerValues(filterEchoValues(extractAnswerValues(candidates), query));
         if (values.size() <= 1) {
             return null;
         }

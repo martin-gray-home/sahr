@@ -10,6 +10,7 @@ import com.sahr.support.SahrTestAgentFactory;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SahrAgentQueryTest {
     @Test
@@ -136,7 +137,8 @@ class SahrAgentQueryTest {
             method.setAccessible(true);
             QueryGoal goal = QueryGoal.relation(null, "cause", "entity:instability", null);
             String answer = (String) method.invoke(agent, goal);
-            assertEquals("entity:wheel_motor", answer);
+            assertTrue(answer.contains("wheel motor"));
+            assertTrue(answer.contains("reaction wheel"));
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed to invoke executeCauseChain", e);
         }
