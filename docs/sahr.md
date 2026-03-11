@@ -371,6 +371,10 @@ exist.
 Explanation sentences now render boolean predicates in a human-friendly
 form (e.g., `fail true` → “fails”, `operate false` → “does not operate”)
 and prefer more specific entities when multiple candidate clauses exist.
+Explanation chains can now extend beyond a single matching rule by
+continuing to follow causal or rule-based links from antecedent entities,
+so “why” answers can surface multi-step reasoning instead of stopping at
+the first rule.
 
 Working Memory
 ---------------

@@ -166,7 +166,7 @@ class SahrAgentQueryTest {
             assertTrue(answer.contains("If"));
             assertTrue(answer.contains("thrusters"));
             assertTrue(answer.contains("backup"));
-            assertTrue(answer.contains("fails"));
+            assertTrue(answer.contains("fail"));
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed to invoke executeCauseChain", e);
         }
@@ -186,6 +186,25 @@ class SahrAgentQueryTest {
             String clause = (String) method.invoke(SahrTestAgentFactory.newAgent(new InMemoryKnowledgeBase()), assertion);
             assertTrue(clause.contains("wheel motor"));
             assertTrue(clause.contains("fails"));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed to invoke formatAssertionClause", e);
+        }
+    }
+
+    @Test
+    void formatsPluralSubjectVerbAgreement() {
+        RelationAssertion assertion = new RelationAssertion(
+                new SymbolId("entity:attitude_control_actuators"),
+                "https://sahr.ai/ontology/relations#fail",
+                new SymbolId("concept:true"),
+                0.9
+        );
+        try {
+            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("formatAssertionClause", RelationAssertion.class);
+            method.setAccessible(true);
+            String clause = (String) method.invoke(SahrTestAgentFactory.newAgent(new InMemoryKnowledgeBase()), assertion);
+            assertTrue(clause.contains("actuators"));
+            assertTrue(clause.contains("fail"));
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed to invoke formatAssertionClause", e);
         }

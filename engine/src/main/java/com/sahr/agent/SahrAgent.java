@@ -1251,10 +1251,25 @@ public final class SahrAgent {
                 ruleSpecificity(right),
                 ruleSpecificity(left)
         ));
+        java.util.Set<String> seen = new java.util.HashSet<>(sentences);
         for (RuleAssertion rule : ruleMatches) {
-            sentences.add(formatRuleSentence(rule));
+            String ruleSentence = formatRuleSentence(rule);
+            if (seen.add(ruleSentence)) {
+                sentences.add(ruleSentence);
+            }
             if (sentences.size() >= limit) {
                 return sentences;
+            }
+            SymbolId next = selectCauseNode(rule.antecedent());
+            if (next == null) {
+                continue;
+            }
+            java.util.List<String> followUp = buildExplanationChainFrom(next, Math.max(1, limit - sentences.size()), seen);
+            if (!followUp.isEmpty()) {
+                sentences.addAll(followUp);
+                if (sentences.size() >= limit) {
+                    return sentences.subList(0, limit);
+                }
             }
         }
         return sentences;
@@ -1265,8 +1280,18 @@ public final class SahrAgent {
         if (target == null) {
             return sentences;
         }
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        sentences.addAll(buildExplanationChainFrom(target, maxDepth, seen));
+        return sentences;
+    }
+
+    private java.util.List<String> buildExplanationChainFrom(SymbolId start, int maxDepth, java.util.Set<String> seen) {
+        java.util.List<String> sentences = new java.util.ArrayList<>();
+        if (start == null) {
+            return sentences;
+        }
         java.util.Set<SymbolId> visited = new java.util.HashSet<>();
-        SymbolId current = target;
+        SymbolId current = start;
         visited.add(current);
         for (int depth = 0; depth < maxDepth; depth++) {
             RelationAssertion causeAssertion = selectBestCauseAssertion(current);
@@ -1275,7 +1300,10 @@ public final class SahrAgent {
                 if (cause == null) {
                     break;
                 }
-                sentences.add(formatCausalSentence(causeAssertion, cause, current));
+                String sentence = formatCausalSentence(causeAssertion, cause, current);
+                if (seen.add(sentence)) {
+                    sentences.add(sentence);
+                }
                 if (!visited.add(cause)) {
                     break;
                 }
@@ -1284,7 +1312,10 @@ public final class SahrAgent {
             }
             RuleAssertion rule = selectBestRuleForConsequent(current);
             if (rule != null) {
-                sentences.add(formatRuleSentence(rule));
+                String sentence = formatRuleSentence(rule);
+                if (seen.add(sentence)) {
+                    sentences.add(sentence);
+                }
                 SymbolId cause = selectCauseNode(rule.antecedent());
                 if (cause == null || !visited.add(cause)) {
                     break;
@@ -1604,15 +1635,15 @@ public final class SahrAgent {
         String subjectText = displayValue(subject);
         if (booleanValue != null) {
             if ("fail".equals(predicate)) {
-                return subjectText + (booleanValue ? " fails" : " does not fail");
+                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "fail" : "does not fail");
             }
             if ("operate".equals(predicate) || "function".equals(predicate)
                     || "work".equals(predicate) || "respond".equals(predicate)
                     || "stop_responding".equals(predicate) || "stop".equals(predicate)) {
-                return subjectText + (booleanValue ? " operates" : " does not operate");
+                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "operate" : "does not operate");
             }
             if ("become_unstable".equals(predicate) || "unstable".equals(predicate)) {
-                return subjectText + (booleanValue ? " becomes unstable" : " remains stable");
+                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "becomes unstable" : "remains stable");
             }
             return subjectText + (booleanValue ? " " + displayPredicate(assertion.predicate())
                     : " does not " + displayPredicate(assertion.predicate()));
@@ -1645,6 +1676,41 @@ public final class SahrAgent {
             return Boolean.FALSE;
         }
         return null;
+    }
+
+    private String selectVerbForm(String subjectText, String base) {
+        if (subjectText == null || subjectText.isBlank()) {
+            return base;
+        }
+        String normalized = subjectText.trim().toLowerCase(java.util.Locale.ROOT);
+        String[] tokens = normalized.split("\\s+");
+        String last = tokens[tokens.length - 1];
+        boolean plural = last.endsWith("s") && !last.endsWith("ss");
+        if (!plural) {
+            if (base.startsWith("does not ")) {
+                return base;
+            }
+            if (base.startsWith("do not ")) {
+                return base.replaceFirst("do not ", "does not ");
+            }
+            if (!base.contains(" ") && !base.endsWith("s")) {
+                return base + "s";
+            }
+            return base;
+        }
+        if (base.startsWith("does not ")) {
+            return base.replaceFirst("does not ", "do not ");
+        }
+        if (base.endsWith("s") && base.split("\\s+").length == 1) {
+            return base.substring(0, base.length() - 1);
+        }
+        if ("is".equals(base)) {
+            return "are";
+        }
+        if ("was".equals(base)) {
+            return "were";
+        }
+        return base;
     }
 
     private String displayValue(SymbolId id) {
