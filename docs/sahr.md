@@ -192,6 +192,9 @@ interpretation heads).
 The default planner can infer missing predicates by matching input tokens
 against predicates already present in the graph (assertions and rules),
 keeping planning data-driven rather than rule-hardcoded.
+Plan execution dispatches to relation, temporal, or causal executors
+based on the inferred plan kind, producing `ANSWER` candidates without
+re-running interpretation heads.
 
 Statement Normalization
 -----------------------
@@ -199,7 +202,9 @@ Statement Normalization
 Some common negated operation predicates (e.g., “cannot operate”) are
 normalized into a canonical `fail` relation to improve dependency-chain
 reasoning, while predicate lexemes such as “require(s)” map onto
-`poweredBy` through ontology labels.
+`poweredBy` through ontology labels. Surface assertions are preserved and
+canonical predicate assertions are emitted alongside them, so reasoning
+uses ontology-backed predicates without losing the original phrasing.
 
 Yes/No Questions
 ----------------

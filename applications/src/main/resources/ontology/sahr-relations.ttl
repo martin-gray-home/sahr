@@ -142,6 +142,43 @@ sahr:chargedBy a owl:ObjectProperty ;
     rdfs:label "charged by" ;
     rdfs:subPropertyOf head:dependencyChain .
 
+sahr:indicate a owl:ObjectProperty ;
+    rdfs:label "indicate" ;
+    rdfs:label "indicates" ;
+    rdfs:label "indicated" ;
+    rdfs:label "suggest" ;
+    rdfs:label "suggests" ;
+    rdfs:label "suggested" ;
+    rdfs:label "show" ;
+    rdfs:label "shows" ;
+    rdfs:label "showed" ;
+    rdfs:subPropertyOf head:causalRelation .
+
+sahr:restore a owl:ObjectProperty ;
+    rdfs:label "restore" ;
+    rdfs:label "restores" ;
+    rdfs:label "restored" ;
+    rdfs:label "regain" ;
+    rdfs:label "regains" ;
+    rdfs:label "regained" ;
+    rdfs:subPropertyOf head:causalRelation .
+
+sahr:backupFor a owl:ObjectProperty ;
+    rdfs:label "backup" ;
+    rdfs:label "backup for" ;
+    rdfs:label "backup_for" ;
+    rdfs:label "used as backup" ;
+    rdfs:label "backup system" ;
+    rdfs:subPropertyOf head:dependencyChain .
+
+sahr:control a owl:ObjectProperty ;
+    rdfs:label "control" ;
+    rdfs:label "controls" ;
+    rdfs:label "controlled" ;
+    rdfs:label "control system" ;
+    rdfs:label "control systems" ;
+    rdfs:subPropertyOf head:dependencyChain .
+
 sahr:fail a owl:ObjectProperty ;
     rdfs:label "fail" ;
     rdfs:label "fails" ;

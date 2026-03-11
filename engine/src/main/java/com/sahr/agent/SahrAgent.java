@@ -328,6 +328,7 @@ public final class SahrAgent {
         }
 
         String predicate = statement.predicate();
+        String surfacePredicate = predicate;
         NormalizedPredicate normalizedPredicate = normalizePredicate(statement, predicate);
         predicate = normalizedPredicate.predicate;
         if (normalizedPredicate.overrideObject != null) {
@@ -335,13 +336,23 @@ public final class SahrAgent {
             objectTypes = normalizedPredicate.overrideObjectTypes;
         }
         Optional<String> predicateIri = termMapper.mapPredicateToken(predicate);
-        if (predicateIri.isPresent()) {
-            predicate = predicateIri.get();
-        }
 
         List<Statement> mappedExtras = new java.util.ArrayList<>();
         for (Statement extra : statement.additionalStatements()) {
             mappedExtras.add(mapStatement(extra));
+        }
+        if (predicateIri.isPresent() && !predicateIri.get().equals(predicate)) {
+            mappedExtras.add(new Statement(
+                    statement.subject(),
+                    objectId,
+                    surfacePredicate,
+                    subjectTypes,
+                    objectTypes,
+                    statement.objectIsConcept(),
+                    statement.confidence(),
+                    List.of()
+            ));
+            predicate = predicateIri.get();
         }
 
         return new Statement(
@@ -655,6 +666,10 @@ public final class SahrAgent {
                 if (queryCandidates.isEmpty()) {
                     workingMemory.popGoal();
                     if (current.goalId().equals(root.goalId())) {
+                        String fallback = directWhereMatch(current);
+                        if (fallback != null) {
+                            return fallback;
+                        }
                         return isYesNo(root) ? "Unknown." : "No candidates produced.";
                     }
                     continue;
@@ -812,6 +827,15 @@ public final class SahrAgent {
         if (goal == null || goal.type() == QueryGoal.Type.UNKNOWN) {
             return "No candidates produced.";
         }
+        return switch (plan.kind()) {
+            case RELATION_MATCH -> executeRelationMatch(goal);
+            case TEMPORAL_MATCH -> executeTemporalMatch(goal);
+            case CAUSE_CHAIN -> executeCauseChain(goal);
+            case EVIDENCE_MATCH -> executeRelationMatch(goal);
+        };
+    }
+
+    private String executeRelationMatch(QueryGoal goal) {
         HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null);
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         List<ReasoningCandidate> answers = new java.util.ArrayList<>();
@@ -821,6 +845,14 @@ public final class SahrAgent {
             }
         }
         if (answers.isEmpty()) {
+            String direct = directRelationMatch(goal);
+            if (direct != null) {
+                return direct;
+            }
+            String whereFallback = directWhereMatch(goal);
+            if (whereFallback != null) {
+                return whereFallback;
+            }
             return isYesNo(goal) ? "Unknown." : "No candidates produced.";
         }
         ReasoningCandidate winner = answers.get(0);
@@ -831,6 +863,182 @@ public final class SahrAgent {
         }
         recordAnswerIfPossible(goal, winner.payload());
         return winner.payload() == null ? "No payload." : winner.payload().toString();
+    }
+
+    private String directRelationMatch(QueryGoal goal) {
+        String predicate = localName(goal.predicate());
+        if (predicate.isBlank()) {
+            return null;
+        }
+        SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
+        SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String assertionPredicate = localName(assertion.predicate());
+            if (!predicate.equals(assertionPredicate)) {
+                continue;
+            }
+            if (subject != null && assertion.subject().equals(subject)) {
+                return assertion.object().value();
+            }
+            if (object != null && assertion.object().equals(object)) {
+                return assertion.subject().value();
+            }
+            if (subject == null && object == null) {
+                return assertion.subject().value();
+            }
+        }
+        return null;
+    }
+
+    private String directWhereMatch(QueryGoal goal) {
+        if (goal == null || goal.type() != QueryGoal.Type.WHERE) {
+            return null;
+        }
+        java.util.Set<String> locationPredicates = com.sahr.core.HeadOntology.expandFamily(ontology, com.sahr.core.HeadOntology.LOCATION_TRANSFER);
+        if (locationPredicates.isEmpty()) {
+            return null;
+        }
+        java.util.Set<String> locationNames = new java.util.HashSet<>();
+        for (String predicate : locationPredicates) {
+            locationNames.add(localName(predicate));
+        }
+        String requestedType = goal.entityType();
+        String normalizedRequested = normalizeTypeToken(requestedType);
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicateName = localName(assertion.predicate());
+            if (!locationPredicates.contains(assertion.predicate()) && !locationNames.contains(predicateName)) {
+                continue;
+            }
+            if (!matchesRequestedType(assertion.subject(), normalizedRequested, requestedType)) {
+                continue;
+            }
+            return assertion.subject().value() + " " + predicateName + " " + assertion.object().value();
+        }
+        return null;
+    }
+
+    private boolean matchesRequestedType(SymbolId subject, String normalizedRequested, String requestedType) {
+        if (normalizedRequested == null || normalizedRequested.isBlank()) {
+            return true;
+        }
+        String subjectName = normalizeTypeToken(subject.value());
+        if (subjectName.equals(normalizedRequested)) {
+            return true;
+        }
+        return graph.findEntity(subject)
+                .map(EntityNode::conceptTypes)
+                .map(types -> types.stream().anyMatch(type ->
+                        type.equals(requestedType)
+                                || normalizeTypeToken(type).equals(normalizedRequested)
+                                || ontology.isSubclassOf(type, requestedType)))
+                .orElse(false);
+    }
+
+    private String normalizeTypeToken(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        if (raw.startsWith("concept:")) {
+            return raw.substring("concept:".length());
+        }
+        if (raw.startsWith("entity:")) {
+            return raw.substring("entity:".length());
+        }
+        return raw;
+    }
+
+    private String executeTemporalMatch(QueryGoal goal) {
+        String predicate = localName(goal.predicate());
+        if (predicate.isBlank()) {
+            return "No candidates produced.";
+        }
+        if ("before".equals(predicate) || "after".equals(predicate) || "during".equals(predicate)) {
+            return directTemporalMatch(predicate, goal);
+        }
+        String baseMatch = directRelationMatch(goal);
+        if (baseMatch != null) {
+            return baseMatch;
+        }
+        return "No candidates produced.";
+    }
+
+    private String directTemporalMatch(String predicate, QueryGoal goal) {
+        SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
+        SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String assertionPredicate = localName(assertion.predicate());
+            if (!predicate.equals(assertionPredicate)) {
+                continue;
+            }
+            if (subject != null && assertion.subject().equals(subject)) {
+                return assertion.object().value();
+            }
+            if (object != null && assertion.object().equals(object)) {
+                return assertion.subject().value();
+            }
+            if (subject == null && object == null) {
+                return assertion.subject().value();
+            }
+        }
+        return "No candidates produced.";
+    }
+
+    private String executeCauseChain(QueryGoal goal) {
+        SymbolId target = goal.object() != null ? new SymbolId(goal.object()) : null;
+        if (target == null && goal.subject() != null) {
+            target = new SymbolId(goal.subject());
+        }
+        if (target == null) {
+            return "No candidates produced.";
+        }
+        java.util.Set<SymbolId> visited = new java.util.HashSet<>();
+        java.util.ArrayDeque<SymbolId> queue = new java.util.ArrayDeque<>();
+        queue.add(target);
+        visited.add(target);
+        int depth = 0;
+        while (!queue.isEmpty() && depth < 3) {
+            int size = queue.size();
+            for (int i = 0; i < size; i++) {
+                SymbolId current = queue.removeFirst();
+                for (RelationAssertion assertion : graph.getAllAssertions()) {
+                    String predicate = localName(assertion.predicate());
+                    if (!"cause".equals(predicate) && !"causedby".equals(predicate)) {
+                        continue;
+                    }
+                    if (assertion.object().equals(current)) {
+                        SymbolId cause = assertion.subject();
+                        if (visited.add(cause)) {
+                            queue.addLast(cause);
+                            if (depth >= 0) {
+                                return cause.value();
+                            }
+                        }
+                    }
+                    if ("causedby".equals(predicate) && assertion.subject().equals(current)) {
+                        SymbolId cause = assertion.object();
+                        if (visited.add(cause)) {
+                            queue.addLast(cause);
+                            if (depth >= 0) {
+                                return cause.value();
+                            }
+                        }
+                    }
+                }
+            }
+            depth++;
+        }
+        return "No candidates produced.";
+    }
+
+    private String localName(String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return "";
+        }
+        int hashIdx = predicate.lastIndexOf('#');
+        int slashIdx = predicate.lastIndexOf('/');
+        int idx = Math.max(hashIdx, slashIdx);
+        String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
+        return local.toLowerCase(java.util.Locale.ROOT);
     }
 
     private void applyAnswerAsAssertion(Object payload) {

@@ -42,6 +42,15 @@ public final class InputFeatureExtractor {
                 features.add("has_wh");
                 features.add("has_" + token);
             }
+            if ("before".equals(token)) {
+                features.add("has_before");
+            }
+            if ("after".equals(token)) {
+                features.add("has_after");
+            }
+            if ("during".equals(token)) {
+                features.add("has_during");
+            }
             if (AUX_TOKENS.contains(token)) {
                 features.add("has_aux");
             }

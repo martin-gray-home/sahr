@@ -667,13 +667,18 @@ public final class OntologyDefinedHead extends BaseHead {
             if (query == null || query.type() == QueryGoal.Type.UNKNOWN) {
                 return List.of();
             }
-            QueryGoal planned = planQuery(context, query);
+            if (query.type() == QueryGoal.Type.WHERE) {
+                return List.of();
+            }
+            PlanSelection selection = planQuery(context, query);
+            QueryGoal planned = selection.query;
             if (planned == null || planned.type() == QueryGoal.Type.UNKNOWN) {
                 return List.of();
             }
             com.sahr.core.QueryPlan plan = new com.sahr.core.QueryPlan(
+                    selection.kind,
                     planned,
-                    List.of("planner=default", "query=" + planned)
+                    List.of("planner=default", "query=" + planned, "planKind=" + selection.kind)
             );
             double score = clamp(definition.baseWeight(), 0.0, 1.0);
             return List.of(new ReasoningCandidate(
@@ -697,14 +702,16 @@ public final class OntologyDefinedHead extends BaseHead {
             return value;
         }
 
-        private QueryGoal planQuery(HeadContext context, QueryGoal query) {
+        private PlanSelection planQuery(HeadContext context, QueryGoal query) {
             String predicate = query.predicate();
             String expectedType = query.expectedType();
+            com.sahr.core.QueryPlan.Kind kind = inferPlanKind(context, predicate);
             if ((predicate == null || predicate.isBlank()) && context.inputFeatures().isPresent()) {
                 java.util.List<String> tokens = context.inputFeatures().get().tokens();
                 String inferred = inferPredicate(tokens, context.graph());
                 if (inferred != null && !inferred.isBlank()) {
                     predicate = inferred;
+                    kind = inferPlanKind(context, predicate);
                 }
             }
             String subject = query.subject();
@@ -722,9 +729,9 @@ public final class OntologyDefinedHead extends BaseHead {
                 }
             }
             if (predicate == null || predicate.isBlank()) {
-                return query;
+                return new PlanSelection(kind, query);
             }
-            return new QueryGoal(
+            QueryGoal planned = new QueryGoal(
                     query.type(),
                     subject,
                     object,
@@ -742,6 +749,29 @@ public final class OntologyDefinedHead extends BaseHead {
                     query.parentGoalId(),
                     query.depth()
             );
+            return new PlanSelection(kind, planned);
+        }
+
+        private com.sahr.core.QueryPlan.Kind inferPlanKind(HeadContext context, String predicate) {
+            if (context != null && context.inputFeatures().isPresent()) {
+                java.util.Set<String> features = context.inputFeatures().get().features();
+                if (features.contains("has_before") || features.contains("has_after") || features.contains("has_during")) {
+                    return com.sahr.core.QueryPlan.Kind.TEMPORAL_MATCH;
+                }
+                if (features.contains("has_why") || features.contains("has_explain")) {
+                    return com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN;
+                }
+            }
+            if (predicate != null) {
+                String normalized = normalizeToken(predicate);
+                if ("cause".equals(normalized) || "causedby".equals(normalized)) {
+                    return com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN;
+                }
+                if ("before".equals(normalized) || "after".equals(normalized) || "during".equals(normalized)) {
+                    return com.sahr.core.QueryPlan.Kind.TEMPORAL_MATCH;
+                }
+            }
+            return com.sahr.core.QueryPlan.Kind.RELATION_MATCH;
         }
 
         private String inferPredicate(java.util.List<String> tokens, com.sahr.core.KnowledgeBase graph) {
@@ -893,6 +923,16 @@ public final class OntologyDefinedHead extends BaseHead {
                 return token.substring(0, token.length() - 1);
             }
             return token;
+        }
+
+        private static final class PlanSelection {
+            private final com.sahr.core.QueryPlan.Kind kind;
+            private final QueryGoal query;
+
+            private PlanSelection(com.sahr.core.QueryPlan.Kind kind, QueryGoal query) {
+                this.kind = kind == null ? com.sahr.core.QueryPlan.Kind.RELATION_MATCH : kind;
+                this.query = query;
+            }
         }
     }
 
