@@ -191,6 +191,7 @@ public final class OntologyDefinedHead extends BaseHead {
         register(map, new RuleForwardChainExecutor());
         register(map, new IntentClassifierExecutor());
         register(map, new QueryProposerExecutor());
+        register(map, new QueryPlannerExecutor());
         return map;
     }
 
@@ -648,6 +649,250 @@ public final class OntologyDefinedHead extends BaseHead {
                 return max;
             }
             return value;
+        }
+    }
+
+    private static final class QueryPlannerExecutor implements OntologyHeadExecutor {
+        @Override
+        public String type() {
+            return OntologyHeadDefinition.EXECUTOR_QUERY_PLANNER;
+        }
+
+        @Override
+        public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
+            if (context == null) {
+                return List.of();
+            }
+            QueryGoal query = context.query();
+            if (query == null || query.type() == QueryGoal.Type.UNKNOWN) {
+                return List.of();
+            }
+            QueryGoal planned = planQuery(context, query);
+            if (planned == null || planned.type() == QueryGoal.Type.UNKNOWN) {
+                return List.of();
+            }
+            com.sahr.core.QueryPlan plan = new com.sahr.core.QueryPlan(
+                    planned,
+                    List.of("planner=default", "query=" + planned)
+            );
+            double score = clamp(definition.baseWeight(), 0.0, 1.0);
+            return List.of(new ReasoningCandidate(
+                    CandidateType.QUERY_PLAN,
+                    plan,
+                    score,
+                    definition.name(),
+                    plan.evidence(),
+                    java.util.Map.of("plan_score", score),
+                    0
+            ));
+        }
+
+        private double clamp(double value, double min, double max) {
+            if (value < min) {
+                return min;
+            }
+            if (value > max) {
+                return max;
+            }
+            return value;
+        }
+
+        private QueryGoal planQuery(HeadContext context, QueryGoal query) {
+            String predicate = query.predicate();
+            String expectedType = query.expectedType();
+            if ((predicate == null || predicate.isBlank()) && context.inputFeatures().isPresent()) {
+                java.util.List<String> tokens = context.inputFeatures().get().tokens();
+                String inferred = inferPredicate(tokens, context.graph());
+                if (inferred != null && !inferred.isBlank()) {
+                    predicate = inferred;
+                }
+            }
+            String subject = query.subject();
+            String object = query.object();
+            if ((subject == null || subject.isBlank() || object == null || object.isBlank())
+                    && context.inputFeatures().isPresent()) {
+                java.util.List<String> tokens = context.inputFeatures().get().tokens();
+                String entity = inferEntity(tokens, context.graph());
+                if (entity != null && !entity.isBlank()) {
+                    if (subject == null || subject.isBlank()) {
+                        subject = entity;
+                    } else if (object == null || object.isBlank()) {
+                        object = entity;
+                    }
+                }
+            }
+            if (predicate == null || predicate.isBlank()) {
+                return query;
+            }
+            return new QueryGoal(
+                    query.type(),
+                    subject,
+                    object,
+                    predicate,
+                    expectedType,
+                    query.entityType(),
+                    query.expectedRange(),
+                    query.attribute(),
+                    query.modifier(),
+                    query.discourseModifier(),
+                    query.subjectText(),
+                    query.objectText(),
+                    query.predicateText(),
+                    query.goalId(),
+                    query.parentGoalId(),
+                    query.depth()
+            );
+        }
+
+        private String inferPredicate(java.util.List<String> tokens, com.sahr.core.KnowledgeBase graph) {
+            if (tokens == null || tokens.isEmpty() || graph == null) {
+                return null;
+            }
+            java.util.Set<String> predicates = collectPredicateNames(graph);
+            if (predicates.isEmpty()) {
+                return null;
+            }
+            for (String token : tokens) {
+                String normalized = normalizeToken(token);
+                if (normalized.isEmpty()) {
+                    continue;
+                }
+                String base = normalizeVerb(normalized);
+                if (predicates.contains(base)) {
+                    return base;
+                }
+                if (predicates.contains(normalized)) {
+                    return normalized;
+                }
+            }
+            return null;
+        }
+
+        private java.util.Set<String> collectPredicateNames(com.sahr.core.KnowledgeBase graph) {
+            java.util.Set<String> names = new java.util.HashSet<>();
+            for (com.sahr.core.RelationAssertion assertion : graph.getAllAssertions()) {
+                String name = localName(assertion.predicate());
+                if (!name.isBlank()) {
+                    names.add(name);
+                }
+            }
+            for (com.sahr.core.RuleAssertion rule : graph.getAllRules()) {
+                String antecedent = localName(rule.antecedent().predicate());
+                String consequent = localName(rule.consequent().predicate());
+                if (!antecedent.isBlank()) {
+                    names.add(antecedent);
+                }
+                if (!consequent.isBlank()) {
+                    names.add(consequent);
+                }
+            }
+            return names;
+        }
+
+        private String inferEntity(java.util.List<String> tokens, com.sahr.core.KnowledgeBase graph) {
+            if (tokens == null || tokens.isEmpty() || graph == null) {
+                return null;
+            }
+            java.util.Map<String, String> entityMap = collectEntityNames(graph);
+            if (entityMap.isEmpty()) {
+                return null;
+            }
+            java.util.List<String> normalized = new java.util.ArrayList<>();
+            for (String token : tokens) {
+                String value = normalizeToken(token);
+                if (!value.isBlank()) {
+                    normalized.add(value);
+                }
+            }
+            int maxGram = Math.min(4, normalized.size());
+            String best = null;
+            String bestEntity = null;
+            for (int size = maxGram; size >= 1; size--) {
+                for (int i = 0; i <= normalized.size() - size; i++) {
+                    String candidate = String.join("_", normalized.subList(i, i + size));
+                    String match = entityMap.get(candidate);
+                    if (match != null) {
+                        best = candidate;
+                        bestEntity = match;
+                        break;
+                    }
+                }
+                if (bestEntity != null) {
+                    break;
+                }
+            }
+            return bestEntity;
+        }
+
+        private java.util.Map<String, String> collectEntityNames(com.sahr.core.KnowledgeBase graph) {
+            java.util.Map<String, String> names = new java.util.HashMap<>();
+            for (com.sahr.core.RelationAssertion assertion : graph.getAllAssertions()) {
+                String subject = assertion.subject().value();
+                String object = assertion.object().value();
+                recordEntityName(names, subject);
+                recordEntityName(names, object);
+            }
+            for (com.sahr.core.EntityNode entity : graph.getAllEntities()) {
+                recordEntityName(names, entity.id().value());
+            }
+            return names;
+        }
+
+        private void recordEntityName(java.util.Map<String, String> names, String value) {
+            if (value == null || value.isBlank()) {
+                return;
+            }
+            String normalized = normalizeToken(stripPrefix(value));
+            if (!normalized.isBlank()) {
+                names.putIfAbsent(normalized, value);
+            }
+        }
+
+        private String stripPrefix(String value) {
+            if (value.startsWith("entity:")) {
+                return value.substring("entity:".length());
+            }
+            if (value.startsWith("concept:")) {
+                return value.substring("concept:".length());
+            }
+            return value;
+        }
+
+        private String localName(String predicate) {
+            if (predicate == null || predicate.isBlank()) {
+                return "";
+            }
+            int hashIdx = predicate.lastIndexOf('#');
+            int slashIdx = predicate.lastIndexOf('/');
+            int idx = Math.max(hashIdx, slashIdx);
+            String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
+            return normalizeToken(local);
+        }
+
+        private String normalizeToken(String raw) {
+            if (raw == null) {
+                return "";
+            }
+            return raw.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z_]", "");
+        }
+
+        private String normalizeVerb(String token) {
+            if (token == null || token.isBlank()) {
+                return "";
+            }
+            if ("failure".equals(token)) {
+                return "fail";
+            }
+            if (token.endsWith("ed") && token.length() > 2) {
+                return token.substring(0, token.length() - 2);
+            }
+            if (token.endsWith("ing") && token.length() > 3) {
+                return token.substring(0, token.length() - 3);
+            }
+            if (token.endsWith("s") && token.length() > 1) {
+                return token.substring(0, token.length() - 1);
+            }
+            return token;
         }
     }
 

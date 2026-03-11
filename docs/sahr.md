@@ -182,6 +182,24 @@ During query and subgoal execution, only query-compatible candidate types
 (answers/subgoals/clarifications) are allowed to win; generic inference
 heads are filtered out to prevent unrelated assertions from hijacking
 query resolution.
+Subgoal resolution also guards against re-emitting identical subgoals,
+so interpretation heads cannot loop indefinitely without producing a
+more specific plan.
+After interpretation, a `QUERY_PLAN` candidate bridges into executable
+graph matching. The planner emits a plan with the resolved `QueryGoal`,
+and the runtime executes that plan against the graph (without reusing the
+interpretation heads).
+The default planner can infer missing predicates by matching input tokens
+against predicates already present in the graph (assertions and rules),
+keeping planning data-driven rather than rule-hardcoded.
+
+Statement Normalization
+-----------------------
+
+Some common negated operation predicates (e.g., “cannot operate”) are
+normalized into a canonical `fail` relation to improve dependency-chain
+reasoning, while predicate lexemes such as “require(s)” map onto
+`poweredBy` through ontology labels.
 
 Yes/No Questions
 ----------------

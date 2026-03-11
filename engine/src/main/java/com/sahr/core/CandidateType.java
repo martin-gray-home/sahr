@@ -8,5 +8,6 @@ public enum CandidateType {
     CLARIFICATION,
     CONTRADICTION,
     SUBGOAL,
+    QUERY_PLAN,
     INTENT
 }

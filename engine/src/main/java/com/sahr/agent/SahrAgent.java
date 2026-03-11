@@ -328,6 +328,12 @@ public final class SahrAgent {
         }
 
         String predicate = statement.predicate();
+        NormalizedPredicate normalizedPredicate = normalizePredicate(statement, predicate);
+        predicate = normalizedPredicate.predicate;
+        if (normalizedPredicate.overrideObject != null) {
+            objectId = normalizedPredicate.overrideObject;
+            objectTypes = normalizedPredicate.overrideObjectTypes;
+        }
         Optional<String> predicateIri = termMapper.mapPredicateToken(predicate);
         if (predicateIri.isPresent()) {
             predicate = predicateIri.get();
@@ -349,6 +355,50 @@ public final class SahrAgent {
                 mappedExtras
         );
     }
+
+    private NormalizedPredicate normalizePredicate(Statement statement, String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return new NormalizedPredicate(predicate, null, null);
+        }
+        if (!statement.objectIsConcept()) {
+            return new NormalizedPredicate(predicate, null, null);
+        }
+        String rawObject = stripPrefix(statement.object().value());
+        if (!NEGATED_OBJECTS.contains(rawObject)) {
+            return new NormalizedPredicate(predicate, null, null);
+        }
+        String normalized = predicate.toLowerCase(java.util.Locale.ROOT);
+        if (NEGATED_OPERATIONS.contains(normalized)) {
+            SymbolId newObject = new SymbolId("concept:true");
+            return new NormalizedPredicate("fail", newObject, java.util.Set.of("true"));
+        }
+        return new NormalizedPredicate(predicate, null, null);
+    }
+
+    private static final class NormalizedPredicate {
+        private final String predicate;
+        private final SymbolId overrideObject;
+        private final java.util.Set<String> overrideObjectTypes;
+
+        private NormalizedPredicate(String predicate, SymbolId overrideObject, java.util.Set<String> overrideObjectTypes) {
+            this.predicate = predicate;
+            this.overrideObject = overrideObject;
+            this.overrideObjectTypes = overrideObjectTypes;
+        }
+    }
+
+    private static final java.util.Set<String> NEGATED_OBJECTS = java.util.Set.of(
+            "false",
+            "not",
+            "no"
+    );
+
+    private static final java.util.Set<String> NEGATED_OPERATIONS = java.util.Set.of(
+            "operate",
+            "function",
+            "work",
+            "respond"
+    );
 
     private Set<String> mapTypes(Set<String> types) {
         Set<String> mapped = new HashSet<>();
@@ -538,6 +588,9 @@ public final class SahrAgent {
             QueryGoal subgoal = (QueryGoal) winner.payload();
             return handleWithSubgoals(subgoal, null, true, null, features);
         }
+        if (CandidateType.QUERY_PLAN.equals(winner.type()) && winner.payload() instanceof com.sahr.core.QueryPlan) {
+            return executeQueryPlan((com.sahr.core.QueryPlan) winner.payload());
+        }
         if (CandidateType.ANSWER.equals(winner.type())) {
             String multiAnswer = buildMultiAnswer(query, candidates);
             if (multiAnswer != null) {
@@ -577,6 +630,7 @@ public final class SahrAgent {
                                       RuleAssertion rule,
                                       InputFeatures features) {
         java.util.ArrayDeque<QueryGoal> queue = new java.util.ArrayDeque<>();
+        java.util.Set<com.sahr.core.QueryKey> seen = new java.util.HashSet<>();
         queue.add(root);
         int processed = 0;
         boolean question = isQuestion(root) || questionLike;
@@ -621,9 +675,27 @@ public final class SahrAgent {
 
             if (CandidateType.SUBGOAL.equals(winner.type()) && winner.payload() instanceof QueryGoal) {
                 QueryGoal subgoal = (QueryGoal) winner.payload();
+                com.sahr.core.QueryKey subgoalKey = com.sahr.core.QueryKey.from(subgoal);
+                if (subgoalKey != null && seen.contains(subgoalKey)) {
+                    workingMemory.popGoal();
+                    continue;
+                }
                 int nextDepth = current.depth() + 1;
                 if (nextDepth <= MAX_SUBGOAL_DEPTH) {
+                    if (subgoalKey != null) {
+                        seen.add(subgoalKey);
+                    }
                     queue.addLast(subgoal.withParent(current.goalId(), nextDepth));
+                }
+                workingMemory.popGoal();
+                continue;
+            }
+
+            if (CandidateType.QUERY_PLAN.equals(winner.type()) && winner.payload() instanceof com.sahr.core.QueryPlan) {
+                String planAnswer = executeQueryPlan((com.sahr.core.QueryPlan) winner.payload());
+                if (current.goalId().equals(root.goalId())) {
+                    workingMemory.popGoal();
+                    return planAnswer;
                 }
                 workingMemory.popGoal();
                 continue;
@@ -702,6 +774,7 @@ public final class SahrAgent {
         for (ReasoningCandidate candidate : candidates) {
             if (CandidateType.ANSWER.equals(candidate.type())
                     || CandidateType.SUBGOAL.equals(candidate.type())
+                    || CandidateType.QUERY_PLAN.equals(candidate.type())
                     || CandidateType.CLARIFICATION.equals(candidate.type())) {
                 allowed.add(candidate);
             }
@@ -716,6 +789,11 @@ public final class SahrAgent {
                 return candidate;
             }
         }
+        for (ReasoningCandidate candidate : candidates) {
+            if (CandidateType.QUERY_PLAN.equals(candidate.type())) {
+                return candidate;
+            }
+        }
         if (CandidateType.SUBGOAL.equals(winner.type())) {
             for (ReasoningCandidate candidate : candidates) {
                 if (CandidateType.ASSERTION.equals(candidate.type())) {
@@ -724,6 +802,35 @@ public final class SahrAgent {
             }
         }
         return winner;
+    }
+
+    private String executeQueryPlan(com.sahr.core.QueryPlan plan) {
+        if (plan == null) {
+            return "No candidates produced.";
+        }
+        QueryGoal goal = plan.goal();
+        if (goal == null || goal.type() == QueryGoal.Type.UNKNOWN) {
+            return "No candidates produced.";
+        }
+        HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null);
+        List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
+        List<ReasoningCandidate> answers = new java.util.ArrayList<>();
+        for (ReasoningCandidate candidate : candidates) {
+            if (CandidateType.ANSWER.equals(candidate.type())) {
+                answers.add(candidate);
+            }
+        }
+        if (answers.isEmpty()) {
+            return isYesNo(goal) ? "Unknown." : "No candidates produced.";
+        }
+        ReasoningCandidate winner = answers.get(0);
+        for (ReasoningCandidate candidate : answers) {
+            if (candidate.score() > winner.score()) {
+                winner = candidate;
+            }
+        }
+        recordAnswerIfPossible(goal, winner.payload());
+        return winner.payload() == null ? "No payload." : winner.payload().toString();
     }
 
     private void applyAnswerAsAssertion(Object payload) {

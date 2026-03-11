@@ -131,6 +131,10 @@ sahr:poweredBy a owl:ObjectProperty ;
     rdfs:label "poweredBy" ;
     rdfs:label "powered by" ;
     rdfs:label "power" ;
+    rdfs:label "require" ;
+    rdfs:label "requires" ;
+    rdfs:label "required" ;
+    rdfs:label "needs" ;
     rdfs:subPropertyOf head:dependencyChain .
 
 sahr:chargedBy a owl:ObjectProperty ;

@@ -248,6 +248,11 @@ headr:ConditionQueryHead a headr:ReasoningHead ;
     headr:hasExecutorParam headr:paramQueryConditionMode ;
     headr:hasScorePolicy headr:scoreRuleInsertion .
 
+headr:QueryPlannerHead a headr:ReasoningHead ;
+    headr:name "query-plan" ;
+    headr:executorType "QUERY_PLANNER" ;
+    headr:hasScorePolicy headr:scoreRuleInsertion .
+
 headr:AssertionInsertionHead a headr:ReasoningHead ;
     headr:name "assertion-insertion" ;
     headr:executorType "ASSERTION_INSERTION" ;
