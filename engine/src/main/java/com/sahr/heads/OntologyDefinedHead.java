@@ -3,6 +3,7 @@ package com.sahr.heads;
 import com.sahr.core.CandidateType;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
+import com.sahr.core.QueryGoal;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.SymbolId;
@@ -189,6 +190,7 @@ public final class OntologyDefinedHead extends BaseHead {
         register(map, new RuleInsertionExecutor());
         register(map, new RuleForwardChainExecutor());
         register(map, new IntentClassifierExecutor());
+        register(map, new QueryProposerExecutor());
         return map;
     }
 
@@ -519,6 +521,123 @@ public final class OntologyDefinedHead extends BaseHead {
                 }
             }
             return count;
+        }
+
+        private double clamp(double value, double min, double max) {
+            if (value < min) {
+                return min;
+            }
+            if (value > max) {
+                return max;
+            }
+            return value;
+        }
+    }
+
+    private static final class QueryProposerExecutor implements OntologyHeadExecutor {
+        private static final Set<String> STOPWORDS = Set.of(
+                "the", "a", "an", "of", "to", "that", "this", "these", "those", "and", "or", "but",
+                "in", "on", "at", "by", "for", "with", "from", "as", "is", "are", "was", "were",
+                "be", "been", "being", "did", "do", "does", "can", "could", "should", "would",
+                "will", "may", "might", "must", "shall", "most", "likely", "about", "after", "before",
+                "during", "even", "though", "under", "what", "which", "why", "how", "who", "whom",
+                "explain", "if", "then", "when"
+        );
+        private static final Set<String> AUX_STARTERS = Set.of(
+                "is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "would",
+                "will", "may", "might", "must", "shall"
+        );
+
+        @Override
+        public String type() {
+            return OntologyHeadDefinition.EXECUTOR_QUERY_PROPOSER;
+        }
+
+        @Override
+        public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
+            var featuresOpt = context.inputFeatures();
+            if (featuresOpt.isEmpty()) {
+                return List.of();
+            }
+            String mode = definition.executorParam("mode");
+            if (mode == null || mode.isBlank()) {
+                return List.of();
+            }
+            com.sahr.nlp.InputFeatures features = featuresOpt.get();
+            String raw = features.raw();
+            if (raw.isBlank()) {
+                return List.of();
+            }
+            String lowered = raw.toLowerCase(java.util.Locale.ROOT);
+            if ("condition".equalsIgnoreCase(mode)) {
+                if (!features.has("has_if") || !features.has("has_wh")) {
+                    return List.of();
+                }
+                String clause = clauseAfterComma(lowered);
+                if (clause == null) {
+                    return List.of();
+                }
+                QueryGoal proposed = proposeQueryFromText(clause);
+                if (proposed == null) {
+                    return List.of();
+                }
+                return List.of(buildCandidate(definition, proposed, "condition_clause"));
+            }
+            if ("question".equalsIgnoreCase(mode)) {
+                boolean startsWithAux = startsWithAux(features.tokens());
+                if (!features.has("has_wh") && !features.has("has_question_mark")
+                        && !features.has("has_explain") && !startsWithAux) {
+                    return List.of();
+                }
+                QueryGoal proposed = proposeQueryFromText(lowered);
+                if (proposed == null) {
+                    return List.of();
+                }
+                return List.of(buildCandidate(definition, proposed, "question_clause"));
+            }
+            return List.of();
+        }
+
+        private ReasoningCandidate buildCandidate(OntologyHeadDefinition definition,
+                                                  QueryGoal query,
+                                                  String evidenceTag) {
+            double score = clamp(query == null ? 0.0 : definition.baseWeight(), 0.0, 1.0);
+            List<String> evidence = List.of(evidenceTag, "query=" + query);
+            return new ReasoningCandidate(
+                    CandidateType.SUBGOAL,
+                    query,
+                    score,
+                    definition.name(),
+                    evidence,
+                    java.util.Map.of("query_score", score),
+                    0
+            );
+        }
+
+        private QueryGoal proposeQueryFromText(String text) {
+            if (text == null || text.isBlank()) {
+                return null;
+            }
+            return com.sahr.nlp.ShallowQueryExtractor.propose(text).orElse(null);
+        }
+
+        private String clauseAfterComma(String text) {
+            if (text == null) {
+                return null;
+            }
+            int idx = text.indexOf(',');
+            if (idx < 0 || idx + 1 >= text.length()) {
+                return null;
+            }
+            return text.substring(idx + 1).trim();
+        }
+
+        private boolean startsWithAux(java.util.List<String> tokens) {
+            if (tokens == null || tokens.isEmpty()) {
+                return false;
+            }
+            String first = tokens.get(0);
+            return AUX_STARTERS.contains(first);
         }
 
         private double clamp(double value, double min, double max) {

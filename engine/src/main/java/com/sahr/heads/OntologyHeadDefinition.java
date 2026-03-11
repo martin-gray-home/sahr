@@ -13,6 +13,7 @@ public final class OntologyHeadDefinition {
     public static final String EXECUTOR_RULE_INSERTION = "RULE_INSERTION";
     public static final String EXECUTOR_RULE_FORWARD_CHAIN = "RULE_FORWARD_CHAIN";
     public static final String EXECUTOR_INTENT_CLASSIFIER = "INTENT_CLASSIFIER";
+    public static final String EXECUTOR_QUERY_PROPOSER = "QUERY_PROPOSER";
 
     private final String name;
     private final List<TriplePattern> patterns;

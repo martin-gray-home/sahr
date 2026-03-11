@@ -1,4 +1,4 @@
-# Sample guideline, please follow similar structure for guideline with code samples
+ Sample guideline, please follow similar structure for guideline with code samples
 # 1. Suggest using streams instead of simple loops for better readability.
 #          <example>
 #          *Comment:

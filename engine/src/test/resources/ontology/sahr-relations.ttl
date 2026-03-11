@@ -138,6 +138,19 @@ sahr:chargedBy a owl:ObjectProperty ;
     rdfs:label "charged by" ;
     rdfs:subPropertyOf head:dependencyChain .
 
+sahr:fail a owl:ObjectProperty ;
+    rdfs:label "fail" ;
+    rdfs:label "fails" ;
+    rdfs:label "failed" ;
+    rdfs:label "failure" ;
+    rdfs:label "stop responding" ;
+    rdfs:label "stop_responding" ;
+    rdfs:label "stop functioning" ;
+    rdfs:label "stop_functioning" ;
+    rdfs:label "cannot operate" ;
+    rdfs:label "cannot function" ;
+    rdfs:subPropertyOf head:dependencyChain .
+
 sahr:causalRelation a owl:ObjectProperty ;
     rdfs:label "causal relation" ;
     rdfs:subPropertyOf head:causalRelation .

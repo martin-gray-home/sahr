@@ -2,7 +2,6 @@ package com.sahr.nlp;
 
 import com.sahr.core.QueryGoal;
 import edu.stanford.nlp.pipeline.Annotation;
-import edu.stanford.nlp.pipeline.StanfordCoreNLP;
 import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.ling.CoreLabel;
 import edu.stanford.nlp.semgraph.SemanticGraph;
@@ -14,7 +13,6 @@ import edu.stanford.nlp.process.Morphology;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 
 public final class SimpleQueryParser {
@@ -23,7 +21,6 @@ public final class SimpleQueryParser {
     private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "below", "with", "in", "inside", "opposite");
     private static final Set<String> COLOCATION_SYNONYMS = Set.of("near", "beside", "alongside", "next");
     private static final Set<String> COLOR_MODIFIERS = Set.of("red", "blue", "green", "black", "white");
-    private static final StanfordCoreNLP PIPELINE = buildPipeline();
     private static final Morphology MORPHOLOGY = new Morphology();
 
     private final boolean ontologyDriven;
@@ -172,7 +169,7 @@ public final class SimpleQueryParser {
 
     private Optional<QueryGoal> parseRelationQuery(String input) {
         Annotation doc = new Annotation(input);
-        PIPELINE.annotate(doc);
+        CoreNlpPipeline.get().annotate(doc);
         for (CoreMap sentence : doc.get(CoreAnnotations.SentencesAnnotation.class)) {
             SemanticGraph graph = sentence.get(SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class);
             if (graph == null) {
@@ -346,7 +343,7 @@ public final class SimpleQueryParser {
             return preposition;
         }
         Annotation doc = new Annotation(input);
-        PIPELINE.annotate(doc);
+        CoreNlpPipeline.get().annotate(doc);
         for (CoreMap sentence : doc.get(CoreAnnotations.SentencesAnnotation.class)) {
             SemanticGraph graph = sentence.get(SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class);
             if (graph == null) {
@@ -727,7 +724,7 @@ public final class SimpleQueryParser {
 
     private Optional<QueryGoal> parseYesNoPassiveByQuery(String input) {
         Annotation doc = new Annotation(input);
-        PIPELINE.annotate(doc);
+        CoreNlpPipeline.get().annotate(doc);
         for (CoreMap sentence : doc.get(CoreAnnotations.SentencesAnnotation.class)) {
             SemanticGraph graph = sentence.get(SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class);
             if (graph == null) {
@@ -1239,10 +1236,4 @@ public final class SimpleQueryParser {
         return "and".equals(token) || "or".equals(token) || "but".equals(token);
     }
 
-    private static StanfordCoreNLP buildPipeline() {
-        Properties props = new Properties();
-        props.setProperty("annotators", "tokenize,ssplit,pos,lemma,depparse");
-        props.setProperty("ssplit.isOneSentence", "true");
-        return new StanfordCoreNLP(props);
-    }
 }

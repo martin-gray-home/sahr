@@ -153,17 +153,22 @@ This enables multi-step reasoning similar to stacked transformer layers.
 Language Interpretation
 -----------------------
 
-Input is parsed into symbolic assertions and queries using an NLP parser
-plus a lexical mapping layer. Tokens are mapped to ontology IRIs when
-available; otherwise, the system uses runtime `concept:*` symbols to keep
-the graph complete and extensible.
+Input is parsed into symbolic assertions and queries using a light NLP
+front-end plus a lexical mapping layer. Shallow features (WH/aux/if/then,
+modal cues, punctuation) are extracted and fed into OWL-defined intent
+heads (question/rule/assertion/condition). Tokens are mapped to ontology
+IRIs when available; otherwise, the system uses runtime `concept:*`
+symbols to keep the graph complete and extensible.
 
 Question Handling
 -----------------
 
 Questions are classified before statement parsing to avoid false
-assertions. WH tokens determine **expected answer type**, while the
-predicate determines **query relation**. Example:
+assertions. Intent heads produce a scored hypothesis that the agent uses
+to decide whether to assert or query. WH tokens determine **expected
+answer type** when the term can be grounded in the ontology; generic WH
+nouns (e.g., “component”, “system”) are ignored so answers are not over-
+filtered. The predicate determines the **query relation**. Example:
 
 • "What is the man wearing?" → relation query (`wear`, subject `man`)  
 • "Where is the man?" → location query (`locatedIn`, subject type `man`)
@@ -344,6 +349,12 @@ Intent classification is also OWL-defined: intent heads use a shallow
 feature extractor (question marks, WH tokens, IF/THEN, modals) and the
 `INTENT_CLASSIFIER` executor to score question/rule/assertion/condition
 interpretations before deeper reasoning runs.
+Query proposal heads are likewise OWL-defined: the `QUERY_PROPOSER`
+executor emits `QueryGoal` subgoals from shallow token cues so question
+handling is no longer gated on a monolithic front-end parser.
+Set `-Dsahr.queryProposer.useCoreNlp=true` to enable dependency-hint
+query proposals; the default is a lightweight token heuristic to keep
+test memory low.
 
 Attention Trace Debugging
 --------------------------

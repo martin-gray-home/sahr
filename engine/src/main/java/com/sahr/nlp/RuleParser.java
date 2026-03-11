@@ -30,6 +30,16 @@ public final class RuleParser {
         Optional<Statement> antecedent = statementParser.parse(split.antecedent);
         Optional<Statement> consequent = statementParser.parse(split.consequent);
         if (antecedent.isEmpty() || consequent.isEmpty()) {
+            String normalizedAntecedent = stripModals(split.antecedent);
+            String normalizedConsequent = stripModals(split.consequent);
+            if (!normalizedAntecedent.equals(split.antecedent)) {
+                antecedent = antecedent.isPresent() ? antecedent : statementParser.parse(normalizedAntecedent);
+            }
+            if (!normalizedConsequent.equals(split.consequent)) {
+                consequent = consequent.isPresent() ? consequent : statementParser.parse(normalizedConsequent);
+            }
+        }
+        if (antecedent.isEmpty() || consequent.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(new RuleStatement(antecedent.get(), consequent.get(), 0.8));
@@ -65,5 +75,13 @@ public final class RuleParser {
             this.antecedent = antecedent;
             this.consequent = consequent;
         }
+    }
+
+    private String stripModals(String input) {
+        if (input == null || input.isBlank()) {
+            return input;
+        }
+        String normalized = input.replaceAll("(?i)\\b(may|might|can|could|would|should|must|will|shall)\\b", "");
+        return normalized.replaceAll("\\s{2,}", " ").trim();
     }
 }

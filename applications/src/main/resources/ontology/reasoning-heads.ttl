@@ -186,6 +186,14 @@ headr:paramIntentConditionBoost a headr:ExecutorParam ;
     headr:paramKey "boost" ;
     headr:paramValue "has_modal,has_which,has_what" .
 
+headr:paramQueryQuestionMode a headr:ExecutorParam ;
+    headr:paramKey "mode" ;
+    headr:paramValue "question" .
+
+headr:paramQueryConditionMode a headr:ExecutorParam ;
+    headr:paramKey "mode" ;
+    headr:paramValue "condition" .
+
 headr:RuleInsertionHead a headr:ReasoningHead ;
     headr:name "rule-insertion" ;
     headr:executorType "RULE_INSERTION" ;
@@ -226,6 +234,18 @@ headr:ConditionQueryIntentHead a headr:ReasoningHead ;
     headr:hasExecutorParam headr:paramIntentConditionIntent ;
     headr:hasExecutorParam headr:paramIntentConditionRequire ;
     headr:hasExecutorParam headr:paramIntentConditionBoost ;
+    headr:hasScorePolicy headr:scoreRuleInsertion .
+
+headr:QuestionQueryHead a headr:ReasoningHead ;
+    headr:name "question-query" ;
+    headr:executorType "QUERY_PROPOSER" ;
+    headr:hasExecutorParam headr:paramQueryQuestionMode ;
+    headr:hasScorePolicy headr:scoreRuleInsertion .
+
+headr:ConditionQueryHead a headr:ReasoningHead ;
+    headr:name "condition-query" ;
+    headr:executorType "QUERY_PROPOSER" ;
+    headr:hasExecutorParam headr:paramQueryConditionMode ;
     headr:hasScorePolicy headr:scoreRuleInsertion .
 
 headr:AssertionInsertionHead a headr:ReasoningHead ;

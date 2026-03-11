@@ -16,11 +16,11 @@ public final class InputFeatureExtractor {
     public static InputFeatures extract(String input) {
         Set<String> features = new HashSet<>();
         if (input == null) {
-            return new InputFeatures(features);
+            return new InputFeatures(features, "", List.of());
         }
         String trimmed = input.trim();
         if (trimmed.isEmpty()) {
-            return new InputFeatures(features);
+            return new InputFeatures(features, "", List.of());
         }
         String lower = trimmed.toLowerCase(Locale.ROOT);
         List<String> tokens = List.of(lower.split("\\s+"));
@@ -56,6 +56,6 @@ public final class InputFeatureExtractor {
             features.add("has_conditional");
         }
 
-        return new InputFeatures(features);
+        return new InputFeatures(features, trimmed, tokens);
     }
 }

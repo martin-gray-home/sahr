@@ -119,7 +119,7 @@ public final class SahrAgent {
         try {
             if (!isQuestion(query)) {
                 HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), rule.orElse(null), workingMemory, features);
-                return handleSingle(context, query, questionLike);
+                return handleSingle(context, query, questionLike, features);
             }
             return handleWithSubgoals(query, statement.orElse(null), questionLike, rule.orElse(null), features);
         } finally {
@@ -286,8 +286,18 @@ public final class SahrAgent {
         if (expectedType == null || expectedType.isBlank()) {
             return expectedType;
         }
-        Optional<String> mappedType = termMapper.mapToken(expectedType);
-        return mappedType.orElse("concept:" + expectedType);
+        String stripped = stripPrefix(expectedType);
+        if (isGenericExpectedType(stripped)) {
+            return null;
+        }
+        Optional<String> mappedType = termMapper.mapToken(stripped);
+        if (mappedType.isPresent()) {
+            return mappedType.get();
+        }
+        if (expectedType.startsWith("concept:")) {
+            return expectedType;
+        }
+        return "concept:" + stripped;
     }
 
     private String mapEntity(String value) {
@@ -358,6 +368,37 @@ public final class SahrAgent {
         }
         return value;
     }
+
+    private boolean isGenericExpectedType(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        return GENERIC_EXPECTED_TYPES.contains(value);
+    }
+
+    private static final java.util.Set<String> GENERIC_EXPECTED_TYPES = java.util.Set.of(
+            "component",
+            "system",
+            "systems",
+            "chain",
+            "event",
+            "events",
+            "cause",
+            "causes",
+            "reason",
+            "reasons",
+            "explanation",
+            "explanations",
+            "evidence",
+            "mechanism",
+            "relationship",
+            "conditions",
+            "condition",
+            "type",
+            "types",
+            "kind",
+            "kinds"
+    );
 
     private String applyCandidate(ReasoningCandidate winner) {
         switch (winner.type()) {
@@ -472,11 +513,11 @@ public final class SahrAgent {
         return "Assertion recorded.";
     }
 
-    private String handleSingle(HeadContext context, QueryGoal query, boolean questionLike) {
+    private String handleSingle(HeadContext context, QueryGoal query, boolean questionLike, InputFeatures features) {
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         boolean question = isQuestion(query) || questionLike;
         if (question) {
-            List<ReasoningCandidate> questionCandidates = filterQuestionCandidates(candidates, query.type() != QueryGoal.Type.UNKNOWN);
+            List<ReasoningCandidate> questionCandidates = filterQueryResolutionCandidates(candidates);
             if (questionCandidates.isEmpty()) {
                 return isYesNo(query) ? "Unknown." : "No candidates produced.";
             }
@@ -493,6 +534,10 @@ public final class SahrAgent {
         trace.addEntry(new ReasoningTraceEntry(query, candidates, winner));
         logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                 + " score=" + winner.score());
+        if (CandidateType.SUBGOAL.equals(winner.type()) && winner.payload() instanceof QueryGoal) {
+            QueryGoal subgoal = (QueryGoal) winner.payload();
+            return handleWithSubgoals(subgoal, null, true, null, features);
+        }
         if (CandidateType.ANSWER.equals(winner.type())) {
             String multiAnswer = buildMultiAnswer(query, candidates);
             if (multiAnswer != null) {
@@ -501,9 +546,6 @@ public final class SahrAgent {
             }
         }
         String result = applyCandidate(winner);
-        if (CandidateType.ASSERTION.equals(winner.type()) && isQuestion(query)) {
-            return resolveQuestionAfterAssertion(query, 2);
-        }
         if (CandidateType.ANSWER.equals(winner.type())) {
             recordAnswerIfPossible(query, winner.payload());
             return formatAnswerWithEvidence(result, candidates, winner);
@@ -554,14 +596,16 @@ public final class SahrAgent {
                     features
             );
             List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
-            if (current.goalId().equals(root.goalId())
-                    && question) {
-                List<ReasoningCandidate> questionCandidates = filterQuestionCandidates(candidates, current.type() != QueryGoal.Type.UNKNOWN);
-                if (questionCandidates.isEmpty()) {
+            if (question) {
+                List<ReasoningCandidate> queryCandidates = filterQueryResolutionCandidates(candidates);
+                if (queryCandidates.isEmpty()) {
                     workingMemory.popGoal();
-                    return isYesNo(root) ? "Unknown." : "No candidates produced.";
+                    if (current.goalId().equals(root.goalId())) {
+                        return isYesNo(root) ? "Unknown." : "No candidates produced.";
+                    }
+                    continue;
                 }
-                candidates = questionCandidates;
+                candidates = queryCandidates;
             }
             if (candidates.isEmpty()) {
                 workingMemory.popGoal();
@@ -585,7 +629,7 @@ public final class SahrAgent {
                 continue;
             }
 
-            if (CandidateType.ASSERTION.equals(winner.type())) {
+            if (!question && CandidateType.ASSERTION.equals(winner.type())) {
                 ApplyResult result = applyAssertionResult(winner.payload());
                 if (result.added) {
                     queue.addLast(root);
@@ -650,21 +694,15 @@ public final class SahrAgent {
         return true;
     }
 
-    private List<ReasoningCandidate> filterQuestionCandidates(List<ReasoningCandidate> candidates,
-                                                              boolean allowAssertions) {
+    private List<ReasoningCandidate> filterQueryResolutionCandidates(List<ReasoningCandidate> candidates) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
         List<ReasoningCandidate> allowed = new java.util.ArrayList<>();
         for (ReasoningCandidate candidate : candidates) {
             if (CandidateType.ANSWER.equals(candidate.type())
-                    || CandidateType.SUBGOAL.equals(candidate.type())) {
-                allowed.add(candidate);
-                continue;
-            }
-            if (allowAssertions
-                    && CandidateType.ASSERTION.equals(candidate.type())
-                    && !"assertion-insertion".equals(candidate.producedBy())) {
+                    || CandidateType.SUBGOAL.equals(candidate.type())
+                    || CandidateType.CLARIFICATION.equals(candidate.type())) {
                 allowed.add(candidate);
             }
         }

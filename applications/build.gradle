@@ -39,5 +39,6 @@ tasks.register("runDebug", JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = application.mainClass
     systemProperty "sahr.log.level", "FINE"
+    systemProperty "sahr.queryProposer.useCoreNlp", "true"
     standardInput = System.in
 }
