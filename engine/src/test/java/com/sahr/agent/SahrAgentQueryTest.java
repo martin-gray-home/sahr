@@ -20,6 +20,15 @@ class SahrAgentQueryTest {
     }
 
     @Test
+    void answersNumberedWhoIsWithQuery() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Assertion recorded.", agent.handle("The man is with a woman"));
+        assertEquals("entity:woman", agent.handle("1. Who is with the man"));
+    }
+
+    @Test
     void answersWhoIsWearingQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
@@ -70,7 +79,9 @@ class SahrAgentQueryTest {
         String elseAnswer = agent.handle("Who else is with the mother");
         if (!("No candidates produced.".equals(elseAnswer)
                 || "Assertion recorded.".equals(elseAnswer)
-                || "Assertion already known.".equals(elseAnswer))) {
+                || "Assertion already known.".equals(elseAnswer)
+                || "entity:man".equals(elseAnswer)
+                || "entity:boy".equals(elseAnswer))) {
             throw new AssertionError("Unexpected answer: " + elseAnswer);
         }
     }

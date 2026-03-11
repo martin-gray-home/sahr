@@ -324,6 +324,17 @@ at `FINE` logging to aid debugging.
 QUERY_PLAN execution logs a compact plan summary at `FINE`, and the
 cause-chain executor will fall back to rule binding if no causal
 assertions are found.
+Leading question numbers (e.g., `7. Which ...`) are stripped before
+intent detection, parsing, and planning to avoid polluting predicate
+selection.
+During planning, auxiliary-verb predicates (e.g., `be/is/are`) and
+generic placeholders like `system` are treated as weak so the planner can
+re-infer a more specific predicate or entity from the token stream.
+Planner predicate selection now bridges common capability phrases like
+“stop functioning” → `stop`/`stop_working` and “function” → `operate`
+when those predicates exist in the graph. For `restore` and `backupFor`
+queries, the planner also infers likely objects from phrases such as
+“stability” or “... for <object>”.
 
 Working Memory
 ---------------

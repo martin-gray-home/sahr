@@ -98,16 +98,20 @@ public final class SahrAgent {
     }
 
     public String handle(String input) {
+        String normalizedInput = stripLeadingQuestionNumber(input);
+        if (input != null && !input.equals(normalizedInput) && logger.isLoggable(java.util.logging.Level.FINE)) {
+            logger.fine(() -> "Normalized input='" + input + "' -> '" + normalizedInput + "'");
+        }
         ReasoningPhase previousPhase = phases.enter(ReasoningPhase.UPDATE);
-        InputFeatures features = InputFeatureExtractor.extract(input);
+        InputFeatures features = InputFeatureExtractor.extract(normalizedInput);
         IntentDecision intentDecision = selectIntent(features);
-        boolean questionLike = parser.isQuestion(input) || isQuestionIntent(intentDecision);
+        boolean questionLike = parser.isQuestion(normalizedInput) || isQuestionIntent(intentDecision);
         boolean allowRuleParse = features.has("has_if")
                 && !features.has("has_question_mark")
                 && !features.has("has_wh");
-        QueryGoal query = mapQuery(parser.parse(input));
+        QueryGoal query = mapQuery(parser.parse(normalizedInput));
         Optional<RuleStatement> ruleStatement = (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
-                ? ruleParser.parse(input).map(this::mapRuleStatement)
+                ? ruleParser.parse(normalizedInput).map(this::mapRuleStatement)
                 : Optional.empty();
         if (ruleStatement.isPresent()) {
             questionLike = false;
@@ -115,8 +119,8 @@ public final class SahrAgent {
         Optional<RuleAssertion> rule = ruleStatement.map(this::toRuleAssertion);
         Optional<Statement> statement = (questionLike || rule.isPresent())
                 ? Optional.empty()
-                : statementParser.parse(input).map(this::mapStatement);
-        logger.fine(() -> "Input='" + input + "' statementPresent=" + statement.isPresent()
+                : statementParser.parse(normalizedInput).map(this::mapStatement);
+        logger.fine(() -> "Input='" + normalizedInput + "' statementPresent=" + statement.isPresent()
                 + " queryIntent=" + query.type());
 
         statement.ifPresent(this::updateWorkingMemoryFromStatement);
@@ -571,6 +575,17 @@ public final class SahrAgent {
 
     private boolean isQuestion(QueryGoal query) {
         return query.type() != QueryGoal.Type.UNKNOWN;
+    }
+
+    private String stripLeadingQuestionNumber(String input) {
+        if (input == null) {
+            return null;
+        }
+        String trimmed = input.trim();
+        if (trimmed.isEmpty()) {
+            return input;
+        }
+        return trimmed.replaceFirst("^\\s*\\d+\\s*[.)]\\s+", "");
     }
 
     private boolean isYesNo(QueryGoal query) {

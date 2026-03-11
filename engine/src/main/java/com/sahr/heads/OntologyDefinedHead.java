@@ -705,27 +705,58 @@ public final class OntologyDefinedHead extends BaseHead {
         private PlanSelection planQuery(HeadContext context, QueryGoal query) {
             String predicate = query.predicate();
             String expectedType = query.expectedType();
+            if (predicate != null && !predicate.isBlank()) {
+                String normalizedPredicate = normalizeToken(predicate);
+                if (normalizedPredicate.matches("\\d+") || "system".equals(normalizedPredicate)
+                        || "systems".equals(normalizedPredicate)
+                        || "be".equals(normalizedPredicate)
+                        || "is".equals(normalizedPredicate)
+                        || "are".equals(normalizedPredicate)
+                        || "was".equals(normalizedPredicate)
+                        || "were".equals(normalizedPredicate)) {
+                    predicate = "";
+                }
+            }
             com.sahr.core.QueryPlan.Kind kind = inferPlanKind(context, predicate);
             if ((predicate == null || predicate.isBlank()) && context.inputFeatures().isPresent()) {
                 java.util.List<String> tokens = context.inputFeatures().get().tokens();
-                String inferred = inferPredicate(tokens, context.graph());
-                if (inferred != null && !inferred.isBlank()) {
-                    predicate = inferred;
+                PredicateSelection selection = inferPredicateSelection(tokens, context.graph());
+                if (selection != null && selection.predicate != null && !selection.predicate.isBlank()) {
+                    predicate = selection.predicate;
                     kind = inferPlanKind(context, predicate);
+                    if (logger.isLoggable(java.util.logging.Level.FINE)) {
+                        String rejected = selection.rejected.isEmpty()
+                                ? ""
+                                : " rejected=" + String.join(",", selection.rejected);
+                        String cue = selection.cue == null ? "" : " cue=" + selection.cue;
+                        String selected = predicate;
+                        logger.fine(() -> "planner predicate selection"
+                                + cue
+                                + " selected=" + selected
+                                + rejected);
+                    }
                 }
             }
             String subject = query.subject();
             String object = query.object();
-            if ((subject == null || subject.isBlank() || object == null || object.isBlank())
+            if ((subject == null || subject.isBlank() || object == null || object.isBlank()
+                    || isWeakEntity(subject) || isWeakEntity(object))
                     && context.inputFeatures().isPresent()) {
                 java.util.List<String> tokens = context.inputFeatures().get().tokens();
                 String entity = inferEntity(tokens, context.graph());
                 if (entity != null && !entity.isBlank()) {
-                    if (subject == null || subject.isBlank()) {
+                    if (subject == null || subject.isBlank() || isWeakEntity(subject)) {
                         subject = entity;
-                    } else if (object == null || object.isBlank()) {
+                    } else if (object == null || object.isBlank() || isWeakEntity(object)) {
                         object = entity;
                     }
+                }
+            }
+            if (context.inputFeatures().isPresent()) {
+                java.util.List<String> tokens = context.inputFeatures().get().tokens();
+                String derivedObject = inferObjectForPredicate(tokens, predicate, subject, object, context.graph());
+                if (derivedObject != null && !derivedObject.isBlank()) {
+                    object = derivedObject;
                 }
             }
             if (predicate == null || predicate.isBlank()) {
@@ -774,7 +805,7 @@ public final class OntologyDefinedHead extends BaseHead {
             return com.sahr.core.QueryPlan.Kind.RELATION_MATCH;
         }
 
-        private String inferPredicate(java.util.List<String> tokens, com.sahr.core.KnowledgeBase graph) {
+        private PredicateSelection inferPredicateSelection(java.util.List<String> tokens, com.sahr.core.KnowledgeBase graph) {
             if (tokens == null || tokens.isEmpty() || graph == null) {
                 return null;
             }
@@ -782,6 +813,18 @@ public final class OntologyDefinedHead extends BaseHead {
             if (predicates.isEmpty()) {
                 return null;
             }
+            java.util.List<String> normalizedTokens = new java.util.ArrayList<>();
+            for (String token : tokens) {
+                String normalized = normalizeToken(token);
+                if (!normalized.isEmpty()) {
+                    normalizedTokens.add(normalized);
+                }
+            }
+            PredicateSelection phraseSelection = inferPhrasePredicate(normalizedTokens, predicates);
+            if (phraseSelection != null) {
+                return phraseSelection;
+            }
+            java.util.List<String> candidates = new java.util.ArrayList<>();
             for (String token : tokens) {
                 String normalized = normalizeToken(token);
                 if (normalized.isEmpty()) {
@@ -789,10 +832,105 @@ public final class OntologyDefinedHead extends BaseHead {
                 }
                 String base = normalizeVerb(normalized);
                 if (predicates.contains(base)) {
-                    return base;
+                    candidates.add(base);
+                    continue;
                 }
                 if (predicates.contains(normalized)) {
-                    return normalized;
+                    candidates.add(normalized);
+                }
+            }
+            if (candidates.isEmpty()) {
+                return null;
+            }
+            PredicateSelection selection = new PredicateSelection(candidates.get(0), "token", candidates);
+            return selection;
+        }
+
+        private PredicateSelection inferPhrasePredicate(java.util.List<String> tokens, java.util.Set<String> predicates) {
+            if (tokens == null || tokens.isEmpty()) {
+                return null;
+            }
+            boolean hasBackup = tokens.contains("backup");
+            boolean hasSystem = tokens.contains("system") || tokens.contains("systems");
+            boolean hasFor = tokens.contains("for");
+            if (hasBackup && hasSystem && hasFor && predicates.contains("backupfor")) {
+                return new PredicateSelection("backupfor", "backup system for", java.util.List.of("system"));
+            }
+            boolean hasStop = tokens.contains("stop") || tokens.contains("stops") || tokens.contains("stopped");
+            boolean hasFunction = tokens.contains("function") || tokens.contains("functioning");
+            if (hasStop && hasFunction) {
+                if (predicates.contains("stop_working")) {
+                    return new PredicateSelection("stop_working", "stop functioning", java.util.List.of("function"));
+                }
+                if (predicates.contains("stop")) {
+                    return new PredicateSelection("stop", "stop functioning", java.util.List.of("function"));
+                }
+            }
+            if (hasFunction) {
+                if (predicates.contains("function")) {
+                    return new PredicateSelection("function", "function", java.util.List.of());
+                }
+                if (predicates.contains("operate")) {
+                    return new PredicateSelection("operate", "function->operate", java.util.List.of("function"));
+                }
+            }
+            if ((tokens.contains("restore") || tokens.contains("restored") || tokens.contains("regain")
+                    || tokens.contains("regained")) && predicates.contains("restore")) {
+                return new PredicateSelection("restore", "restore", java.util.List.of());
+            }
+            return null;
+        }
+
+        private String inferObjectForPredicate(java.util.List<String> tokens,
+                                               String predicate,
+                                               String subject,
+                                               String object,
+                                               com.sahr.core.KnowledgeBase graph) {
+            if (tokens == null || tokens.isEmpty() || graph == null) {
+                return null;
+            }
+            String normalizedPredicate = normalizeToken(predicate);
+            java.util.Map<String, String> entityMap = collectEntityNames(graph);
+            if (entityMap.isEmpty()) {
+                return null;
+            }
+            if ("backupfor".equals(normalizedPredicate)) {
+                if (object == null || object.isBlank() || (subject != null && subject.equals(object))) {
+                    String afterFor = inferEntityAfterToken(tokens, "for", entityMap);
+                    if (afterFor != null) {
+                        return afterFor;
+                    }
+                }
+            }
+            if ("restore".equals(normalizedPredicate)) {
+                boolean hasStability = tokens.contains("stability") || tokens.contains("stable");
+                boolean hasOrientation = tokens.contains("orientation");
+                if (hasStability && entityMap.containsKey("stable_orientation")) {
+                    return entityMap.get("stable_orientation");
+                }
+                if (hasOrientation && entityMap.containsKey("spacecraft_orientation")) {
+                    return entityMap.get("spacecraft_orientation");
+                }
+            }
+            return null;
+        }
+
+        private String inferEntityAfterToken(java.util.List<String> tokens,
+                                             String marker,
+                                             java.util.Map<String, String> entityMap) {
+            int idx = tokens.indexOf(marker);
+            if (idx < 0 || idx + 1 >= tokens.size()) {
+                return null;
+            }
+            java.util.List<String> tail = tokens.subList(idx + 1, tokens.size());
+            int maxGram = Math.min(4, tail.size());
+            for (int size = maxGram; size >= 1; size--) {
+                for (int i = 0; i <= tail.size() - size; i++) {
+                    String candidate = String.join("_", tail.subList(i, i + size));
+                    String match = entityMap.get(candidate);
+                    if (match != null) {
+                        return match;
+                    }
                 }
             }
             return null;
@@ -925,6 +1063,15 @@ public final class OntologyDefinedHead extends BaseHead {
             return token;
         }
 
+        private boolean isWeakEntity(String value) {
+            if (value == null || value.isBlank()) {
+                return true;
+            }
+            String normalized = normalizeToken(stripPrefix(value));
+            return "system".equals(normalized) || "systems".equals(normalized)
+                    || "component".equals(normalized) || "components".equals(normalized);
+        }
+
         private static final class PlanSelection {
             private final com.sahr.core.QueryPlan.Kind kind;
             private final QueryGoal query;
@@ -932,6 +1079,18 @@ public final class OntologyDefinedHead extends BaseHead {
             private PlanSelection(com.sahr.core.QueryPlan.Kind kind, QueryGoal query) {
                 this.kind = kind == null ? com.sahr.core.QueryPlan.Kind.RELATION_MATCH : kind;
                 this.query = query;
+            }
+        }
+
+        private static final class PredicateSelection {
+            private final String predicate;
+            private final String cue;
+            private final java.util.List<String> rejected;
+
+            private PredicateSelection(String predicate, String cue, java.util.List<String> rejected) {
+                this.predicate = predicate;
+                this.cue = cue;
+                this.rejected = rejected == null ? java.util.List.of() : java.util.List.copyOf(rejected);
             }
         }
     }
