@@ -819,7 +819,8 @@ public final class OntologyDefinedHead extends BaseHead {
             }
             if (predicate != null) {
                 String normalized = normalizeToken(predicate);
-                if ("cause".equals(normalized) || "causedby".equals(normalized)) {
+                String verbNormalized = normalizeVerb(normalized);
+                if ("cause".equals(verbNormalized) || "causedby".equals(normalized)) {
                     return com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN;
                 }
                 if ("before".equals(normalized) || "after".equals(normalized) || "during".equals(normalized)) {

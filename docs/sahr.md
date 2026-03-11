@@ -350,6 +350,11 @@ objects such as `motor_failure` when the question references a failure.
 Cause-chain execution now falls back to matching rule consequents against
 the target event to surface antecedent causes when explicit `cause`
 assertions are missing.
+The rule-chain fallback now performs a depth-limited BFS over rule
+consequents so multi-hop causal ancestry can be surfaced instead of only
+single-hop matches.
+Cause-chain planning normalizes verb forms so predicates like `caused`
+and `causes` route to the same causal plan as `cause`.
 
 Working Memory
 ---------------

@@ -1175,14 +1175,56 @@ public final class SahrAgent {
     }
 
     private String ruleChainFallback(SymbolId target) {
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
-            RelationAssertion antecedent = rule.antecedent();
-            if (consequent.subject().equals(target) || consequent.object().equals(target)) {
-                return antecedent.subject().value();
+        if (target == null) {
+            return null;
+        }
+        java.util.Set<SymbolId> visited = new java.util.HashSet<>();
+        java.util.ArrayDeque<SymbolId> queue = new java.util.ArrayDeque<>();
+        queue.add(target);
+        visited.add(target);
+        SymbolId lastFound = null;
+        int depth = 0;
+        while (!queue.isEmpty() && depth < 3) {
+            int size = queue.size();
+            for (int i = 0; i < size; i++) {
+                SymbolId current = queue.removeFirst();
+                for (RuleAssertion rule : graph.getAllRules()) {
+                    RelationAssertion consequent = rule.consequent();
+                    RelationAssertion antecedent = rule.antecedent();
+                    if (!consequent.subject().equals(current) && !consequent.object().equals(current)) {
+                        continue;
+                    }
+                    SymbolId cause = selectCauseNode(antecedent);
+                    if (cause == null || !visited.add(cause)) {
+                        continue;
+                    }
+                    lastFound = cause;
+                    queue.addLast(cause);
+                }
             }
+            depth++;
+        }
+        return lastFound != null ? lastFound.value() : null;
+    }
+
+    private SymbolId selectCauseNode(RelationAssertion antecedent) {
+        if (antecedent == null) {
+            return null;
+        }
+        if (isEntity(antecedent.subject())) {
+            return antecedent.subject();
+        }
+        if (isEntity(antecedent.object())) {
+            return antecedent.object();
         }
         return null;
+    }
+
+    private boolean isEntity(SymbolId id) {
+        if (id == null || id.value() == null) {
+            return false;
+        }
+        return id.value().startsWith("entity:");
     }
 
     private String localName(String predicate) {

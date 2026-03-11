@@ -2,7 +2,9 @@ package com.sahr.agent;
 
 import com.sahr.core.EntityNode;
 import com.sahr.core.InMemoryKnowledgeBase;
+import com.sahr.core.QueryGoal;
 import com.sahr.core.RelationAssertion;
+import com.sahr.core.RuleAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.support.SahrTestAgentFactory;
 import org.junit.jupiter.api.Test;
@@ -105,5 +107,38 @@ class SahrAgentQueryTest {
         ));
 
         assertEquals("entity:woman in entity:room", agent.handle("Where is the woman"));
+    }
+
+    @Test
+    void answersCauseChainUsingRules() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        RuleAssertion wheelToReaction = new RuleAssertion(
+                new RelationAssertion(new SymbolId("entity:wheel_motor"), "https://sahr.ai/ontology/relations#fail",
+                        new SymbolId("entity:wheel_motor"), 0.9),
+                new RelationAssertion(new SymbolId("entity:reaction_wheel"), "https://sahr.ai/ontology/relations#fail",
+                        new SymbolId("entity:reaction_wheel"), 0.9),
+                0.9
+        );
+        RuleAssertion reactionToInstability = new RuleAssertion(
+                new RelationAssertion(new SymbolId("entity:reaction_wheel"), "https://sahr.ai/ontology/relations#fail",
+                        new SymbolId("entity:reaction_wheel"), 0.9),
+                new RelationAssertion(new SymbolId("entity:instability"), "https://sahr.ai/ontology/relations#causedBy",
+                        new SymbolId("entity:reaction_wheel"), 0.9),
+                0.9
+        );
+        graph.addRule(wheelToReaction);
+        graph.addRule(reactionToInstability);
+
+        try {
+            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
+            method.setAccessible(true);
+            QueryGoal goal = QueryGoal.relation(null, "cause", "entity:instability", null);
+            String answer = (String) method.invoke(agent, goal);
+            assertEquals("entity:wheel_motor", answer);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed to invoke executeCauseChain", e);
+        }
     }
 }
