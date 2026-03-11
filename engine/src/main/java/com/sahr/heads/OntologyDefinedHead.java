@@ -13,10 +13,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 public final class OntologyDefinedHead extends BaseHead {
+    private static final Logger logger = Logger.getLogger(OntologyDefinedHead.class.getName());
     private final List<OntologyHeadDefinition> definitions;
     private final Map<String, OntologyHeadExecutor> executors;
+    private final Set<String> unknownExecutors = ConcurrentHashMap.newKeySet();
 
     public OntologyDefinedHead(List<OntologyHeadDefinition> definitions,
                                Map<String, List<String>> predicateAliases) {
@@ -52,11 +56,12 @@ public final class OntologyDefinedHead extends BaseHead {
             }
             OntologyHeadExecutor executor = executors.get(definition.executorType());
             if (executor == null) {
+                warnUnknownExecutor(definition);
                 continue;
             }
             List<ReasoningCandidate> produced = executor.execute(context, definition);
             if (!produced.isEmpty()) {
-                candidates.addAll(scaleCandidates(definition, produced));
+                candidates.addAll(overrideCandidates(definition, produced));
             }
         }
         return candidates;
@@ -188,31 +193,28 @@ public final class OntologyDefinedHead extends BaseHead {
         map.put(executor.type(), executor);
     }
 
-    private List<ReasoningCandidate> scaleCandidates(OntologyHeadDefinition definition,
-                                                     List<ReasoningCandidate> candidates) {
+    private List<ReasoningCandidate> overrideCandidates(OntologyHeadDefinition definition,
+                                                        List<ReasoningCandidate> candidates) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
         double weight = definition.baseWeight();
-        if (Math.abs(weight - 1.0) < 0.0001) {
-            return candidates;
-        }
-        List<ReasoningCandidate> scaled = new ArrayList<>(candidates.size());
+        List<ReasoningCandidate> adjusted = new ArrayList<>(candidates.size());
         for (ReasoningCandidate candidate : candidates) {
             double headScore = clampScore(candidate.score() * weight);
             Map<String, Double> breakdown = new HashMap<>(candidate.scoreBreakdown());
             breakdown.put("head_base_weight", weight);
-            scaled.add(new ReasoningCandidate(
+            adjusted.add(new ReasoningCandidate(
                     candidate.type(),
                     candidate.payload(),
                     headScore,
-                    candidate.producedBy(),
+                    definition.name(),
                     candidate.evidence(),
                     breakdown,
                     candidate.inferenceDepth()
             ));
         }
-        return scaled;
+        return adjusted;
     }
 
     private double clampScore(double value) {
@@ -223,6 +225,15 @@ public final class OntologyDefinedHead extends BaseHead {
             return 1.0;
         }
         return value;
+    }
+
+    private void warnUnknownExecutor(OntologyHeadDefinition definition) {
+        String type = definition.executorType();
+        if (!unknownExecutors.add(type)) {
+            return;
+        }
+        logger.warning(() -> "Unknown executorType '" + type + "' for OWL head '" + definition.name()
+                + "'. Head will be skipped.");
     }
 
     private static final class PatternBinding {
