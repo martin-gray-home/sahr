@@ -1144,6 +1144,13 @@ public final class SahrAgent {
         if (target == null) {
             return "No candidates produced.";
         }
+        String predicate = localName(goal.predicate());
+        if (!predicate.isBlank() && !"cause".equals(predicate) && !"causedby".equals(predicate)) {
+            java.util.List<String> predicateExplanation = buildPredicateExplanation(goal, predicate, 3);
+            if (!predicateExplanation.isEmpty()) {
+                return String.join("\n", predicateExplanation);
+            }
+        }
         java.util.List<String> explanation = buildExplanationChain(target, 4);
         if (!explanation.isEmpty()) {
             return String.join("\n", explanation);
@@ -1158,8 +1165,8 @@ public final class SahrAgent {
             for (int i = 0; i < size; i++) {
                 SymbolId current = queue.removeFirst();
                 for (RelationAssertion assertion : graph.getAllAssertions()) {
-                    String predicate = localName(assertion.predicate());
-                    if (!"cause".equals(predicate) && !"causedby".equals(predicate)) {
+                    String assertionPredicate = localName(assertion.predicate());
+                    if (!"cause".equals(assertionPredicate) && !"causedby".equals(assertionPredicate)) {
                         continue;
                     }
                     if (assertion.object().equals(current)) {
@@ -1171,7 +1178,7 @@ public final class SahrAgent {
                             }
                         }
                     }
-                    if ("causedby".equals(predicate) && assertion.subject().equals(current)) {
+                    if ("causedby".equals(assertionPredicate) && assertion.subject().equals(current)) {
                         SymbolId cause = assertion.object();
                         if (visited.add(cause)) {
                             queue.addLast(cause);
@@ -1193,6 +1200,48 @@ public final class SahrAgent {
             return ruleChain;
         }
         return "No candidates produced.";
+    }
+
+    private java.util.List<String> buildPredicateExplanation(QueryGoal goal, String predicate, int limit) {
+        java.util.List<String> sentences = new java.util.ArrayList<>();
+        if (goal == null || predicate == null || predicate.isBlank()) {
+            return sentences;
+        }
+        SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
+        SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (!predicate.equals(localName(assertion.predicate()))) {
+                continue;
+            }
+            if (subject != null && !assertion.subject().equals(subject)) {
+                continue;
+            }
+            if (object != null && !assertion.object().equals(object)) {
+                continue;
+            }
+            sentences.add(displayValue(assertion.subject()) + " " + displayPredicate(assertion.predicate()) + " "
+                    + displayValue(assertion.object()) + ".");
+            if (sentences.size() >= limit) {
+                return sentences;
+            }
+        }
+        for (RuleAssertion rule : graph.getAllRules()) {
+            RelationAssertion consequent = rule.consequent();
+            if (!predicate.equals(localName(consequent.predicate()))) {
+                continue;
+            }
+            if (subject != null && !consequent.subject().equals(subject)) {
+                continue;
+            }
+            if (object != null && !consequent.object().equals(object)) {
+                continue;
+            }
+            sentences.add(formatRuleSentence(rule));
+            if (sentences.size() >= limit) {
+                return sentences;
+            }
+        }
+        return sentences;
     }
 
     private java.util.List<String> buildExplanationChain(SymbolId target, int maxDepth) {

@@ -363,6 +363,11 @@ from the query itself) when other candidates exist, so self-loops do not
 dominate answers.
 Cause-chain answers now assemble short, human-readable explanation
 sentences from causal assertions or rules when possible.
+For non-causal “why” queries (e.g., asking why `backupFor` applies), the
+cause-chain executor will also emit explanation sentences derived from
+matching predicate assertions or rule consequents, so “why” can be
+answered with rule-backed evidence even when no explicit `cause` facts
+exist.
 
 Working Memory
 ---------------

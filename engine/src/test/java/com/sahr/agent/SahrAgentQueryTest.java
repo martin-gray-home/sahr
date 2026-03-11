@@ -143,4 +143,31 @@ class SahrAgentQueryTest {
             throw new AssertionError("Failed to invoke executeCauseChain", e);
         }
     }
+
+    @Test
+    void explainsPredicateUsingRuleConsequent() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        RuleAssertion backupRule = new RuleAssertion(
+                new RelationAssertion(new SymbolId("entity:actuators"), "https://sahr.ai/ontology/relations#fail",
+                        new SymbolId("concept:true"), 0.9),
+                new RelationAssertion(new SymbolId("entity:thrusters"), "https://sahr.ai/ontology/relations#backupFor",
+                        new SymbolId("concept:attitude_control"), 0.9),
+                0.9
+        );
+        graph.addRule(backupRule);
+
+        try {
+            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
+            method.setAccessible(true);
+            QueryGoal goal = QueryGoal.relation("entity:thrusters", "backupFor", "concept:attitude_control", null);
+            String answer = (String) method.invoke(agent, goal);
+            assertTrue(answer.contains("If"));
+            assertTrue(answer.contains("thrusters"));
+            assertTrue(answer.contains("backup"));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed to invoke executeCauseChain", e);
+        }
+    }
 }
