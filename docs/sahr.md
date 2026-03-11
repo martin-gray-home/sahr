@@ -317,6 +317,13 @@ forms (e.g., `wear`, `with`) and their SAHR relation IRIs
 Reciprocal phrases like “each other” are parsed into symmetric
 relations (e.g., `opposite`) rather than introducing a literal `other`
 entity.
+Query-plan execution now binds over stored rules as well as assertions,
+so relation queries can resolve against rule antecedents/consequents when
+no direct fact is present. Rule binding emits fine-grained skip reasons
+at `FINE` logging to aid debugging.
+QUERY_PLAN execution logs a compact plan summary at `FINE`, and the
+cause-chain executor will fall back to rule binding if no causal
+assertions are found.
 
 Working Memory
 ---------------

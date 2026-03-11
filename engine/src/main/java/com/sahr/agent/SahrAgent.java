@@ -860,6 +860,13 @@ public final class SahrAgent {
         if (goal == null || goal.type() == QueryGoal.Type.UNKNOWN) {
             return "No candidates produced.";
         }
+        if (logger.isLoggable(java.util.logging.Level.FINE)) {
+            logger.fine(() -> "QUERY_PLAN kind=" + plan.kind()
+                    + " goalType=" + goal.type()
+                    + " subject=" + safe(goal.subject())
+                    + " predicate=" + safe(goal.predicate())
+                    + " object=" + safe(goal.object()));
+        }
         return switch (plan.kind()) {
             case RELATION_MATCH -> executeRelationMatch(goal);
             case TEMPORAL_MATCH -> executeTemporalMatch(goal);
@@ -881,6 +888,10 @@ public final class SahrAgent {
             String direct = directRelationMatch(goal);
             if (direct != null) {
                 return direct;
+            }
+            String ruleMatch = directRuleMatch(goal);
+            if (ruleMatch != null) {
+                return ruleMatch;
             }
             String whereFallback = directWhereMatch(goal);
             if (whereFallback != null) {
@@ -921,6 +932,74 @@ public final class SahrAgent {
             }
         }
         return null;
+    }
+
+    private String directRuleMatch(QueryGoal goal) {
+        String predicate = localName(goal.predicate());
+        if (predicate.isBlank()) {
+            return null;
+        }
+        SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
+        SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
+        for (RuleAssertion rule : graph.getAllRules()) {
+            RelationAssertion consequent = rule.consequent();
+            RelationAssertion antecedent = rule.antecedent();
+            String consequentPredicate = localName(consequent.predicate());
+            String antecedentPredicate = localName(antecedent.predicate());
+
+            if (predicate.equals(consequentPredicate)) {
+                String match = ruleMatchValue("consequent", subject, object, consequent);
+                if (match != null) {
+                    return match;
+                }
+                logRuleReject(rule, predicate, subject, object, "consequent");
+            }
+            if (predicate.equals(antecedentPredicate)) {
+                String match = ruleMatchValue("antecedent", subject, object, antecedent);
+                if (match != null) {
+                    return match;
+                }
+                logRuleReject(rule, predicate, subject, object, "antecedent");
+            }
+        }
+        return null;
+    }
+
+    private String ruleMatchValue(String side, SymbolId subject, SymbolId object, RelationAssertion assertion) {
+        if (subject != null && assertion.subject().equals(subject)) {
+            return assertion.object().value();
+        }
+        if (object != null && assertion.object().equals(object)) {
+            return assertion.subject().value();
+        }
+        if (subject == null && object == null) {
+            return "rule(" + side + "): " + assertion.subject().value() + " "
+                    + localName(assertion.predicate()) + " " + assertion.object().value();
+        }
+        return null;
+    }
+
+    private void logRuleReject(RuleAssertion rule,
+                               String expectedPredicate,
+                               SymbolId subject,
+                               SymbolId object,
+                               String side) {
+        if (!logger.isLoggable(java.util.logging.Level.FINE)) {
+            return;
+        }
+        RelationAssertion assertion = "consequent".equals(side) ? rule.consequent() : rule.antecedent();
+        StringBuilder reason = new StringBuilder("rule-bind skip side=").append(side)
+                .append(" expectedPredicate=").append(expectedPredicate)
+                .append(" rulePredicate=").append(localName(assertion.predicate()));
+        if (subject != null && !assertion.subject().equals(subject)) {
+            reason.append(" subjectMismatch expected=").append(subject.value())
+                    .append(" actual=").append(assertion.subject().value());
+        }
+        if (object != null && !assertion.object().equals(object)) {
+            reason.append(" objectMismatch expected=").append(object.value())
+                    .append(" actual=").append(assertion.object().value());
+        }
+        logger.fine(() -> reason.append(" rule=").append(rule).toString());
     }
 
     private String directWhereMatch(QueryGoal goal) {
@@ -1059,6 +1138,10 @@ public final class SahrAgent {
                 }
             }
             depth++;
+        }
+        String ruleFallback = directRuleMatch(goal);
+        if (ruleFallback != null) {
+            return ruleFallback;
         }
         return "No candidates produced.";
     }
