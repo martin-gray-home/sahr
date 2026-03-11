@@ -216,6 +216,30 @@ class StatementParserTest {
     }
 
     @Test
+    void emitsPossessiveCandidatesFromDependencies() {
+        Statement statement = parser.parse("The hat of the woman is in the room").orElseThrow();
+        List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
+        all.add(statement);
+
+        assertTrue(all.stream().anyMatch(item ->
+                ("possess".equals(item.predicate()) || "have".equals(item.predicate()))
+                        && "entity:woman".equals(item.subject().value())
+                        && "entity:hat".equals(item.object().value())));
+    }
+
+    @Test
+    void emitsMannerCandidatesFromAdverbs() {
+        Statement statement = parser.parse("The man ran quickly").orElseThrow();
+        List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
+        all.add(statement);
+
+        assertTrue(all.stream().anyMatch(item ->
+                "hasManner".equals(item.predicate())
+                        && "entity:man".equals(item.subject().value())
+                        && "entity:quickly".equals(item.object().value())));
+    }
+
+    @Test
     void capturesAdjectiveNounObject() {
         Statement statement = parser.parse("The man is in the red room").orElseThrow();
         List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());

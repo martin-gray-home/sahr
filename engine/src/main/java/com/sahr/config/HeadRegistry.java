@@ -11,6 +11,8 @@ import com.sahr.heads.RelationPropagationHead;
 import com.sahr.heads.RelationQueryHead;
 import com.sahr.heads.SubgoalExpansionHead;
 import com.sahr.heads.SurfaceContactPropagationHead;
+import com.sahr.heads.OntologyDefinedHead;
+import com.sahr.ontology.OntologyHeadCompiler;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,16 +24,20 @@ public final class HeadRegistry {
     private HeadRegistry() {
     }
 
-    public static List<SymbolicAttentionHead> buildHeads(EngineConfig config) {
+    public static List<SymbolicAttentionHead> buildHeads(EngineConfig config, OntologyContext context) {
         List<SymbolicAttentionHead> heads = new ArrayList<>();
         for (String id : config.headIds()) {
-            heads.add(createHead(id, config));
+            heads.add(createHead(id, config, context));
         }
         logger.info(() -> "Initialized heads: " + config.headIds());
         return heads;
     }
 
-    private static SymbolicAttentionHead createHead(String id, EngineConfig config) {
+    public static List<SymbolicAttentionHead> buildHeads(EngineConfig config) {
+        return buildHeads(config, null);
+    }
+
+    private static SymbolicAttentionHead createHead(String id, EngineConfig config, OntologyContext context) {
         switch (id) {
             case "graph-retrieval":
                 return new GraphRetrievalHead();
@@ -53,6 +59,11 @@ public final class HeadRegistry {
                 return new DependencyChainHead();
             case "query-alignment":
                 return new QueryAlignmentHead();
+            case "ontology-defined":
+                if (context == null || context.ontology() == null) {
+                    throw new IllegalArgumentException("Ontology-defined heads require an ontology context.");
+                }
+                return new OntologyDefinedHead(OntologyHeadCompiler.compile(context.ontology()));
             default:
                 throw new IllegalArgumentException("Unknown head id: " + id);
         }

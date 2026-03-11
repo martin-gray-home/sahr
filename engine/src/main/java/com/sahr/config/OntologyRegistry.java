@@ -37,7 +37,7 @@ public final class OntologyRegistry {
         logger.info("Ontology loaded. Building cached view.");
         OntologyService cached = new CachedOntologyService(delegate);
         TermMapper mapper = buildTermMapper(config, ontology);
-        return new OntologyContext(cached, mapper);
+        return new OntologyContext(cached, mapper, ontology);
     }
 
     private static TermMapper buildTermMapper(EngineConfig config, OWLOntology ontology) {

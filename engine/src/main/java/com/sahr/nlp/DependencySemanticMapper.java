@@ -38,7 +38,9 @@ public final class DependencySemanticMapper {
         List<Statement> candidates = new ArrayList<>();
         addVerbObjectCandidates(graph, helpers, candidates);
         addPrepositionCandidates(graph, helpers, candidates);
+        addPossessiveCandidates(graph, helpers, candidates);
         addAdjectiveCandidates(graph, helpers, candidates);
+        addAdverbCandidates(graph, helpers, candidates);
         return dedupe(candidates);
     }
 
@@ -110,6 +112,50 @@ public final class DependencySemanticMapper {
                 continue;
             }
             out.add(helpers.buildStatement(subjectToken, objectToken, "hasAttribute", false));
+        }
+    }
+
+    private void addPossessiveCandidates(SemanticGraph graph, StatementParserHelpers helpers, List<Statement> out) {
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            if (!"nmod".equals(edge.getRelation().getShortName())) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific == null) {
+                continue;
+            }
+            String normalizedSpecific = specific.toLowerCase(Locale.ROOT);
+            if (!"poss".equals(normalizedSpecific) && !"of".equals(normalizedSpecific)) {
+                continue;
+            }
+            CoreLabel possessed = edge.getGovernor().backingLabel();
+            CoreLabel possessor = edge.getDependent().backingLabel();
+            String subjectToken = helpers.normalizeCompoundToken(graph, possessor);
+            String objectToken = helpers.normalizeCompoundToken(graph, possessed);
+            if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+                continue;
+            }
+            out.add(helpers.buildStatement(subjectToken, objectToken, "possess", false));
+            out.add(helpers.buildStatement(subjectToken, objectToken, "have", false));
+        }
+    }
+
+    private void addAdverbCandidates(SemanticGraph graph, StatementParserHelpers helpers, List<Statement> out) {
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            if (!"advmod".equals(edge.getRelation().getShortName())) {
+                continue;
+            }
+            CoreLabel subject = helpers.findDependent(graph, edge.getGovernor(), "nsubj");
+            if (subject == null) {
+                continue;
+            }
+            CoreLabel adverb = edge.getDependent().backingLabel();
+            String subjectToken = helpers.normalizeCompoundToken(graph, subject);
+            String objectToken = helpers.normalizeToken(adverb.word());
+            if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+                continue;
+            }
+            out.add(helpers.buildStatement(subjectToken, objectToken, "hasManner", false));
         }
     }
 

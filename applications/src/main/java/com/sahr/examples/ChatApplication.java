@@ -30,7 +30,7 @@ public final class ChatApplication {
         OntologyContext context = OntologyRegistry.loadOntologyContext(config);
         OntologyService ontology = new CompositeOntologyService(java.util.List.of(localOntology, context.service()));
 
-        SahrReasoner reasoner = new SahrReasoner(HeadRegistry.buildHeads(config));
+        SahrReasoner reasoner = new SahrReasoner(HeadRegistry.buildHeads(config, context));
         SimpleQueryParser parser = new SimpleQueryParser(true);
         StatementParser statementParser = new StatementParser(true);
         SahrAgent agent = new SahrAgent(graph, ontology, reasoner, parser, statementParser, context.termMapper());

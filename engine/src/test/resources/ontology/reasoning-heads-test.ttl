@@ -1,0 +1,59 @@
+@prefix headr: <https://sahr.ai/ontology/reasoning#> .
+@prefix test: <http://example.org/test#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+headr:ReasoningHead a owl:Class .
+headr:Pattern a owl:Class .
+headr:TriplePattern a owl:Class .
+headr:Variable a owl:Class .
+headr:AddAssertion a owl:Class .
+headr:ScorePolicy a owl:Class .
+
+headr:hasPattern a owl:ObjectProperty .
+headr:hasTriple a owl:ObjectProperty .
+headr:hasAction a owl:ObjectProperty .
+headr:hasScorePolicy a owl:ObjectProperty .
+headr:subject a owl:ObjectProperty .
+headr:predicate a owl:ObjectProperty .
+headr:object a owl:ObjectProperty .
+
+headr:name a owl:DatatypeProperty .
+headr:varName a owl:DatatypeProperty .
+headr:baseWeight a owl:DatatypeProperty .
+
+headr:varX a headr:Variable ;
+    headr:varName "x" .
+
+headr:varY a headr:Variable ;
+    headr:varName "y" .
+
+headr:varZ a headr:Variable ;
+    headr:varName "z" .
+
+headr:tpLeft a headr:TriplePattern ;
+    headr:subject headr:varX ;
+    headr:predicate test:locatedIn ;
+    headr:object headr:varY .
+
+headr:tpRight a headr:TriplePattern ;
+    headr:subject headr:varY ;
+    headr:predicate test:locatedIn ;
+    headr:object headr:varZ .
+
+headr:patternTransitive a headr:Pattern ;
+    headr:hasTriple headr:tpLeft, headr:tpRight .
+
+headr:actionTransitive a headr:AddAssertion ;
+    headr:subject headr:varX ;
+    headr:predicate test:locatedIn ;
+    headr:object headr:varZ .
+
+headr:scoreTransitive a headr:ScorePolicy ;
+    headr:baseWeight "0.8"^^xsd:double .
+
+headr:TransitiveLocatedInHead a headr:ReasoningHead ;
+    headr:name "transitive-test" ;
+    headr:hasPattern headr:patternTransitive ;
+    headr:hasAction headr:actionTransitive ;
+    headr:hasScorePolicy headr:scoreTransitive .

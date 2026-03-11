@@ -1,9 +1,11 @@
 package com.sahr.core;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public final class SymbolicAttentionScorer {
     private static final double NEUTRAL_QUERY_MATCH = 0.5;
@@ -83,7 +85,7 @@ public final class SymbolicAttentionScorer {
         if (predicate == null) {
             return DEFAULT_RELATION_MATCH;
         }
-        if (LOCATION_PREDICATES.contains(predicate)) {
+        if (isLocationPredicate(ontology, predicate)) {
             return 1.0;
         }
         if (expectedRange != null && isIri(predicate)) {
@@ -96,7 +98,7 @@ public final class SymbolicAttentionScorer {
         if (expectedRange == null || expectedRange.isBlank()) {
             return DEFAULT_TYPE_MATCH;
         }
-        if (LOCATION_PREDICATES.contains(predicate)) {
+        if (isLocationPredicate(ontology, predicate)) {
             return 1.0;
         }
         if (!isIri(predicate)) {
@@ -124,6 +126,20 @@ public final class SymbolicAttentionScorer {
             return 1.0;
         }
         return DEFAULT_ENTITY_MATCH;
+    }
+
+    private boolean isLocationPredicate(OntologyService ontology, String predicate) {
+        if (predicate == null) {
+            return false;
+        }
+        if (LOCATION_PREDICATES.contains(predicate)) {
+            return true;
+        }
+        Set<String> family = new HashSet<>();
+        family.addAll(HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER));
+        family.addAll(HeadOntology.expandFamily(ontology, HeadOntology.CONTAINMENT));
+        family.addAll(HeadOntology.expandFamily(ontology, HeadOntology.SURFACE_CONTACT));
+        return family.contains(predicate);
     }
 
     private double matchRelationPredicate(HeadContext context, ReasoningCandidate candidate, QueryGoal query) {

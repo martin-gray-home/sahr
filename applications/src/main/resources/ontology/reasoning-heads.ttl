@@ -1,0 +1,61 @@
+@prefix headr: <https://sahr.ai/ontology/reasoning#> .
+@prefix sahr: <https://sahr.ai/ontology/relations#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+headr:ReasoningHead a owl:Class .
+headr:Pattern a owl:Class .
+headr:TriplePattern a owl:Class .
+headr:Variable a owl:Class .
+headr:Constant a owl:Class .
+headr:AddAssertion a owl:Class .
+headr:ScorePolicy a owl:Class .
+
+headr:hasPattern a owl:ObjectProperty .
+headr:hasTriple a owl:ObjectProperty .
+headr:hasAction a owl:ObjectProperty .
+headr:hasScorePolicy a owl:ObjectProperty .
+headr:subject a owl:ObjectProperty .
+headr:predicate a owl:ObjectProperty .
+headr:object a owl:ObjectProperty .
+
+headr:name a owl:DatatypeProperty .
+headr:varName a owl:DatatypeProperty .
+headr:value a owl:DatatypeProperty .
+headr:baseWeight a owl:DatatypeProperty .
+
+headr:varA a headr:Variable ;
+    headr:varName "a" .
+
+headr:varB a headr:Variable ;
+    headr:varName "b" .
+
+headr:varC a headr:Variable ;
+    headr:varName "c" .
+
+headr:tpLocatedInLeft a headr:TriplePattern ;
+    headr:subject headr:varA ;
+    headr:predicate sahr:locatedIn ;
+    headr:object headr:varB .
+
+headr:tpLocatedInRight a headr:TriplePattern ;
+    headr:subject headr:varB ;
+    headr:predicate sahr:locatedIn ;
+    headr:object headr:varC .
+
+headr:patternLocatedInTransitive a headr:Pattern ;
+    headr:hasTriple headr:tpLocatedInLeft, headr:tpLocatedInRight .
+
+headr:actionLocatedInTransitive a headr:AddAssertion ;
+    headr:subject headr:varA ;
+    headr:predicate sahr:locatedIn ;
+    headr:object headr:varC .
+
+headr:scoreLocatedInTransitive a headr:ScorePolicy ;
+    headr:baseWeight "0.72"^^xsd:double .
+
+headr:TransitiveLocatedInHead a headr:ReasoningHead ;
+    headr:name "transitive-locatedIn" ;
+    headr:hasPattern headr:patternLocatedInTransitive ;
+    headr:hasAction headr:actionLocatedInTransitive ;
+    headr:hasScorePolicy headr:scoreLocatedInTransitive .
