@@ -1131,6 +1131,7 @@ public final class SimpleQueryParser {
         } else if (trimmed.startsWith("an ")) {
             trimmed = trimmed.substring(3);
         }
+        trimmed = trimmed.toLowerCase(java.util.Locale.ROOT);
         trimmed = trimmed.replaceAll("[^a-z0-9_\\s]", "");
         String normalized = trimmed.trim().replaceAll("\\s+", "_");
         if (normalized.startsWith("emperature")) {

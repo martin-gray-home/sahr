@@ -758,6 +758,26 @@ public final class OntologyDefinedHead extends BaseHead {
                 if (derivedObject != null && !derivedObject.isBlank()) {
                     object = derivedObject;
                 }
+                ConditionBridge bridge = inferConditionBridge(tokens, context.graph());
+                if (bridge != null) {
+                    if (bridge.predicate != null && !bridge.predicate.isBlank()) {
+                        predicate = bridge.predicate;
+                        kind = inferPlanKind(context, predicate);
+                    }
+                    if (bridge.object != null && !bridge.object.isBlank()) {
+                        object = bridge.object;
+                    }
+                    if (bridge.forceSubjectNull) {
+                        subject = null;
+                    }
+                    if (logger.isLoggable(java.util.logging.Level.FINE)) {
+                        logger.fine(() -> "planner condition bridge failed="
+                                + String.join(",", bridge.failedConditions)
+                                + " preserved=" + String.join(",", bridge.preservedConditions)
+                                + " predicate=" + safeToken(bridge.predicate)
+                                + " object=" + safeToken(bridge.object));
+                    }
+                }
             }
             if (predicate == null || predicate.isBlank()) {
                 return new PlanSelection(kind, query);
@@ -915,6 +935,81 @@ public final class OntologyDefinedHead extends BaseHead {
             return null;
         }
 
+        private ConditionBridge inferConditionBridge(java.util.List<String> tokens,
+                                                     com.sahr.core.KnowledgeBase graph) {
+            if (tokens == null || tokens.isEmpty() || graph == null) {
+                return null;
+            }
+            java.util.List<String> normalized = new java.util.ArrayList<>();
+            for (String token : tokens) {
+                String value = normalizeToken(token);
+                if (!value.isBlank()) {
+                    normalized.add(value);
+                }
+            }
+            if (normalized.isEmpty()) {
+                return null;
+            }
+            boolean powerUnavailable = containsAny(normalized, "power", "voltage", "electrical")
+                    && containsAny(normalized, "lost", "drop", "drops", "dropped", "down", "unavailable");
+            boolean propellantAvailable = normalized.contains("propellant")
+                    && containsAny(normalized, "available", "operational", "functional", "normal", "remained");
+            boolean stopFunctioning = containsAny(normalized, "stop", "stops", "stopped")
+                    && containsAny(normalized, "function", "functioning", "working");
+            boolean stillFunctioning = normalized.contains("still")
+                    && containsAny(normalized, "function", "functioning", "operate", "operational");
+
+            java.util.Map<String, String> entityMap = collectEntityNames(graph);
+            if (entityMap.isEmpty()) {
+                return null;
+            }
+            if (stopFunctioning && powerUnavailable) {
+                String resource = firstAvailableResource(entityMap, "electrical_power",
+                        "electrical_bus_voltage", "electrical_bus", "power");
+                if (resource != null) {
+                    return new ConditionBridge(
+                            java.util.List.of("power_unavailable"),
+                            java.util.List.of(),
+                            "poweredby",
+                            resource,
+                            true
+                    );
+                }
+            }
+            if (stillFunctioning && propellantAvailable) {
+                String resource = firstAvailableResource(entityMap, "propellant");
+                if (resource != null) {
+                    return new ConditionBridge(
+                            java.util.List.of(),
+                            java.util.List.of("propellant_available"),
+                            "poweredby",
+                            resource,
+                            true
+                    );
+                }
+            }
+            return null;
+        }
+
+        private boolean containsAny(java.util.List<String> tokens, String... options) {
+            for (String option : options) {
+                if (tokens.contains(option)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private String firstAvailableResource(java.util.Map<String, String> entityMap, String... keys) {
+            for (String key : keys) {
+                String match = entityMap.get(key);
+                if (match != null) {
+                    return match;
+                }
+            }
+            return null;
+        }
+
         private String inferEntityAfterToken(java.util.List<String> tokens,
                                              String marker,
                                              java.util.Map<String, String> entityMap) {
@@ -934,6 +1029,13 @@ public final class OntologyDefinedHead extends BaseHead {
                 }
             }
             return null;
+        }
+
+        private String safeToken(String value) {
+            if (value == null) {
+                return "";
+            }
+            return value.replaceAll("\\s+", " ").trim();
         }
 
         private java.util.Set<String> collectPredicateNames(com.sahr.core.KnowledgeBase graph) {
@@ -1091,6 +1193,26 @@ public final class OntologyDefinedHead extends BaseHead {
                 this.predicate = predicate;
                 this.cue = cue;
                 this.rejected = rejected == null ? java.util.List.of() : java.util.List.copyOf(rejected);
+            }
+        }
+
+        private static final class ConditionBridge {
+            private final java.util.List<String> failedConditions;
+            private final java.util.List<String> preservedConditions;
+            private final String predicate;
+            private final String object;
+            private final boolean forceSubjectNull;
+
+            private ConditionBridge(java.util.List<String> failedConditions,
+                                    java.util.List<String> preservedConditions,
+                                    String predicate,
+                                    String object,
+                                    boolean forceSubjectNull) {
+                this.failedConditions = failedConditions == null ? java.util.List.of() : java.util.List.copyOf(failedConditions);
+                this.preservedConditions = preservedConditions == null ? java.util.List.of() : java.util.List.copyOf(preservedConditions);
+                this.predicate = predicate;
+                this.object = object;
+                this.forceSubjectNull = forceSubjectNull;
             }
         }
     }

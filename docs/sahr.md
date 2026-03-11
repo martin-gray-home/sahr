@@ -335,6 +335,12 @@ Planner predicate selection now bridges common capability phrases like
 when those predicates exist in the graph. For `restore` and `backupFor`
 queries, the planner also infers likely objects from phrases such as
 “stability” or “... for <object>”.
+Conditional questions also receive a generic capability bridge: the
+planner normalizes degraded/available resource phrases (e.g., power
+unavailable, propellant available) and maps them into dependency queries
+by selecting a resource-backed predicate (e.g., `poweredBy`) plus the
+resource object so rule/fact binding can surface affected or surviving
+systems. The normalized condition bundle is logged at `FINE`.
 
 Working Memory
 ---------------
@@ -567,6 +573,7 @@ This sets `sahr.log.level=FINE` to log config loading, ontology initialization, 
 # Statement Parsing
 
 `StatementParser` uses Stanford CoreNLP dependency parsing to extract subject–predicate–object structures generically (including `nmod` and `obl` prepositions). It falls back to simple pattern rules when parsing fails, and prioritizes explicit “used as/used to” patterns before CoreNLP so the surface predicate stays `use` for later canonicalization into `backupFor` or `control`. Unary failure clauses like “actuators fail” are handled as a compact `fail` predicate with a boolean concept object. Compound subjects (e.g., "man and boy") are tagged so the agent can apply multiple assertions, and multiple prepositional relations in a single sentence are surfaced as additional statements. Copular, verb-object, adjectival, appositive, relative-clause, adverbial, and clausal-complement relations can be batched into `Statement.additionalStatements` to maximize assertions per input, including phrasal verbs (`compound:prt`) like “pick up.”
+Token normalization lowercases before filtering non-alphanumerics so leading uppercase letters are preserved in entity IDs.
 
 ---
 

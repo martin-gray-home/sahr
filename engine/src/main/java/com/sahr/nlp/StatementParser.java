@@ -1178,6 +1178,7 @@ public final class StatementParser {
         if ("the".equals(trimmed) || "a".equals(trimmed) || "an".equals(trimmed)) {
             return "";
         }
+        trimmed = trimmed.toLowerCase(Locale.ROOT);
         trimmed = trimmed.replaceAll("[^a-z0-9_\\s]", "");
         String normalized = trimmed.trim().replaceAll("\\s+", "_");
         return correctCommonTypos(normalized);

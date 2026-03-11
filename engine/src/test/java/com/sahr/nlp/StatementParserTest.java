@@ -57,6 +57,15 @@ class StatementParserTest {
     }
 
     @Test
+    void preservesLeadingCharacterInEntities() {
+        Statement reaction = parser.parse("Reaction wheels require electrical power to operate.").orElseThrow();
+        Statement thrusters = parser.parse("Thrusters require propellant to operate.").orElseThrow();
+
+        assertEquals("entity:reaction_wheels", reaction.subject().value());
+        assertEquals("entity:thrusters", thrusters.subject().value());
+    }
+
+    @Test
     void parsesWithHoldingAndCarryingStatements() {
         Statement with = parser.parse("The woman is with the man").orElseThrow();
         assertEquals("entity:woman", with.subject().value());
