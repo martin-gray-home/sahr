@@ -477,6 +477,7 @@ public final class SahrAgent {
             RuleAssertion rule = (RuleAssertion) payload;
             boolean added = addRuleIfNew(rule);
             logger.fine(() -> "Applied rule payload: " + rule);
+            logIngested("rule", rule.toString(), null, null, null);
             return added ? ApplyResult.added("Rule recorded.") : ApplyResult.existing("Rule already known.");
         }
         if (payload instanceof RelationAssertion) {
@@ -489,6 +490,7 @@ public final class SahrAgent {
                 runPropagationClosure();
             }
             logger.fine(() -> "Applied assertion payload: " + payload);
+            logIngested("assertion", assertion.toString(), assertion.subject().value(), assertion.predicate(), assertion.object().value());
             return added ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
         }
         if (payload instanceof StatementBatch) {
@@ -527,9 +529,25 @@ public final class SahrAgent {
                 runPropagationClosure();
             }
             logger.fine(() -> "Applied statement assertion: " + statement);
+            logIngested("statement", statement.predicate(), statement.subject().value(), statement.predicate(), statement.object().value());
             return addedAny ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
         }
         return ApplyResult.existing("Unknown assertion payload.");
+    }
+
+    private void logIngested(String kind, String label, String subject, String predicate, String object) {
+        logger.fine(() -> "INGEST kind=" + kind
+                + " label=" + safe(label)
+                + " subject=" + safe(subject)
+                + " predicate=" + safe(predicate)
+                + " object=" + safe(object));
+    }
+
+    private String safe(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replaceAll("\\s+", " ").trim();
     }
 
     private String applyAssertion(Object payload) {
