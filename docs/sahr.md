@@ -419,6 +419,9 @@ answers surface operational context alongside the restored state.
 Statement parsing now normalizes negated ability/control patterns (e.g.,
 “cannot operate”, “cannot be controlled”) into boolean predicates so rule
 consequents preserve the correct polarity for failure reasoning.
+Cause-chain ranking now prefers candidates with temporal or telemetry
+support, and will emit temporal evidence sentences when available to
+improve sequence-oriented explanations.
 
 Working Memory
 ---------------

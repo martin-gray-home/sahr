@@ -1648,6 +1648,97 @@ public final class SahrAgent {
         return score;
     }
 
+    private double causeEvidenceScore(SymbolId cause, SymbolId effect) {
+        if (cause == null) {
+            return 0.0;
+        }
+        double score = specificityScore(cause.value());
+        score += temporalSupportScore(cause, effect);
+        score += telemetrySupportScore(cause);
+        return score;
+    }
+
+    private double temporalSupportScore(SymbolId cause, SymbolId effect) {
+        if (cause == null || effect == null) {
+            return 0.0;
+        }
+        double score = 0.0;
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
+                continue;
+            }
+            if (assertion.subject().equals(cause) && assertion.object().equals(effect)) {
+                score += 0.4;
+            } else if ("after".equals(predicate) && assertion.subject().equals(effect) && assertion.object().equals(cause)) {
+                score += 0.4;
+            } else if ("before".equals(predicate) && assertion.subject().equals(effect) && assertion.object().equals(cause)) {
+                score += 0.2;
+            } else if ("during".equals(predicate)
+                    && (assertion.subject().equals(cause) || assertion.subject().equals(effect))) {
+                score += 0.2;
+            }
+        }
+        return score;
+    }
+
+    private double telemetrySupportScore(SymbolId cause) {
+        if (cause == null) {
+            return 0.0;
+        }
+        double score = 0.0;
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if ("indicate".equals(predicate) || "signal".equals(predicate) || "suggest".equals(predicate)) {
+                if (assertion.object().equals(cause) || assertion.subject().equals(cause)) {
+                    score += 0.35;
+                }
+            }
+            if ("telemetry".equals(normalizeTypeToken(assertion.subject().value()))) {
+                if (assertion.object().equals(cause)) {
+                    score += 0.2;
+                }
+            }
+        }
+        return score;
+    }
+
+    private java.util.List<String> collectTemporalEvidence(SymbolId cause,
+                                                           SymbolId effect,
+                                                           int limit,
+                                                           java.util.Set<String> seen) {
+        if (limit <= 0) {
+            return java.util.List.of();
+        }
+        java.util.List<String> sentences = new java.util.ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
+                continue;
+            }
+            boolean matches = false;
+            if (cause != null && effect != null) {
+                matches = assertion.subject().equals(cause) && assertion.object().equals(effect);
+                matches = matches || assertion.subject().equals(effect) && assertion.object().equals(cause);
+            } else if (cause != null) {
+                matches = assertion.subject().equals(cause);
+            } else if (effect != null) {
+                matches = assertion.subject().equals(effect);
+            }
+            if (!matches) {
+                continue;
+            }
+            String sentence = formatAssertionSentence(assertion);
+            if (seen.add(sentence)) {
+                sentences.add(sentence);
+            }
+            if (sentences.size() >= limit) {
+                return sentences;
+            }
+        }
+        return sentences;
+    }
+
     private java.util.List<String> buildRecoveryEvidence(int limit) {
         if (limit <= 0) {
             return java.util.List.of();
@@ -1753,6 +1844,9 @@ public final class SahrAgent {
         }
         java.util.Set<String> seen = new java.util.HashSet<>();
         sentences.addAll(buildExplanationChainFrom(target, maxDepth, seen));
+        if (sentences.isEmpty()) {
+            sentences.addAll(collectTemporalEvidence(target, null, maxDepth, seen));
+        }
         return sentences;
     }
 
@@ -1775,6 +1869,7 @@ public final class SahrAgent {
                 if (seen.add(sentence)) {
                     sentences.add(sentence);
                 }
+                sentences.addAll(collectTemporalEvidence(cause, current, maxDepth, seen));
                 if (!visited.add(cause)) {
                     break;
                 }
@@ -1791,6 +1886,7 @@ public final class SahrAgent {
                 if (cause == null || !visited.add(cause)) {
                     break;
                 }
+                sentences.addAll(collectTemporalEvidence(cause, current, maxDepth, seen));
                 current = cause;
                 continue;
             }
@@ -1820,13 +1916,13 @@ public final class SahrAgent {
             return null;
         }
         RelationAssertion best = candidates.get(0);
-        double bestScore = specificityScore(causeFromAssertion(best, effect).value());
+        double bestScore = causeEvidenceScore(causeFromAssertion(best, effect), effect);
         for (RelationAssertion candidate : candidates) {
             SymbolId cause = causeFromAssertion(candidate, effect);
             if (cause == null) {
                 continue;
             }
-            double score = specificityScore(cause.value());
+            double score = causeEvidenceScore(cause, effect);
             if (score > bestScore) {
                 best = candidate;
                 bestScore = score;
@@ -1859,10 +1955,10 @@ public final class SahrAgent {
         }
         RuleAssertion best = candidates.get(0);
         SymbolId bestCause = selectCauseNode(best.antecedent());
-        double bestScore = bestCause == null ? 0.0 : specificityScore(bestCause.value());
+        double bestScore = bestCause == null ? 0.0 : causeEvidenceScore(bestCause, effect);
         for (RuleAssertion candidate : candidates) {
             SymbolId cause = selectCauseNode(candidate.antecedent());
-            double score = cause == null ? 0.0 : specificityScore(cause.value());
+            double score = cause == null ? 0.0 : causeEvidenceScore(cause, effect);
             if (score > bestScore) {
                 best = candidate;
                 bestScore = score;
