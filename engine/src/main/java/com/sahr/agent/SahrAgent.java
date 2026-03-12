@@ -57,6 +57,7 @@ public final class SahrAgent {
     private final ReasoningTrace trace;
     private final WorkingMemory workingMemory;
     private final ReasoningPhaseCoordinator phases;
+    private final ExplanationChainBuilder explanationChains;
 
     public SahrAgent(
             KnowledgeBase graph,
@@ -95,6 +96,37 @@ public final class SahrAgent {
         this.termMapper = termMapper;
         this.trace = new ReasoningTrace();
         this.workingMemory = new WorkingMemory(phases);
+        this.explanationChains = new ExplanationChainBuilder(
+                this.graph,
+                this.ontology,
+                new ExplanationChainBuilder.Formatter() {
+                    @Override
+                    public String localName(String predicate) {
+                        return SahrAgent.this.localName(predicate);
+                    }
+
+                    @Override
+                    public String formatAssertionSentence(RelationAssertion assertion) {
+                        return SahrAgent.this.formatAssertionSentence(assertion);
+                    }
+
+                    @Override
+                    public String formatRuleSentence(RuleAssertion rule) {
+                        return SahrAgent.this.formatRuleSentence(rule);
+                    }
+
+                    @Override
+                    public String formatCausalSentence(RelationAssertion assertion, SymbolId cause, SymbolId effect) {
+                        return SahrAgent.this.formatCausalSentence(assertion, cause, effect);
+                    }
+
+                    @Override
+                    public String normalizeTypeToken(String raw) {
+                        return SahrAgent.this.normalizeTypeToken(raw);
+                    }
+                },
+                this::specificityScore
+        );
     }
 
     public String handle(String input) {
@@ -1176,7 +1208,7 @@ public final class SahrAgent {
         }
         ChainResult bestExplanation = null;
         for (SymbolId targetCandidate : targetCandidates) {
-            java.util.List<String> explanation = buildExplanationChain(targetCandidate, 4);
+            java.util.List<String> explanation = explanationChains.buildExplanationChain(targetCandidate, 4);
             if (explanation.isEmpty()) {
                 continue;
             }
@@ -1648,119 +1680,6 @@ public final class SahrAgent {
         return score;
     }
 
-    private double causeEvidenceScore(SymbolId cause, SymbolId effect) {
-        if (cause == null) {
-            return 0.0;
-        }
-        double score = specificityScore(cause.value());
-        score += temporalSupportScore(cause, effect);
-        score += telemetrySupportScore(cause);
-        return score;
-    }
-
-    private double temporalSupportScore(SymbolId cause, SymbolId effect) {
-        if (cause == null || effect == null) {
-            return 0.0;
-        }
-        double score = 0.0;
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = localName(assertion.predicate());
-            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
-                continue;
-            }
-            if (assertion.subject().equals(cause) && assertion.object().equals(effect)) {
-                score += 0.4;
-            } else if ("after".equals(predicate) && assertion.subject().equals(effect) && assertion.object().equals(cause)) {
-                score += 0.4;
-            } else if ("before".equals(predicate) && assertion.subject().equals(effect) && assertion.object().equals(cause)) {
-                score += 0.2;
-            } else if ("during".equals(predicate)
-                    && (assertion.subject().equals(cause) || assertion.subject().equals(effect))) {
-                score += 0.2;
-            }
-        }
-        return score;
-    }
-
-    private double telemetrySupportScore(SymbolId cause) {
-        if (cause == null) {
-            return 0.0;
-        }
-        double score = 0.0;
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = localName(assertion.predicate());
-            if ("indicate".equals(predicate) || "signal".equals(predicate) || "suggest".equals(predicate)) {
-                if (assertion.object().equals(cause) || assertion.subject().equals(cause)) {
-                    score += 0.35;
-                }
-            }
-            if ("telemetry".equals(normalizeTypeToken(assertion.subject().value()))) {
-                if (assertion.object().equals(cause)) {
-                    score += 0.2;
-                }
-            }
-        }
-        return score;
-    }
-
-    private java.util.List<String> collectTemporalEvidence(SymbolId cause,
-                                                           SymbolId effect,
-                                                           int limit,
-                                                           java.util.Set<String> seen) {
-        if (limit <= 0) {
-            return java.util.List.of();
-        }
-        java.util.List<String> sentences = new java.util.ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = localName(assertion.predicate());
-            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
-                continue;
-            }
-            boolean matches = false;
-            if (cause != null && effect != null) {
-                matches = assertion.subject().equals(cause) && assertion.object().equals(effect);
-                matches = matches || assertion.subject().equals(effect) && assertion.object().equals(cause);
-            } else if (cause != null) {
-                matches = assertion.subject().equals(cause);
-            } else if (effect != null) {
-                matches = assertion.subject().equals(effect);
-            }
-            if (!matches) {
-                continue;
-            }
-            String sentence = formatAssertionSentence(assertion);
-            if (seen.add(sentence)) {
-                sentences.add(sentence);
-            }
-            if (sentences.size() >= limit) {
-                return sentences;
-            }
-        }
-        return sentences;
-    }
-
-    private java.util.List<String> buildRecoveryEvidence(int limit) {
-        if (limit <= 0) {
-            return java.util.List.of();
-        }
-        java.util.List<String> sentences = new java.util.ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = localName(assertion.predicate());
-            if (!"during".equals(predicate) && !"after".equals(predicate)) {
-                continue;
-            }
-            String objectValue = assertion.object().value().toLowerCase(java.util.Locale.ROOT);
-            if (!objectValue.contains("recovery")) {
-                continue;
-            }
-            sentences.add(formatAssertionSentence(assertion));
-            if (sentences.size() >= limit) {
-                return sentences;
-            }
-        }
-        return sentences;
-    }
-
     private java.util.List<String> buildPredicateExplanation(QueryGoal goal, String predicate, int limit) {
         java.util.List<String> sentences = new java.util.ArrayList<>();
         if (goal == null || predicate == null || predicate.isBlank()) {
@@ -1823,7 +1742,11 @@ public final class SahrAgent {
             if (next == null) {
                 continue;
             }
-            java.util.List<String> followUp = buildExplanationChainFrom(next, Math.max(1, limit - sentences.size()), seen);
+            java.util.List<String> followUp = explanationChains.buildExplanationChainFrom(
+                    next,
+                    Math.max(1, limit - sentences.size()),
+                    seen
+            );
             if (!followUp.isEmpty()) {
                 sentences.addAll(followUp);
                 if (sentences.size() >= limit) {
@@ -1832,139 +1755,9 @@ public final class SahrAgent {
             }
         }
         if (sentences.size() < limit && ("restore".equals(predicate) || "regain".equals(predicate))) {
-            sentences.addAll(buildRecoveryEvidence(limit - sentences.size()));
+            sentences.addAll(explanationChains.buildRecoveryEvidence(limit - sentences.size()));
         }
         return sentences;
-    }
-
-    private java.util.List<String> buildExplanationChain(SymbolId target, int maxDepth) {
-        java.util.List<String> sentences = new java.util.ArrayList<>();
-        if (target == null) {
-            return sentences;
-        }
-        java.util.Set<String> seen = new java.util.HashSet<>();
-        sentences.addAll(buildExplanationChainFrom(target, maxDepth, seen));
-        if (sentences.isEmpty()) {
-            sentences.addAll(collectTemporalEvidence(target, null, maxDepth, seen));
-        }
-        return sentences;
-    }
-
-    private java.util.List<String> buildExplanationChainFrom(SymbolId start, int maxDepth, java.util.Set<String> seen) {
-        java.util.List<String> sentences = new java.util.ArrayList<>();
-        if (start == null) {
-            return sentences;
-        }
-        java.util.Set<SymbolId> visited = new java.util.HashSet<>();
-        SymbolId current = start;
-        visited.add(current);
-        for (int depth = 0; depth < maxDepth; depth++) {
-            RelationAssertion causeAssertion = selectBestCauseAssertion(current);
-            if (causeAssertion != null) {
-                SymbolId cause = causeFromAssertion(causeAssertion, current);
-                if (cause == null) {
-                    break;
-                }
-                String sentence = formatCausalSentence(causeAssertion, cause, current);
-                if (seen.add(sentence)) {
-                    sentences.add(sentence);
-                }
-                sentences.addAll(collectTemporalEvidence(cause, current, maxDepth, seen));
-                if (!visited.add(cause)) {
-                    break;
-                }
-                current = cause;
-                continue;
-            }
-            RuleAssertion rule = selectBestRuleForConsequent(current);
-            if (rule != null) {
-                String sentence = formatRuleSentence(rule);
-                if (seen.add(sentence)) {
-                    sentences.add(sentence);
-                }
-                SymbolId cause = selectCauseNode(rule.antecedent());
-                if (cause == null || !visited.add(cause)) {
-                    break;
-                }
-                sentences.addAll(collectTemporalEvidence(cause, current, maxDepth, seen));
-                current = cause;
-                continue;
-            }
-            break;
-        }
-        return sentences;
-    }
-
-    private RelationAssertion selectBestCauseAssertion(SymbolId effect) {
-        java.util.List<RelationAssertion> candidates = new java.util.ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = localName(assertion.predicate());
-            if (!"cause".equals(predicate) && !"causedby".equals(predicate)) {
-                continue;
-            }
-            if ("causedby".equals(predicate)) {
-                if (assertion.subject().equals(effect)) {
-                    candidates.add(assertion);
-                }
-                continue;
-            }
-            if (assertion.object().equals(effect)) {
-                candidates.add(assertion);
-            }
-        }
-        if (candidates.isEmpty()) {
-            return null;
-        }
-        RelationAssertion best = candidates.get(0);
-        double bestScore = causeEvidenceScore(causeFromAssertion(best, effect), effect);
-        for (RelationAssertion candidate : candidates) {
-            SymbolId cause = causeFromAssertion(candidate, effect);
-            if (cause == null) {
-                continue;
-            }
-            double score = causeEvidenceScore(cause, effect);
-            if (score > bestScore) {
-                best = candidate;
-                bestScore = score;
-            }
-        }
-        return best;
-    }
-
-    private SymbolId causeFromAssertion(RelationAssertion assertion, SymbolId effect) {
-        if (assertion == null || effect == null) {
-            return null;
-        }
-        String predicate = localName(assertion.predicate());
-        if ("causedby".equals(predicate)) {
-            return assertion.object();
-        }
-        return assertion.subject();
-    }
-
-    private RuleAssertion selectBestRuleForConsequent(SymbolId effect) {
-        java.util.List<RuleAssertion> candidates = new java.util.ArrayList<>();
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
-            if (consequent.subject().equals(effect) || consequent.object().equals(effect)) {
-                candidates.add(rule);
-            }
-        }
-        if (candidates.isEmpty()) {
-            return null;
-        }
-        RuleAssertion best = candidates.get(0);
-        SymbolId bestCause = selectCauseNode(best.antecedent());
-        double bestScore = bestCause == null ? 0.0 : causeEvidenceScore(bestCause, effect);
-        for (RuleAssertion candidate : candidates) {
-            SymbolId cause = selectCauseNode(candidate.antecedent());
-            double score = cause == null ? 0.0 : causeEvidenceScore(cause, effect);
-            if (score > bestScore) {
-                best = candidate;
-                bestScore = score;
-            }
-        }
-        return best;
     }
 
     private String formatCausalSentence(RelationAssertion assertion, SymbolId cause, SymbolId effect) {

@@ -422,6 +422,9 @@ consequents preserve the correct polarity for failure reasoning.
 Cause-chain ranking now prefers candidates with temporal or telemetry
 support, and will emit temporal evidence sentences when available to
 improve sequence-oriented explanations.
+Explanation-chain construction and cause selection are now centralized
+in `ExplanationChainBuilder` to keep `SahrAgent` focused on orchestration
+and reduce method sprawl.
 
 Working Memory
 ---------------
