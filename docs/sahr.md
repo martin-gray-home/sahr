@@ -434,6 +434,44 @@ Answer scoring and rendering now consult ontology annotations (e.g.,
 `ann:answerTemplate`) so domain packs can control ranking and output
 without hard-coded engine rules.
 
+Annotation Policy
+-----------------
+
+SAHR treats a small set of ontology annotations as behavior configuration.
+These annotations should be considered a stable API contract between the
+engine and domain packs.
+
+Supported annotations:
+
+- `ann:answerTemplate` (object properties)
+  - Purpose: phrase relation assertions.
+  - Value: string template containing `{subject}` and `{object}` (optional `{predicate}`).
+  - Fallback: generic "{subject} {predicate} {object}" rendering.
+- `ann:answerTemplateTrue` / `ann:answerTemplateFalse` (object properties)
+  - Purpose: phrase boolean predicate assertions.
+  - Value: string template containing `{subject}`.
+  - Fallback: generic boolean rendering ("fails"/"does not fail").
+- `ann:dynamicWeight` (object properties)
+  - Purpose: rank predicates during explanation selection.
+  - Value: numeric weight; higher favors dynamic predicates.
+  - Fallback: 0.0 when missing or invalid.
+- `ann:temporalWeight` (temporal predicates)
+  - Purpose: weight temporal evidence in explanation chains.
+  - Value: numeric weight; higher favors temporal links.
+  - Fallback: 0.0 when missing or invalid.
+- `ann:evidenceWeight` (evidence predicates)
+  - Purpose: weight evidence assertions (e.g., telemetry) in explanation chains.
+  - Value: numeric weight; higher favors evidence links.
+  - Fallback: 0.0 when missing or invalid.
+
+Validation rules:
+
+- Non-numeric weights are warned at startup.
+- Templates missing required placeholders are warned at startup.
+- Conflicting annotation values for the same predicate are warned at startup.
+- Alias collisions are warned for SAHR namespace labels when multiple IRIs
+  normalize to the same token.
+
 Working Memory
 ---------------
 

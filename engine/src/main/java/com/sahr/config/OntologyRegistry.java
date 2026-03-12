@@ -6,6 +6,7 @@ import com.sahr.ontology.CachedOntologyService;
 import com.sahr.nlp.CompositeTermMapper;
 import com.sahr.ontology.LabelLexicalMapper;
 import com.sahr.ontology.OntologyLoader;
+import com.sahr.ontology.OntologyAnnotationValidator;
 import com.sahr.ontology.OwlApiOntologyService;
 import com.sahr.ontology.VectorLexicalMapper;
 import com.sahr.ontology.OnnxTextVectorizer;
@@ -33,6 +34,7 @@ public final class OntologyRegistry {
         }
         logger.info(() -> "Loading ontology resources: " + resources);
         OWLOntology ontology = OntologyLoader.loadFromClasspath(resources);
+        new OntologyAnnotationValidator(ontology).validate();
         OntologyService delegate = new OwlApiOntologyService(ontology);
         logger.info("Ontology loaded. Building cached view.");
         OntologyService cached = new CachedOntologyService(delegate);
