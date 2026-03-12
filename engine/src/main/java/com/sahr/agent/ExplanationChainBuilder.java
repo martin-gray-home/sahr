@@ -286,6 +286,7 @@ final class ExplanationChainBuilder {
         if (includeRules) {
             for (RuleAssertion rule : graph.getAllRules()) {
                 RelationAssertion consequent = rule.consequent();
+                RelationAssertion antecedent = rule.antecedent();
                 String predicate = formatter.localName(consequent.predicate());
                 if (!"fail".equals(predicate)) {
                     continue;
@@ -294,6 +295,10 @@ final class ExplanationChainBuilder {
                     continue;
                 }
                 failures.add(consequent.subject());
+                if ("fail".equals(formatter.localName(antecedent.predicate()))
+                        && isBooleanTrue(antecedent.object())) {
+                    failures.add(antecedent.subject());
+                }
             }
         }
         return failures;

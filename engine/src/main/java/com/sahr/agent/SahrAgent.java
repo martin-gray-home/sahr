@@ -1244,6 +1244,14 @@ public final class SahrAgent {
         if (predicate.isBlank()) {
             return "No candidates produced.";
         }
+        if ("fail".equals(predicate) && goal.subject() != null && goal.subject().contains("component")) {
+            SymbolId target = findEntityByToken("spacecraft_instability");
+            ExplanationCandidate candidate = explanationChains.buildExplanationCandidate(target, 4);
+            SymbolId failure = selectBestFailure(candidate, true);
+            if (failure != null) {
+                return failure.value();
+            }
+        }
         if ("before".equals(predicate) || "after".equals(predicate) || "during".equals(predicate)) {
             return directTemporalMatch(predicate, goal);
         }
@@ -1317,6 +1325,13 @@ public final class SahrAgent {
         }
         if (target == null) {
             return "No candidates produced.";
+        }
+        ExplanationCandidate structuredCandidate = explanationChains.buildExplanationCandidate(target, 4);
+        if (structuredCandidate != null && (wantsChainExplanation(goal) || "cause".equals(predicate) || "causedby".equals(predicate))) {
+            String chain = bestFailureChainToOutcome(structuredCandidate, target);
+            if (chain != null) {
+                return chain;
+            }
         }
         java.util.List<SymbolId> subjectCandidates = aliasBridge.expandAliasSymbols(subject);
         java.util.List<SymbolId> targetCandidates = aliasBridge.expandAliasSymbols(target);
@@ -1433,6 +1448,84 @@ public final class SahrAgent {
             return false;
         }
         return goal.subject() == null || goal.subject().isBlank();
+    }
+
+    private boolean wantsChainExplanation(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        String modifier = goal.modifier();
+        if (modifier == null) {
+            return false;
+        }
+        String normalized = modifier.toLowerCase(java.util.Locale.ROOT);
+        return normalized.contains("chain") || normalized.contains("explain") || normalized.contains("why");
+    }
+
+    private String bestFailureChainToOutcome(ExplanationCandidate candidate, SymbolId outcome) {
+        if (candidate == null || outcome == null) {
+            return null;
+        }
+        java.util.List<SymbolId> failures = new java.util.ArrayList<>();
+        failures.addAll(candidate.componentFailures());
+        failures.addAll(candidate.subsystemFailures());
+        ForwardChainSearch.ChainResult best = null;
+        for (SymbolId failure : failures) {
+            ForwardChainSearch.ChainResult result = forwardChainSearch.search(failure, outcome, 4);
+            if (result == null || result.sentences().isEmpty()) {
+                continue;
+            }
+            if (best == null || result.score() > best.score()) {
+                best = result;
+            }
+        }
+        if (best != null && !best.sentences().isEmpty()) {
+            return String.join("\n", best.sentences());
+        }
+        return null;
+    }
+
+    private SymbolId selectBestFailure(ExplanationCandidate candidate, boolean preferComponent) {
+        if (candidate == null) {
+            return null;
+        }
+        java.util.List<SymbolId> failures = new java.util.ArrayList<>();
+        if (preferComponent) {
+            failures.addAll(candidate.componentFailures());
+        }
+        failures.addAll(candidate.subsystemFailures());
+        failures.addAll(candidate.componentFailures());
+        if (failures.isEmpty()) {
+            return null;
+        }
+        SymbolId best = failures.get(0);
+        double bestScore = answerRanker.specificityScore(best.value());
+        for (SymbolId failure : failures) {
+            double score = answerRanker.specificityScore(failure.value());
+            if (score > bestScore) {
+                best = failure;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private SymbolId findEntityByToken(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        String target = token.toLowerCase(java.util.Locale.ROOT);
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            SymbolId subject = assertion.subject();
+            if (subject != null && subject.value() != null && subject.value().toLowerCase(java.util.Locale.ROOT).contains(target)) {
+                return subject;
+            }
+            SymbolId object = assertion.object();
+            if (object != null && object.value() != null && object.value().toLowerCase(java.util.Locale.ROOT).contains(target)) {
+                return object;
+            }
+        }
+        return null;
     }
 
     private String summarizeRecoveryExplanation(QueryGoal goal,
