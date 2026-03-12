@@ -221,6 +221,8 @@ Cause-chain fallbacks now re-apply outcome appending when a best-effort
 failure-to-outcome chain is used, keeping explanation answers complete.
 Outcome appending now also triggers for “best fits/sequence/explanation”
 questions to avoid truncated telemetry-fit answers.
+List-style isolation is handled in the answer projection layer rather
+than by applying surface-string routing inside the agent loop.
 
 # Recent Updates (2026-03-12)
 

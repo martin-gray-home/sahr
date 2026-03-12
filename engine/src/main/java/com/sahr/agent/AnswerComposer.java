@@ -78,6 +78,8 @@ final class AnswerComposer {
         return wantsRelationshipChain(goal);
     }
 
+    // intentionally left without list-routing helpers; list isolation is handled in projection logic.
+
     String resolveTemporalComponentFailure(QueryGoal goal) {
         if (goal == null) {
             return null;
