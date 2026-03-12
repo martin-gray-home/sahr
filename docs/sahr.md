@@ -200,6 +200,15 @@ re-running interpretation heads.
 
 # Recent Updates (2026-03-12)
 
+Answer composition moved further out of `SahrAgent` and into `AnswerComposer`,
+with outcome/capability loss normalization now handled in one place. Chain
+answers now dedupe repeated lines, append outcomes for cause-style questions,
+and avoid appending outcomes in ruled-out modes. Recovery and chain questions
+use expanded cue detection (chain/explain/why/most likely/plausible/best fits),
+so explanation projection stays robust even when modifiers vary.
+
+# Recent Updates (2026-03-12)
+
 • Relationship-chain extraction now consults ontology labels when mapping question phrases to known entities, improving multi-entity relationship answers without hard-coded symbols.
 • Explanation chains include explicit recovery clauses when the prompt asks “how stability was restored,” even if the primary outcome is instability.
 • Dependency-contrast answers now add a short inference sentence when recovery evidence and electrical dependency facts are both present, improving “did not depend on electrical actuators” questions.

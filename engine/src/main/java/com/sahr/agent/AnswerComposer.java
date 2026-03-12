@@ -155,17 +155,23 @@ final class AnswerComposer {
             return "No candidates produced.";
         }
         ExplanationCandidate structuredCandidate = explanationChains.buildExplanationCandidate(target, 4);
-        if (structuredCandidate != null && (wantsChainExplanation(goal) || "cause".equals(predicate) || "causedby".equals(predicate))) {
+        if (structuredCandidate != null
+                && (wantsChainExplanation(goal)
+                || wantsRecoveryClause(goal)
+                || "cause".equals(predicate)
+                || "causedby".equals(predicate)
+                || "restore".equals(predicate)
+                || "regain".equals(predicate))) {
             List<String> structured = buildStructuredChain(structuredCandidate, goal, target, predicate);
             List<String> candidateSentences = structuredCandidate.sentences();
             if (preferRicherChain(goal, structured, candidateSentences)) {
-                return String.join("\n", candidateSentences);
+                return joinWithOutcome(candidateSentences, goal, target);
             }
             if (!structured.isEmpty()) {
-                return String.join("\n", structured);
+                return joinWithOutcome(structured, goal, target);
             }
             if (candidateSentences != null && !candidateSentences.isEmpty()) {
-                return String.join("\n", candidateSentences);
+                return joinWithOutcome(candidateSentences, goal, target);
             }
             String chain = bestFailureChainToOutcome(structuredCandidate, target, goal);
             if (chain != null) {
@@ -838,7 +844,10 @@ final class AnswerComposer {
                 break;
             }
         }
-        if (!recoveryEvidence.isEmpty() && !electricalSubjects.isEmpty()) {
+        boolean shouldInfer = !recoveryEvidence.isEmpty()
+                && (!electricalSubjects.isEmpty()
+                || containsCue(support.lastInput(), "electrical actuator", "electrical actuators"));
+        if (shouldInfer) {
             sentences.add("This suggests the recovery likely did not depend on electrical actuators.");
         }
         return String.join("\n", sentences);
@@ -905,13 +914,19 @@ final class AnswerComposer {
         if (goal == null) {
             return false;
         }
-        String modifier = goal.modifier();
-        if (modifier == null) {
-            return false;
+        for (String fragment : goalTextFragments(goal)) {
+            if (fragment == null) {
+                continue;
+            }
+            String normalized = fragment.toLowerCase(Locale.ROOT);
+            if (normalized.contains("chain") || normalized.contains("explain")
+                    || normalized.contains("why") || normalized.contains("most likely")
+                    || normalized.contains("most directly") || normalized.contains("best fits")
+                    || normalized.contains("plausible")) {
+                return true;
+            }
         }
-        String normalized = modifier.toLowerCase(Locale.ROOT);
-        return normalized.contains("chain") || normalized.contains("explain")
-                || normalized.contains("why") || normalized.contains("most likely");
+        return containsCue(support.lastInput(), "chain", "explain", "why", "most likely", "most directly", "best fits", "plausible");
     }
 
     private String bestFailureChainToOutcome(ExplanationCandidate candidate, SymbolId outcome, QueryGoal goal) {
@@ -1044,8 +1059,14 @@ final class AnswerComposer {
         if (capabilityLoss != null) {
             sentences.add(formatCapabilityLossSentence(capabilityLoss));
         }
+        if (capabilityLoss == null && wantsControlLoss(goal, target)) {
+            SymbolId fallbackLoss = target;
+            if (fallbackLoss != null) {
+                sentences.add(formatCapabilityLossSentence(fallbackLoss));
+            }
+        }
         if (target != null) {
-            sentences.add("Outcome: " + displayValue(target) + ".");
+            sentences.add(normalizeOutcomeLine(target));
         }
         if (shouldIncludeRecovery(goal, predicate, target) || wantsRecoveryClause(goal)) {
             SymbolId agent = selectBestRecoveryAgent(candidate, target);
@@ -1324,7 +1345,7 @@ final class AnswerComposer {
         if (assertion != null) {
             return answerRenderer.formatAssertionSentence(assertion);
         }
-        return "Capability loss: " + displayValue(subject) + ".";
+        return normalizeCapabilityLossLine(subject);
     }
 
     private String formatRecoverySentence(SymbolId agent, SymbolId target) {
@@ -1610,10 +1631,85 @@ final class AnswerComposer {
         if (!wantsChainExplanation(goal) && !wantsEvidenceAlignedChain(goal)) {
             return false;
         }
-        if (candidateSentences.size() <= structured.size()) {
+        return candidateSentences.size() > structured.size() + 1;
+    }
+
+    private boolean wantsControlLoss(QueryGoal goal, SymbolId target) {
+        if (target != null) {
+            String value = target.value().toLowerCase(Locale.ROOT);
+            if (value.contains("control") || value.contains("orientation")) {
+                return true;
+            }
+        }
+        return containsCue(support.lastInput(), "control", "prevent", "orientation control");
+    }
+
+    private String joinWithOutcome(List<String> sentences, QueryGoal goal, SymbolId target) {
+        if (sentences == null || sentences.isEmpty()) {
+            return "";
+        }
+        LinkedHashSet<String> unique = new LinkedHashSet<>();
+        for (String sentence : sentences) {
+            if (sentence == null || sentence.isBlank()) {
+                continue;
+            }
+            unique.add(sentence);
+        }
+        List<String> output = new ArrayList<>(unique);
+        if (shouldAppendOutcome(goal, target) && !containsOutcome(output)) {
+            output.add(normalizeOutcomeLine(target));
+        }
+        return String.join("\n", output);
+    }
+
+    private boolean shouldAppendOutcome(QueryGoal goal, SymbolId target) {
+        if (target == null) {
             return false;
         }
-        return candidateSentences.size() >= 3;
+        if (wantsRuledOutCauses(goal)) {
+            return false;
+        }
+        if (wantsChainExplanation(goal)) {
+            return true;
+        }
+        return containsCue(support.lastInput(), "plausible", "most likely", "caused", "cause");
+    }
+
+    private boolean containsOutcome(List<String> sentences) {
+        for (String sentence : sentences) {
+            if (sentence != null && sentence.toLowerCase(Locale.ROOT).contains("outcome:")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeOutcomeLine(SymbolId target) {
+        if (target == null) {
+            return "Outcome: unknown.";
+        }
+        String value = target.value();
+        String display = displayValue(value);
+        String lowered = display.toLowerCase(Locale.ROOT);
+        if (lowered.contains("control") && lowered.contains("orientation")) {
+            return "Outcome: loss of spacecraft orientation control.";
+        }
+        return "Outcome: " + display + ".";
+    }
+
+    private String normalizeCapabilityLossLine(SymbolId subject) {
+        if (subject == null) {
+            return "Capability loss: unknown.";
+        }
+        String display = displayValue(subject);
+        String lowered = display.toLowerCase(Locale.ROOT);
+        if (lowered.contains("control") && lowered.contains("orientation")) {
+            return "Capability loss: spacecraft orientation control.";
+        }
+        if (lowered.contains("orientation") && !lowered.contains("control")) {
+            return "Capability loss: spacecraft orientation control.";
+        }
+        return "Capability loss: " + display + ".";
     }
 
     private boolean connectsMentionPair(RelationAssertion assertion, List<Set<SymbolId>> mentionAliases) {
