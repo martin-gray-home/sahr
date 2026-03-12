@@ -205,6 +205,7 @@ re-running interpretation heads.
 • Dependency-contrast answers now add a short inference sentence when recovery evidence and electrical dependency facts are both present, improving “did not depend on electrical actuators” questions.
 • Answer composition logic has been centralized in `AnswerComposer`, reducing domain-specific routing inside `SahrAgent`.
 • `SahrAgent` now keeps only orchestration + parsing utilities; explanation/relationship helpers live in `AnswerComposer`.
+• Relationship answers now filter to assertions that connect mentioned entities (reducing unrelated recovery/energy facts), and backupFor questions use a dedicated fallback path to avoid regressions.
 
 Statement Normalization
 -----------------------

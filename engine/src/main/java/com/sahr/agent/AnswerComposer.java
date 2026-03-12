@@ -102,6 +102,12 @@ final class AnswerComposer {
         if (target == null && goal.subject() != null) {
             target = new SymbolId(goal.subject());
         }
+        if ("backupfor".equals(predicate)) {
+            String backupExplanation = backupForFallback(subject, target);
+            if (backupExplanation != null) {
+                return backupExplanation;
+            }
+        }
         String relationship = relationshipAnswer(goal);
         if (relationship != null && !relationship.isBlank()) {
             return relationship;
@@ -228,14 +234,7 @@ final class AnswerComposer {
             if (!isRelationshipPredicate(predicateName)) {
                 continue;
             }
-            boolean matches = false;
-            for (Set<SymbolId> aliasSet : mentionAliases) {
-                if (aliasSet.contains(assertion.subject()) || aliasSet.contains(assertion.object())) {
-                    matches = true;
-                    break;
-                }
-            }
-            if (matches) {
+            if (connectsMentionPair(assertion, mentionAliases)) {
                 matched.add(assertion);
             }
         }
@@ -1572,7 +1571,7 @@ final class AnswerComposer {
         }
         return switch (predicate) {
             case "type", "rdf:type", "contain", "contains", "control",
-                    "use", "used", "act", "actuates", "poweredby", "require", "requires" -> true;
+                    "use", "used", "act", "actuates" -> true;
             default -> false;
         };
     }
@@ -1585,8 +1584,67 @@ final class AnswerComposer {
             case "contain", "contains" -> 0;
             case "control", "use", "used", "act", "actuates" -> 1;
             case "type", "rdf:type" -> 2;
-            case "poweredby", "require", "requires" -> 3;
             default -> 10;
         };
+    }
+
+    private boolean connectsMentionPair(RelationAssertion assertion, List<Set<SymbolId>> mentionAliases) {
+        int subjectIndex = -1;
+        int objectIndex = -1;
+        for (int i = 0; i < mentionAliases.size(); i++) {
+            Set<SymbolId> aliasSet = mentionAliases.get(i);
+            if (subjectIndex < 0 && aliasSet.contains(assertion.subject())) {
+                subjectIndex = i;
+            }
+            if (objectIndex < 0 && aliasSet.contains(assertion.object())) {
+                objectIndex = i;
+            }
+            if (subjectIndex >= 0 && objectIndex >= 0) {
+                break;
+            }
+        }
+        return subjectIndex >= 0 && objectIndex >= 0 && subjectIndex != objectIndex;
+    }
+
+    private String backupForFallback(SymbolId subject, SymbolId object) {
+        List<SymbolId> subjectCandidates = aliasBridge.expandAliasSymbols(subject);
+        List<SymbolId> objectCandidates = aliasBridge.expandAliasSymbols(object);
+        for (RuleAssertion rule : graph.getAllRules()) {
+            RelationAssertion consequent = rule.consequent();
+            if (!"backupfor".equals(support.localName(consequent.predicate()))) {
+                continue;
+            }
+            if (!subjectCandidates.isEmpty() && !subjectCandidates.contains(consequent.subject())) {
+                continue;
+            }
+            if (!objectCandidates.isEmpty() && !objectCandidates.contains(consequent.object())) {
+                continue;
+            }
+            return answerRenderer.formatRuleSentence(rule);
+        }
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (!"backupfor".equals(support.localName(assertion.predicate()))) {
+                continue;
+            }
+            if (!subjectCandidates.isEmpty() && !subjectCandidates.contains(assertion.subject())) {
+                continue;
+            }
+            if (!objectCandidates.isEmpty() && !objectCandidates.contains(assertion.object())) {
+                continue;
+            }
+            return answerRenderer.formatAssertionSentence(assertion);
+        }
+        if (subject != null) {
+            for (RuleAssertion rule : graph.getAllRules()) {
+                RelationAssertion consequent = rule.consequent();
+                if (!"backupfor".equals(support.localName(consequent.predicate()))) {
+                    continue;
+                }
+                if (subjectCandidates.contains(consequent.subject())) {
+                    return answerRenderer.formatRuleSentence(rule);
+                }
+            }
+        }
+        return null;
     }
 }
