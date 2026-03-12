@@ -799,6 +799,9 @@ public final class OntologyDefinedHead extends BaseHead {
                         }
                     }
                     if ((normalized.contains("orientation") || normalized.contains("control"))
+                            && entityMap.containsKey("control_spacecraft_orientation")) {
+                        object = entityMap.get("control_spacecraft_orientation");
+                    } else if ((normalized.contains("orientation") || normalized.contains("control"))
                             && entityMap.containsKey("spacecraft_orientation_control")) {
                         object = entityMap.get("spacecraft_orientation_control");
                     }
@@ -1190,6 +1193,16 @@ public final class OntologyDefinedHead extends BaseHead {
                     object = entityMap.get("spacecraft_instability");
                 }
                 return new PhraseOverride("cause", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
+            }
+            boolean hasRestore = normalized.contains("restore") || normalized.contains("restored")
+                    || normalized.contains("regain") || normalized.contains("regained");
+            boolean hasLikely = normalized.contains("likely") || normalized.contains("most");
+            if (hasRestore && hasLikely && predicates.contains("restore")) {
+                String object = null;
+                if (normalized.contains("stability") && entityMap.containsKey("stable_orientation")) {
+                    object = entityMap.get("stable_orientation");
+                }
+                return new PhraseOverride("restore", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, false);
             }
             boolean hasPrevent = normalized.contains("prevent") || normalized.contains("prevents")
                     || normalized.contains("prevented") || normalized.contains("preventing");

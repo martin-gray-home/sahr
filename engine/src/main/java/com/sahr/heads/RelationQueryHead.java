@@ -47,6 +47,12 @@ public final class RelationQueryHead extends BaseHead {
                 && query.type() != QueryGoal.Type.COUNT) {
             return List.of();
         }
+        if (context.inputFeatures().isPresent()) {
+            Set<String> features = context.inputFeatures().get().features();
+            if (features.contains("has_why") || features.contains("has_explain")) {
+                return List.of();
+            }
+        }
 
         String subjectBinding = query.subject();
         String predicate = query.predicate();

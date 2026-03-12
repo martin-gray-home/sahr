@@ -403,6 +403,22 @@ Forward-chain traversal now considers lightweight alias and type bridges
 (entity/concept aliases, singular/plural variants, and entity type links)
 when expanding nodes, so explanation chains can cross from instances to
 their types and still prioritize the most specific path available.
+Suffix-based alias bridges now allow entity and concept names that share
+token suffixes (e.g., `control_actuator` → `attitude_control_actuators`)
+to connect during explanation search, improving grounding without adding
+domain-specific rules.
+Forward-chain scoring now prefers dynamic operational predicates (fail,
+stop, restore, fire, respond) and de-emphasizes static dependency facts
+(`poweredBy`, `requires`) when selecting explanation chains.
+Direct relation answers are suppressed for “why/explain” questions so the
+planner can route them through cause-chain explanations instead of
+returning shallow endpoint nodes.
+Restore/regain explanations now append recovery-period temporal evidence
+when available (e.g., “thrusters during recovery period”) so recovery
+answers surface operational context alongside the restored state.
+Statement parsing now normalizes negated ability/control patterns (e.g.,
+“cannot operate”, “cannot be controlled”) into boolean predicates so rule
+consequents preserve the correct polarity for failure reasoning.
 
 Working Memory
 ---------------

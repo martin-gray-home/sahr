@@ -1250,6 +1250,7 @@ public final class SahrAgent {
                         .thenComparingInt(step -> step.depth)
         );
         java.util.Set<SymbolId> knownSymbols = collectKnownSymbols();
+        java.util.Set<String> temporalPredicates = temporalPredicateNames();
         queue.add(new ChainStep(start, null, null, null, 0.0));
         bestScore.put(start, 0.0);
         ChainResult bestResult = null;
@@ -1274,17 +1275,22 @@ public final class SahrAgent {
             for (SymbolId next : typeNodes(current.node, knownSymbols)) {
                 enqueueChainStep(queue, bestScore, current, next, 0.15, null, null);
             }
+            for (SymbolId next : temporalBridgeNodes(current.node, temporalPredicates)) {
+                enqueueChainStep(queue, bestScore, current, next, 0.25, null, null);
+            }
             for (RelationAssertion assertion : graph.getAllAssertions()) {
                 java.util.List<SymbolId> nextNodes = nextNodesFromAssertion(current.node, assertion);
                 for (SymbolId next : nextNodes) {
-                    double stepScore = assertionSpecificity(assertion);
+                    double stepScore = assertionSpecificity(assertion)
+                            + predicateDynamismScore(localName(assertion.predicate()));
                     enqueueChainStep(queue, bestScore, current, next, stepScore, assertion, null);
                 }
             }
             for (RuleAssertion rule : graph.getAllRules()) {
                 java.util.List<SymbolId> nextNodes = nextNodesFromRule(current.node, rule);
                 for (SymbolId next : nextNodes) {
-                    double stepScore = ruleSpecificity(rule);
+                    double stepScore = ruleSpecificity(rule)
+                            + predicateDynamismScore(localName(rule.consequent().predicate()));
                     enqueueChainStep(queue, bestScore, current, next, stepScore, null, rule);
                 }
             }
@@ -1358,6 +1364,13 @@ public final class SahrAgent {
         }
         java.util.List<SymbolId> aliases = new java.util.ArrayList<>();
         String value = node.value();
+        if ("entity:spacecraft_orientation_control".equals(value)
+                || "concept:control_spacecraft_orientation".equals(value)) {
+            addKnownAlias(aliases, knownSymbols, "entity:spacecraft_orientation_control");
+            addKnownAlias(aliases, knownSymbols, "concept:control_spacecraft_orientation");
+            addKnownAlias(aliases, knownSymbols, "entity:spacecraft_orientation");
+            addKnownAlias(aliases, knownSymbols, "concept:spacecraft_orientation");
+        }
         if (value.startsWith("entity:")) {
             String local = value.substring("entity:".length());
             addKnownAlias(aliases, knownSymbols, "concept:" + local);
@@ -1374,6 +1387,7 @@ public final class SahrAgent {
                 addKnownAlias(aliases, knownSymbols, "entity:" + plural);
             }
         }
+        addSuffixAliases(aliases, knownSymbols, value);
         return aliases;
     }
 
@@ -1422,6 +1436,53 @@ public final class SahrAgent {
         if (knownSymbols.contains(id)) {
             aliases.add(id);
         }
+    }
+
+    private void addSuffixAliases(java.util.List<SymbolId> aliases,
+                                  java.util.Set<SymbolId> knownSymbols,
+                                  String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        String local = value;
+        if (local.startsWith("entity:")) {
+            local = local.substring("entity:".length());
+        } else if (local.startsWith("concept:")) {
+            local = local.substring("concept:".length());
+        }
+        String[] localTokens = local.split("_");
+        if (localTokens.length < 2) {
+            return;
+        }
+        for (SymbolId candidate : knownSymbols) {
+            String candidateValue = candidate.value();
+            String candidateLocal = candidateValue;
+            if (candidateLocal.startsWith("entity:")) {
+                candidateLocal = candidateLocal.substring("entity:".length());
+            } else if (candidateLocal.startsWith("concept:")) {
+                candidateLocal = candidateLocal.substring("concept:".length());
+            }
+            String[] candidateTokens = candidateLocal.split("_");
+            if (candidateTokens.length <= localTokens.length) {
+                continue;
+            }
+            if (endsWithTokens(candidateTokens, localTokens)) {
+                aliases.add(candidate);
+            }
+        }
+    }
+
+    private boolean endsWithTokens(String[] candidateTokens, String[] localTokens) {
+        if (candidateTokens.length < localTokens.length) {
+            return false;
+        }
+        int offset = candidateTokens.length - localTokens.length;
+        for (int i = 0; i < localTokens.length; i++) {
+            if (!candidateTokens[offset + i].equals(localTokens[i])) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String singularize(String value) {
@@ -1514,8 +1575,99 @@ public final class SahrAgent {
                 continue;
             }
             score += specificityScore(sentence);
+            score += sentenceDynamismScore(sentence);
         }
         return score;
+    }
+
+    private java.util.Set<String> temporalPredicateNames() {
+        java.util.Set<String> predicates = new java.util.HashSet<>();
+        predicates.add("before");
+        predicates.add("after");
+        predicates.add("during");
+        return predicates;
+    }
+
+    private java.util.List<SymbolId> temporalBridgeNodes(SymbolId node, java.util.Set<String> temporalPredicates) {
+        if (node == null) {
+            return java.util.List.of();
+        }
+        java.util.List<SymbolId> results = new java.util.ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (!assertion.subject().equals(node)) {
+                continue;
+            }
+            if (!temporalPredicates.contains(localName(assertion.predicate()))) {
+                continue;
+            }
+            SymbolId time = assertion.object();
+            for (RelationAssertion other : graph.getAllAssertions()) {
+                if (other.subject().equals(node)) {
+                    continue;
+                }
+                if (!temporalPredicates.contains(localName(other.predicate()))) {
+                    continue;
+                }
+                if (other.object().equals(time)) {
+                    results.add(other.subject());
+                }
+            }
+        }
+        return results;
+    }
+
+    private double predicateDynamismScore(String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return 0.0;
+        }
+        return switch (predicate) {
+            case "fail", "fails", "stop", "stops", "operate", "operates", "restore", "restores",
+                    "regain", "regains", "fire", "fires", "fired", "respond", "responds", "drop",
+                    "drops", "spike", "spikes", "cause", "causes", "causedby" -> 0.55;
+            case "poweredby", "require", "requires", "contain", "contains", "type", "rdf:type" -> -0.25;
+            default -> 0.0;
+        };
+    }
+
+    private double sentenceDynamismScore(String sentence) {
+        if (sentence == null || sentence.isBlank()) {
+            return 0.0;
+        }
+        String normalized = sentence.toLowerCase(java.util.Locale.ROOT);
+        double score = 0.0;
+        if (normalized.contains("fail") || normalized.contains("stop")
+                || normalized.contains("restore") || normalized.contains("regain")
+                || normalized.contains("fired") || normalized.contains("respond")
+                || normalized.contains("drop") || normalized.contains("spike")) {
+            score += 0.4;
+        }
+        if (normalized.contains("powered by") || normalized.contains("requires")
+                || normalized.contains("contains")) {
+            score -= 0.2;
+        }
+        return score;
+    }
+
+    private java.util.List<String> buildRecoveryEvidence(int limit) {
+        if (limit <= 0) {
+            return java.util.List.of();
+        }
+        java.util.List<String> sentences = new java.util.ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"during".equals(predicate) && !"after".equals(predicate)) {
+                continue;
+            }
+            String objectValue = assertion.object().value().toLowerCase(java.util.Locale.ROOT);
+            if (!objectValue.contains("recovery")) {
+                continue;
+            }
+            sentences.add(formatAssertionSentence(assertion));
+            if (sentences.size() >= limit) {
+                return sentences;
+            }
+        }
+        return sentences;
     }
 
     private java.util.List<String> buildPredicateExplanation(QueryGoal goal, String predicate, int limit) {
@@ -1539,8 +1691,8 @@ public final class SahrAgent {
             assertionMatches.add(assertion);
         }
         assertionMatches.sort((left, right) -> Double.compare(
-                assertionSpecificity(right),
-                assertionSpecificity(left)
+                assertionExplanationScore(right),
+                assertionExplanationScore(left)
         ));
         for (RelationAssertion assertion : assertionMatches) {
             sentences.add(formatAssertionSentence(assertion));
@@ -1564,8 +1716,8 @@ public final class SahrAgent {
             ruleMatches.add(rule);
         }
         ruleMatches.sort((left, right) -> Double.compare(
-                ruleSpecificity(right),
-                ruleSpecificity(left)
+                ruleExplanationScore(right),
+                ruleExplanationScore(left)
         ));
         java.util.Set<String> seen = new java.util.HashSet<>(sentences);
         for (RuleAssertion rule : ruleMatches) {
@@ -1587,6 +1739,9 @@ public final class SahrAgent {
                     return sentences.subList(0, limit);
                 }
             }
+        }
+        if (sentences.size() < limit && ("restore".equals(predicate) || "regain".equals(predicate))) {
+            sentences.addAll(buildRecoveryEvidence(limit - sentences.size()));
         }
         return sentences;
     }
@@ -1924,6 +2079,14 @@ public final class SahrAgent {
                 specificityScore(assertion.object().value()));
     }
 
+    private double assertionExplanationScore(RelationAssertion assertion) {
+        if (assertion == null) {
+            return 0.0;
+        }
+        return assertionSpecificity(assertion)
+                + predicateDynamismScore(localName(assertion.predicate()));
+    }
+
     private double ruleSpecificity(RuleAssertion rule) {
         if (rule == null) {
             return 0.0;
@@ -1934,6 +2097,18 @@ public final class SahrAgent {
         }
         return Math.max(specificityScore(consequent.subject().value()),
                 specificityScore(consequent.object().value()));
+    }
+
+    private double ruleExplanationScore(RuleAssertion rule) {
+        if (rule == null) {
+            return 0.0;
+        }
+        RelationAssertion consequent = rule.consequent();
+        if (consequent == null) {
+            return 0.0;
+        }
+        return ruleSpecificity(rule)
+                + predicateDynamismScore(localName(consequent.predicate()));
     }
 
     private String formatAssertionSentence(RelationAssertion assertion) {

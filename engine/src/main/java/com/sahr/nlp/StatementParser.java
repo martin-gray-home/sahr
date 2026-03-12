@@ -66,6 +66,14 @@ public final class StatementParser {
         if (usage.isPresent()) {
             return usage;
         }
+        Optional<Statement> negatedControl = parseNegatedControl(normalized);
+        if (negatedControl.isPresent()) {
+            return negatedControl;
+        }
+        Optional<Statement> negatedAbility = parseNegatedAbility(normalized);
+        if (negatedAbility.isPresent()) {
+            return negatedAbility;
+        }
         Optional<Statement> coreNlp = parseWithCoreNlp(trimmed);
         Optional<Statement> passive = parsePassiveBy(normalized);
         if (coreNlp.isPresent() && passive.isPresent()) {
@@ -185,6 +193,106 @@ public final class StatementParser {
             return Optional.empty();
         }
         return Optional.of(buildStatement(subjectToken, "true", "fail", false));
+    }
+
+    private Optional<Statement> parseNegatedAbility(String normalized) {
+        String cleaned = normalized.replaceAll("[^a-z0-9_\\s]", " ").replaceAll("\\s+", " ").trim();
+        if (cleaned.isEmpty()) {
+            return Optional.empty();
+        }
+        String marker = findNegationMarker(cleaned);
+        if (marker == null) {
+            return Optional.empty();
+        }
+        int idx = cleaned.indexOf(marker);
+        if (idx <= 0) {
+            return Optional.empty();
+        }
+        String subjectPart = cleaned.substring(0, idx).trim();
+        String remainder = cleaned.substring(idx + marker.length()).trim();
+        if (subjectPart.isEmpty() || remainder.isEmpty()) {
+            return Optional.empty();
+        }
+        if (remainder.startsWith("be actively controlled") || remainder.startsWith("be controlled")
+                || remainder.startsWith("be actively control") || remainder.startsWith("be control")) {
+            return Optional.empty();
+        }
+        String predicate = normalizeNegatedAbilityVerb(remainder);
+        if (predicate.isEmpty()) {
+            return Optional.empty();
+        }
+        String subjectToken = normalizeToken(subjectPart);
+        if (subjectToken.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(buildStatement(subjectToken, "false", predicate, true));
+    }
+
+    private Optional<Statement> parseNegatedControl(String normalized) {
+        String cleaned = normalized.replaceAll("[^a-z0-9_\\s]", " ").replaceAll("\\s+", " ").trim();
+        if (cleaned.isEmpty()) {
+            return Optional.empty();
+        }
+        String marker = findNegationMarker(cleaned);
+        if (marker == null) {
+            return Optional.empty();
+        }
+        int idx = cleaned.indexOf(marker);
+        if (idx <= 0) {
+            return Optional.empty();
+        }
+        String subjectPart = cleaned.substring(0, idx).trim();
+        String remainder = cleaned.substring(idx + marker.length()).trim();
+        if (subjectPart.isEmpty() || remainder.isEmpty()) {
+            return Optional.empty();
+        }
+        if (!remainder.startsWith("be actively controlled") && !remainder.startsWith("be controlled")
+                && !remainder.startsWith("be actively control") && !remainder.startsWith("be control")) {
+            return Optional.empty();
+        }
+        String subjectToken = normalizeToken(subjectPart);
+        if (subjectToken.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(buildStatement(subjectToken, "false", "control", true));
+    }
+
+    private String findNegationMarker(String cleaned) {
+        if (cleaned.contains(" cannot ")) {
+            return " cannot ";
+        }
+        if (cleaned.contains(" can't ")) {
+            return " can't ";
+        }
+        if (cleaned.startsWith("cannot ")) {
+            return "cannot ";
+        }
+        if (cleaned.startsWith("can't ")) {
+            return "can't ";
+        }
+        return null;
+    }
+
+    private String normalizeNegatedAbilityVerb(String remainder) {
+        if (remainder.startsWith("operate") || remainder.startsWith("operating")) {
+            return "operate";
+        }
+        if (remainder.startsWith("function") || remainder.startsWith("functioning")) {
+            return "operate";
+        }
+        if (remainder.startsWith("work") || remainder.startsWith("working")) {
+            return "operate";
+        }
+        if (remainder.startsWith("respond") || remainder.startsWith("responding")) {
+            return "respond";
+        }
+        if (remainder.startsWith("stop functioning") || remainder.startsWith("stopped functioning")) {
+            return "operate";
+        }
+        if (remainder.startsWith("stop responding") || remainder.startsWith("stopped responding")) {
+            return "respond";
+        }
+        return "";
     }
 
     private Optional<String> stripUnarySuffix(String normalized, String suffix) {
