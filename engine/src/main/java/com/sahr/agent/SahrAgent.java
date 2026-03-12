@@ -58,6 +58,11 @@ public final class SahrAgent {
     private final WorkingMemory workingMemory;
     private final ReasoningPhaseCoordinator phases;
     private final ExplanationChainBuilder explanationChains;
+    private final AnswerRenderer answerRenderer;
+    private final AliasBridge aliasBridge;
+    private final ForwardChainSearch forwardChainSearch;
+    private final PredicateExplainer predicateExplainer;
+    private final AnswerRanker answerRanker;
 
     public SahrAgent(
             KnowledgeBase graph,
@@ -96,6 +101,35 @@ public final class SahrAgent {
         this.termMapper = termMapper;
         this.trace = new ReasoningTrace();
         this.workingMemory = new WorkingMemory(phases);
+        this.answerRenderer = new AnswerRenderer(
+                new AnswerRenderer.DisplayFormatter() {
+                    @Override
+                    public String localName(String predicate) {
+                        return SahrAgent.this.localName(predicate);
+                    }
+
+                    @Override
+                    public Boolean booleanConcept(SymbolId id) {
+                        return SahrAgent.this.booleanConcept(id);
+                    }
+
+                    @Override
+                    public String normalizeTypeToken(String raw) {
+                        return SahrAgent.this.normalizeTypeToken(raw);
+                    }
+                }
+        );
+        this.aliasBridge = new AliasBridge(
+                this.graph,
+                this.ontology,
+                new AliasBridge.AliasFormatter() {
+                    @Override
+                    public String localName(String predicate) {
+                        return SahrAgent.this.localName(predicate);
+                    }
+                }
+        );
+        this.answerRanker = new AnswerRanker();
         this.explanationChains = new ExplanationChainBuilder(
                 this.graph,
                 this.ontology,
@@ -107,17 +141,17 @@ public final class SahrAgent {
 
                     @Override
                     public String formatAssertionSentence(RelationAssertion assertion) {
-                        return SahrAgent.this.formatAssertionSentence(assertion);
+                        return answerRenderer.formatAssertionSentence(assertion);
                     }
 
                     @Override
                     public String formatRuleSentence(RuleAssertion rule) {
-                        return SahrAgent.this.formatRuleSentence(rule);
+                        return answerRenderer.formatRuleSentence(rule);
                     }
 
                     @Override
                     public String formatCausalSentence(RelationAssertion assertion, SymbolId cause, SymbolId effect) {
-                        return SahrAgent.this.formatCausalSentence(assertion, cause, effect);
+                        return answerRenderer.formatCausalSentence(assertion, cause, effect);
                     }
 
                     @Override
@@ -125,7 +159,62 @@ public final class SahrAgent {
                         return SahrAgent.this.normalizeTypeToken(raw);
                     }
                 },
-                this::specificityScore
+                answerRanker::specificityScore
+        );
+        this.forwardChainSearch = new ForwardChainSearch(
+                this.graph,
+                this.aliasBridge,
+                new ForwardChainSearch.Formatter() {
+                    @Override
+                    public String formatAssertionSentence(RelationAssertion assertion) {
+                        return answerRenderer.formatAssertionSentence(assertion);
+                    }
+
+                    @Override
+                    public String formatRuleSentence(RuleAssertion rule) {
+                        return answerRenderer.formatRuleSentence(rule);
+                    }
+
+                    @Override
+                    public String localName(String predicate) {
+                        return SahrAgent.this.localName(predicate);
+                    }
+
+                    @Override
+                    public Boolean booleanConcept(SymbolId id) {
+                        return SahrAgent.this.booleanConcept(id);
+                    }
+                },
+                answerRanker::predicateDynamismScore,
+                answerRanker::assertionSpecificity,
+                answerRanker::ruleSpecificity
+        );
+        this.predicateExplainer = new PredicateExplainer(
+                this.graph,
+                new PredicateExplainer.Formatter() {
+                    @Override
+                    public String localName(String predicate) {
+                        return SahrAgent.this.localName(predicate);
+                    }
+
+                    @Override
+                    public String formatAssertionSentence(RelationAssertion assertion) {
+                        return answerRenderer.formatAssertionSentence(assertion);
+                    }
+
+                    @Override
+                    public String formatRuleSentence(RuleAssertion rule) {
+                        return answerRenderer.formatRuleSentence(rule);
+                    }
+
+                    @Override
+                    public SymbolId selectCauseNode(RelationAssertion antecedent) {
+                        return SahrAgent.this.selectCauseNode(antecedent);
+                    }
+                },
+                (assertion) -> answerRanker.assertionExplanationScore(assertion, localName(assertion.predicate())),
+                (rule) -> answerRanker.ruleExplanationScore(rule, localName(rule.consequent().predicate())),
+                explanationChains
         );
     }
 
@@ -931,15 +1020,15 @@ public final class SahrAgent {
                 answers.add(candidate);
             }
         }
-        List<ReasoningCandidate> filteredAnswers = filterEchoAnswers(answers, goal);
+        List<ReasoningCandidate> filteredAnswers = answerRanker.filterEchoAnswers(answers, goal);
         if (!filteredAnswers.isEmpty()) {
             answers = filteredAnswers;
         }
         if (answers.isEmpty()) {
             java.util.List<String> directMatches = directRelationMatches(goal);
             if (!directMatches.isEmpty()) {
-                directMatches = filterEchoValues(directMatches, goal);
-                directMatches = rankAnswerValues(directMatches);
+                directMatches = answerRanker.filterEchoValues(directMatches, goal);
+                directMatches = answerRanker.rankAnswerValues(directMatches);
                 if (directMatches.size() == 1) {
                     return directMatches.get(0);
                 }
@@ -955,7 +1044,7 @@ public final class SahrAgent {
             }
             return isYesNo(goal) ? "Unknown." : "No candidates produced.";
         }
-        ReasoningCandidate winner = selectBestAnswerCandidate(answers);
+        ReasoningCandidate winner = answerRanker.selectBestAnswerCandidate(answers);
         recordAnswerIfPossible(goal, winner.payload());
         return winner.payload() == null ? "No payload." : winner.payload().toString();
     }
@@ -1019,11 +1108,11 @@ public final class SahrAgent {
                 }
             }
         }
-        matches = filterEchoValues(matches, goal);
+        matches = answerRanker.filterEchoValues(matches, goal);
         if (matches.isEmpty()) {
             return null;
         }
-        return rankAnswerValues(matches).get(0);
+        return answerRanker.rankAnswerValues(matches).get(0);
     }
 
     private String ruleMatchValue(String side, SymbolId subject, SymbolId object, RelationAssertion assertion) {
@@ -1130,8 +1219,8 @@ public final class SahrAgent {
         }
         java.util.List<String> baseMatches = directRelationMatches(goal);
         if (!baseMatches.isEmpty()) {
-            baseMatches = filterEchoValues(baseMatches, goal);
-            baseMatches = rankAnswerValues(baseMatches);
+            baseMatches = answerRanker.filterEchoValues(baseMatches, goal);
+            baseMatches = answerRanker.rankAnswerValues(baseMatches);
             if (baseMatches.size() == 1) {
                 return baseMatches.get(0);
             }
@@ -1161,17 +1250,17 @@ public final class SahrAgent {
                 matches.add(assertion.subject().value());
             }
         }
-        matches = filterEchoValues(matches, goal);
+        matches = answerRanker.filterEchoValues(matches, goal);
         if (matches.isEmpty()) {
             return "No candidates produced.";
         }
-        return rankAnswerValues(matches).get(0);
+        return answerRanker.rankAnswerValues(matches).get(0);
     }
 
     private String executeCauseChain(QueryGoal goal) {
         String predicate = localName(goal.predicate());
         if (!predicate.isBlank() && !"cause".equals(predicate) && !"causedby".equals(predicate)) {
-            java.util.List<String> predicateExplanation = buildPredicateExplanation(goal, predicate, 3);
+            java.util.List<String> predicateExplanation = predicateExplainer.buildPredicateExplanation(goal, predicate, 3);
             if (!predicateExplanation.isEmpty()) {
                 return String.join("\n", predicateExplanation);
             }
@@ -1184,16 +1273,20 @@ public final class SahrAgent {
         if (target == null) {
             return "No candidates produced.";
         }
-        java.util.List<SymbolId> subjectCandidates = expandAliasSymbols(subject);
-        java.util.List<SymbolId> targetCandidates = expandAliasSymbols(target);
+        java.util.List<SymbolId> subjectCandidates = aliasBridge.expandAliasSymbols(subject);
+        java.util.List<SymbolId> targetCandidates = aliasBridge.expandAliasSymbols(target);
         if (subject != null && target != null && !subject.equals(target)) {
-            ChainResult best = null;
+            ForwardChainSearch.ChainResult best = null;
             for (SymbolId subjectCandidate : subjectCandidates) {
                 for (SymbolId targetCandidate : targetCandidates) {
                     if (subjectCandidate.equals(targetCandidate)) {
                         continue;
                     }
-                    ChainResult forward = buildForwardExplanationChain(subjectCandidate, targetCandidate, 4);
+                    ForwardChainSearch.ChainResult forward = forwardChainSearch.search(
+                            subjectCandidate,
+                            targetCandidate,
+                            4
+                    );
                     if (forward == null || forward.sentences().isEmpty()) {
                         continue;
                     }
@@ -1206,13 +1299,16 @@ public final class SahrAgent {
                 return String.join("\n", best.sentences());
             }
         }
-        ChainResult bestExplanation = null;
+        ForwardChainSearch.ChainResult bestExplanation = null;
         for (SymbolId targetCandidate : targetCandidates) {
             java.util.List<String> explanation = explanationChains.buildExplanationChain(targetCandidate, 4);
             if (explanation.isEmpty()) {
                 continue;
             }
-            ChainResult candidate = new ChainResult(explanation, explanationSpecificity(explanation));
+            ForwardChainSearch.ChainResult candidate = new ForwardChainSearch.ChainResult(
+                    explanation,
+                    answerRanker.explanationSpecificity(explanation)
+            );
             if (bestExplanation == null || candidate.score() > bestExplanation.score()) {
                 bestExplanation = candidate;
             }
@@ -1267,511 +1363,6 @@ public final class SahrAgent {
             }
         }
         return "No candidates produced.";
-    }
-
-    private ChainResult buildForwardExplanationChain(SymbolId start,
-                                                     SymbolId target,
-                                                     int maxDepth) {
-        java.util.List<String> sentences = new java.util.ArrayList<>();
-        if (start == null || target == null) {
-            return new ChainResult(sentences, 0.0);
-        }
-        java.util.Map<SymbolId, Double> bestScore = new java.util.HashMap<>();
-        java.util.PriorityQueue<ChainStep> queue = new java.util.PriorityQueue<>(
-                java.util.Comparator.<ChainStep>comparingDouble(step -> -step.score)
-                        .thenComparingInt(step -> step.depth)
-        );
-        java.util.Set<SymbolId> knownSymbols = collectKnownSymbols();
-        java.util.Set<String> temporalPredicates = temporalPredicateNames();
-        queue.add(new ChainStep(start, null, null, null, 0.0));
-        bestScore.put(start, 0.0);
-        ChainResult bestResult = null;
-        while (!queue.isEmpty() && maxDepth > 0) {
-            ChainStep current = queue.remove();
-            if (current.node.equals(target)) {
-                java.util.List<String> chain = renderChainSteps(current);
-                double chainScore = current.score;
-                if (!chain.isEmpty()) {
-                    if (bestResult == null || chainScore > bestResult.score()) {
-                        bestResult = new ChainResult(chain, chainScore);
-                    }
-                }
-                continue;
-            }
-            if (current.depth >= maxDepth) {
-                continue;
-            }
-            for (SymbolId next : aliasNodes(current.node, knownSymbols)) {
-                enqueueChainStep(queue, bestScore, current, next, 0.05, null, null);
-            }
-            for (SymbolId next : typeNodes(current.node, knownSymbols)) {
-                enqueueChainStep(queue, bestScore, current, next, 0.15, null, null);
-            }
-            for (SymbolId next : temporalBridgeNodes(current.node, temporalPredicates)) {
-                enqueueChainStep(queue, bestScore, current, next, 0.25, null, null);
-            }
-            for (RelationAssertion assertion : graph.getAllAssertions()) {
-                java.util.List<SymbolId> nextNodes = nextNodesFromAssertion(current.node, assertion);
-                for (SymbolId next : nextNodes) {
-                    double stepScore = assertionSpecificity(assertion)
-                            + predicateDynamismScore(localName(assertion.predicate()));
-                    enqueueChainStep(queue, bestScore, current, next, stepScore, assertion, null);
-                }
-            }
-            for (RuleAssertion rule : graph.getAllRules()) {
-                java.util.List<SymbolId> nextNodes = nextNodesFromRule(current.node, rule);
-                for (SymbolId next : nextNodes) {
-                    double stepScore = ruleSpecificity(rule)
-                            + predicateDynamismScore(localName(rule.consequent().predicate()));
-                    enqueueChainStep(queue, bestScore, current, next, stepScore, null, rule);
-                }
-            }
-        }
-        return bestResult == null ? new ChainResult(sentences, 0.0) : bestResult;
-    }
-
-    private void enqueueChainStep(java.util.PriorityQueue<ChainStep> queue,
-                                  java.util.Map<SymbolId, Double> bestScore,
-                                  ChainStep current,
-                                  SymbolId next,
-                                  double stepScore,
-                                  RelationAssertion assertion,
-                                  RuleAssertion rule) {
-        if (next == null) {
-            return;
-        }
-        double score = current.score + stepScore;
-        Double existing = bestScore.get(next);
-        if (existing != null && existing >= score) {
-            return;
-        }
-        bestScore.put(next, score);
-        queue.add(new ChainStep(next, current, assertion, rule, score));
-    }
-
-    private java.util.List<SymbolId> nextNodesFromAssertion(SymbolId node, RelationAssertion assertion) {
-        if (node == null || assertion == null) {
-            return java.util.List.of();
-        }
-        if (!assertion.subject().equals(node)) {
-            return java.util.List.of();
-        }
-        SymbolId object = assertion.object();
-        if (booleanConcept(object) != null) {
-            return java.util.List.of();
-        }
-        if (object == null || object.equals(node)) {
-            return java.util.List.of();
-        }
-        return java.util.List.of(object);
-    }
-
-    private java.util.List<SymbolId> nextNodesFromRule(SymbolId node, RuleAssertion rule) {
-        if (node == null || rule == null) {
-            return java.util.List.of();
-        }
-        RelationAssertion antecedent = rule.antecedent();
-        if (!antecedent.subject().equals(node) && !antecedent.object().equals(node)) {
-            return java.util.List.of();
-        }
-        java.util.List<SymbolId> nextNodes = new java.util.ArrayList<>();
-        addConsequentNode(rule.consequent().subject(), node, nextNodes);
-        addConsequentNode(rule.consequent().object(), node, nextNodes);
-        return nextNodes;
-    }
-
-    private void addConsequentNode(SymbolId candidate, SymbolId current, java.util.List<SymbolId> nextNodes) {
-        if (candidate == null || candidate.equals(current)) {
-            return;
-        }
-        if (booleanConcept(candidate) != null) {
-            return;
-        }
-        nextNodes.add(candidate);
-    }
-
-    private java.util.List<SymbolId> aliasNodes(SymbolId node, java.util.Set<SymbolId> knownSymbols) {
-        if (node == null) {
-            return java.util.List.of();
-        }
-        java.util.List<SymbolId> aliases = new java.util.ArrayList<>();
-        String value = node.value();
-        if ("entity:spacecraft_orientation_control".equals(value)
-                || "concept:control_spacecraft_orientation".equals(value)) {
-            addKnownAlias(aliases, knownSymbols, "entity:spacecraft_orientation_control");
-            addKnownAlias(aliases, knownSymbols, "concept:control_spacecraft_orientation");
-            addKnownAlias(aliases, knownSymbols, "entity:spacecraft_orientation");
-            addKnownAlias(aliases, knownSymbols, "concept:spacecraft_orientation");
-        }
-        if (value.startsWith("entity:")) {
-            String local = value.substring("entity:".length());
-            addKnownAlias(aliases, knownSymbols, "concept:" + local);
-            String singular = singularize(local);
-            if (!singular.equals(local)) {
-                addKnownAlias(aliases, knownSymbols, "entity:" + singular);
-                addKnownAlias(aliases, knownSymbols, "concept:" + singular);
-            }
-        } else if (value.startsWith("concept:")) {
-            String local = value.substring("concept:".length());
-            addKnownAlias(aliases, knownSymbols, "entity:" + local);
-            String plural = pluralize(local);
-            if (!plural.equals(local)) {
-                addKnownAlias(aliases, knownSymbols, "entity:" + plural);
-            }
-        }
-        addSuffixAliases(aliases, knownSymbols, value);
-        return aliases;
-    }
-
-    private java.util.List<SymbolId> typeNodes(SymbolId node, java.util.Set<SymbolId> knownSymbols) {
-        java.util.List<SymbolId> next = new java.util.ArrayList<>();
-        if (node == null) {
-            return next;
-        }
-        graph.findEntity(node).ifPresent(entity -> {
-            for (String type : entity.conceptTypes()) {
-                SymbolId typeId = symbolFromType(type);
-                if (typeId != null) {
-                    if (knownSymbols.contains(typeId) || typeId.value().startsWith("concept:")
-                            || typeId.value().startsWith("http")) {
-                        next.add(typeId);
-                    }
-                    if (typeId.value().startsWith("http")) {
-                        for (String superclass : ontology.getSuperclasses(typeId.value())) {
-                            SymbolId superId = new SymbolId(superclass);
-                            if (!superId.equals(node)) {
-                                next.add(superId);
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        return next;
-    }
-
-    private SymbolId symbolFromType(String type) {
-        if (type == null || type.isBlank()) {
-            return null;
-        }
-        if (type.startsWith("concept:") || type.startsWith("entity:")
-                || type.startsWith("http://") || type.startsWith("https://")) {
-            return new SymbolId(type);
-        }
-        return new SymbolId("concept:" + type);
-    }
-
-    private void addKnownAlias(java.util.List<SymbolId> aliases,
-                               java.util.Set<SymbolId> knownSymbols,
-                               String candidate) {
-        SymbolId id = new SymbolId(candidate);
-        if (knownSymbols.contains(id)) {
-            aliases.add(id);
-        }
-    }
-
-    private void addSuffixAliases(java.util.List<SymbolId> aliases,
-                                  java.util.Set<SymbolId> knownSymbols,
-                                  String value) {
-        if (value == null || value.isBlank()) {
-            return;
-        }
-        String local = value;
-        if (local.startsWith("entity:")) {
-            local = local.substring("entity:".length());
-        } else if (local.startsWith("concept:")) {
-            local = local.substring("concept:".length());
-        }
-        String[] localTokens = local.split("_");
-        if (localTokens.length < 2) {
-            return;
-        }
-        for (SymbolId candidate : knownSymbols) {
-            String candidateValue = candidate.value();
-            String candidateLocal = candidateValue;
-            if (candidateLocal.startsWith("entity:")) {
-                candidateLocal = candidateLocal.substring("entity:".length());
-            } else if (candidateLocal.startsWith("concept:")) {
-                candidateLocal = candidateLocal.substring("concept:".length());
-            }
-            String[] candidateTokens = candidateLocal.split("_");
-            if (candidateTokens.length <= localTokens.length) {
-                continue;
-            }
-            if (endsWithTokens(candidateTokens, localTokens)) {
-                aliases.add(candidate);
-            }
-        }
-    }
-
-    private boolean endsWithTokens(String[] candidateTokens, String[] localTokens) {
-        if (candidateTokens.length < localTokens.length) {
-            return false;
-        }
-        int offset = candidateTokens.length - localTokens.length;
-        for (int i = 0; i < localTokens.length; i++) {
-            if (!candidateTokens[offset + i].equals(localTokens[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private String singularize(String value) {
-        if (value.endsWith("ss") || !value.endsWith("s") || value.length() <= 1) {
-            return value;
-        }
-        return value.substring(0, value.length() - 1);
-    }
-
-    private String pluralize(String value) {
-        if (value.endsWith("s")) {
-            return value;
-        }
-        return value + "s";
-    }
-
-    private java.util.Set<SymbolId> collectKnownSymbols() {
-        java.util.Set<SymbolId> known = new java.util.HashSet<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            known.add(assertion.subject());
-            known.add(assertion.object());
-        }
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion antecedent = rule.antecedent();
-            RelationAssertion consequent = rule.consequent();
-            known.add(antecedent.subject());
-            known.add(antecedent.object());
-            known.add(consequent.subject());
-            known.add(consequent.object());
-        }
-        return known;
-    }
-
-    private java.util.List<String> renderChainSteps(ChainStep end) {
-        java.util.ArrayDeque<String> stack = new java.util.ArrayDeque<>();
-        ChainStep current = end;
-        while (current != null && current.parent != null) {
-            if (current.assertion != null) {
-                stack.addFirst(formatAssertionSentence(current.assertion));
-            } else if (current.rule != null) {
-                stack.addFirst(formatRuleSentence(current.rule));
-            }
-            current = current.parent;
-        }
-        return new java.util.ArrayList<>(stack);
-    }
-
-    private static final class ChainStep {
-        private final SymbolId node;
-        private final ChainStep parent;
-        private final RelationAssertion assertion;
-        private final RuleAssertion rule;
-        private final int depth;
-        private final double score;
-
-        private ChainStep(SymbolId node, ChainStep parent) {
-            this(node, parent, null, null, 0.0);
-        }
-
-        private ChainStep(SymbolId node, ChainStep parent, RelationAssertion assertion, RuleAssertion rule, double score) {
-            this.node = node;
-            this.parent = parent;
-            this.assertion = assertion;
-            this.rule = rule;
-            this.depth = parent == null ? 0 : parent.depth + 1;
-            this.score = score;
-        }
-    }
-
-    private record ChainResult(java.util.List<String> sentences, double score) {}
-
-    private java.util.List<SymbolId> expandAliasSymbols(SymbolId node) {
-        if (node == null) {
-            return java.util.List.of();
-        }
-        java.util.Set<SymbolId> known = collectKnownSymbols();
-        java.util.LinkedHashSet<SymbolId> expanded = new java.util.LinkedHashSet<>();
-        expanded.add(node);
-        expanded.addAll(aliasNodes(node, known));
-        return new java.util.ArrayList<>(expanded);
-    }
-
-    private double explanationSpecificity(java.util.List<String> sentences) {
-        if (sentences == null || sentences.isEmpty()) {
-            return 0.0;
-        }
-        double score = 0.0;
-        for (String sentence : sentences) {
-            if (sentence == null) {
-                continue;
-            }
-            score += specificityScore(sentence);
-            score += sentenceDynamismScore(sentence);
-        }
-        return score;
-    }
-
-    private java.util.Set<String> temporalPredicateNames() {
-        java.util.Set<String> predicates = new java.util.HashSet<>();
-        predicates.add("before");
-        predicates.add("after");
-        predicates.add("during");
-        return predicates;
-    }
-
-    private java.util.List<SymbolId> temporalBridgeNodes(SymbolId node, java.util.Set<String> temporalPredicates) {
-        if (node == null) {
-            return java.util.List.of();
-        }
-        java.util.List<SymbolId> results = new java.util.ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            if (!assertion.subject().equals(node)) {
-                continue;
-            }
-            if (!temporalPredicates.contains(localName(assertion.predicate()))) {
-                continue;
-            }
-            SymbolId time = assertion.object();
-            for (RelationAssertion other : graph.getAllAssertions()) {
-                if (other.subject().equals(node)) {
-                    continue;
-                }
-                if (!temporalPredicates.contains(localName(other.predicate()))) {
-                    continue;
-                }
-                if (other.object().equals(time)) {
-                    results.add(other.subject());
-                }
-            }
-        }
-        return results;
-    }
-
-    private double predicateDynamismScore(String predicate) {
-        if (predicate == null || predicate.isBlank()) {
-            return 0.0;
-        }
-        return switch (predicate) {
-            case "fail", "fails", "stop", "stops", "operate", "operates", "restore", "restores",
-                    "regain", "regains", "fire", "fires", "fired", "respond", "responds", "drop",
-                    "drops", "spike", "spikes", "cause", "causes", "causedby" -> 0.55;
-            case "poweredby", "require", "requires", "contain", "contains", "type", "rdf:type" -> -0.25;
-            default -> 0.0;
-        };
-    }
-
-    private double sentenceDynamismScore(String sentence) {
-        if (sentence == null || sentence.isBlank()) {
-            return 0.0;
-        }
-        String normalized = sentence.toLowerCase(java.util.Locale.ROOT);
-        double score = 0.0;
-        if (normalized.contains("fail") || normalized.contains("stop")
-                || normalized.contains("restore") || normalized.contains("regain")
-                || normalized.contains("fired") || normalized.contains("respond")
-                || normalized.contains("drop") || normalized.contains("spike")) {
-            score += 0.4;
-        }
-        if (normalized.contains("powered by") || normalized.contains("requires")
-                || normalized.contains("contains")) {
-            score -= 0.2;
-        }
-        return score;
-    }
-
-    private java.util.List<String> buildPredicateExplanation(QueryGoal goal, String predicate, int limit) {
-        java.util.List<String> sentences = new java.util.ArrayList<>();
-        if (goal == null || predicate == null || predicate.isBlank()) {
-            return sentences;
-        }
-        SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
-        SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
-        java.util.List<RelationAssertion> assertionMatches = new java.util.ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            if (!predicate.equals(localName(assertion.predicate()))) {
-                continue;
-            }
-            if (subject != null && !assertion.subject().equals(subject)) {
-                continue;
-            }
-            if (object != null && !assertion.object().equals(object)) {
-                continue;
-            }
-            assertionMatches.add(assertion);
-        }
-        assertionMatches.sort((left, right) -> Double.compare(
-                assertionExplanationScore(right),
-                assertionExplanationScore(left)
-        ));
-        for (RelationAssertion assertion : assertionMatches) {
-            sentences.add(formatAssertionSentence(assertion));
-            if (sentences.size() >= limit) {
-                return sentences;
-            }
-        }
-
-        java.util.List<RuleAssertion> ruleMatches = new java.util.ArrayList<>();
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
-            if (!predicate.equals(localName(consequent.predicate()))) {
-                continue;
-            }
-            if (subject != null && !consequent.subject().equals(subject)) {
-                continue;
-            }
-            if (object != null && !consequent.object().equals(object)) {
-                continue;
-            }
-            ruleMatches.add(rule);
-        }
-        ruleMatches.sort((left, right) -> Double.compare(
-                ruleExplanationScore(right),
-                ruleExplanationScore(left)
-        ));
-        java.util.Set<String> seen = new java.util.HashSet<>(sentences);
-        for (RuleAssertion rule : ruleMatches) {
-            String ruleSentence = formatRuleSentence(rule);
-            if (seen.add(ruleSentence)) {
-                sentences.add(ruleSentence);
-            }
-            if (sentences.size() >= limit) {
-                return sentences;
-            }
-            SymbolId next = selectCauseNode(rule.antecedent());
-            if (next == null) {
-                continue;
-            }
-            java.util.List<String> followUp = explanationChains.buildExplanationChainFrom(
-                    next,
-                    Math.max(1, limit - sentences.size()),
-                    seen
-            );
-            if (!followUp.isEmpty()) {
-                sentences.addAll(followUp);
-                if (sentences.size() >= limit) {
-                    return sentences.subList(0, limit);
-                }
-            }
-        }
-        if (sentences.size() < limit && ("restore".equals(predicate) || "regain".equals(predicate))) {
-            sentences.addAll(explanationChains.buildRecoveryEvidence(limit - sentences.size()));
-        }
-        return sentences;
-    }
-
-    private String formatCausalSentence(RelationAssertion assertion, SymbolId cause, SymbolId effect) {
-        String predicate = localName(assertion.predicate());
-        if ("causedby".equals(predicate)) {
-            return displayValue(effect) + " is caused by " + displayValue(cause) + ".";
-        }
-        return displayValue(cause) + " causes " + displayValue(effect) + ".";
-    }
-
-    private String formatRuleSentence(RuleAssertion rule) {
-        RelationAssertion antecedent = rule.antecedent();
-        RelationAssertion consequent = rule.consequent();
-        return "If " + formatAssertionClause(antecedent) + ", then " + formatAssertionClause(consequent) + ".";
     }
 
     private String ruleChainFallback(SymbolId target) {
@@ -1838,208 +1429,6 @@ public final class SahrAgent {
         return local.toLowerCase(java.util.Locale.ROOT);
     }
 
-    private ReasoningCandidate selectBestAnswerCandidate(List<ReasoningCandidate> candidates) {
-        ReasoningCandidate winner = candidates.get(0);
-        double winnerScore = candidateScore(winner);
-        for (ReasoningCandidate candidate : candidates) {
-            double score = candidateScore(candidate);
-            if (score > winnerScore) {
-                winner = candidate;
-                winnerScore = score;
-            }
-        }
-        return winner;
-    }
-
-    private double candidateScore(ReasoningCandidate candidate) {
-        if (candidate == null) {
-            return 0.0;
-        }
-        double base = candidate.score();
-        Object payload = candidate.payload();
-        if (payload instanceof SymbolId) {
-            base += specificityScore(((SymbolId) payload).value()) * 0.05;
-        } else if (payload instanceof String) {
-            base += specificityScore(payload.toString()) * 0.05;
-        }
-        return base;
-    }
-
-    private java.util.List<ReasoningCandidate> filterEchoAnswers(java.util.List<ReasoningCandidate> answers, QueryGoal query) {
-        if (answers == null || answers.isEmpty() || query == null) {
-            return answers == null ? java.util.List.of() : answers;
-        }
-        String subject = query.subject();
-        String object = query.object();
-        if ((subject == null || subject.isBlank()) && (object == null || object.isBlank())) {
-            return answers;
-        }
-        java.util.List<ReasoningCandidate> filtered = new java.util.ArrayList<>();
-        for (ReasoningCandidate candidate : answers) {
-            Object payload = candidate.payload();
-            String value = null;
-            if (payload instanceof SymbolId) {
-                value = ((SymbolId) payload).value();
-            } else if (payload instanceof String) {
-                value = payload.toString();
-            }
-            if (value == null || value.isBlank()) {
-                continue;
-            }
-            if (value.equals(subject) || value.equals(object)) {
-                continue;
-            }
-            filtered.add(candidate);
-        }
-        return filtered.isEmpty() ? answers : filtered;
-    }
-
-    private java.util.List<String> filterEchoValues(java.util.List<String> values, QueryGoal query) {
-        if (values == null || values.isEmpty() || query == null) {
-            return values == null ? java.util.List.of() : values;
-        }
-        String subject = query.subject();
-        String object = query.object();
-        if ((subject == null || subject.isBlank()) && (object == null || object.isBlank())) {
-            return values;
-        }
-        java.util.List<String> filtered = new java.util.ArrayList<>();
-        for (String value : values) {
-            if (value == null || value.isBlank()) {
-                continue;
-            }
-            if (value.equals(subject) || value.equals(object)) {
-                continue;
-            }
-            filtered.add(value);
-        }
-        return filtered.isEmpty() ? values : filtered;
-    }
-
-    private java.util.List<String> rankAnswerValues(java.util.List<String> values) {
-        if (values == null || values.size() <= 1) {
-            return values == null ? java.util.List.of() : values;
-        }
-        java.util.List<String> ranked = new java.util.ArrayList<>(values);
-        ranked.sort((left, right) -> Double.compare(specificityScore(right), specificityScore(left)));
-        return ranked;
-    }
-
-    private double specificityScore(String value) {
-        if (value == null || value.isBlank()) {
-            return 0.0;
-        }
-        double score = 0.0;
-        if (value.startsWith("entity:")) {
-            score += 1.0;
-        } else if (value.startsWith("concept:")) {
-            score += 0.5;
-        }
-        String normalized = value.toLowerCase(java.util.Locale.ROOT);
-        normalized = normalized.replace("entity:", "").replace("concept:", "");
-        normalized = normalized.replaceAll("[^a-z0-9_ ]", "");
-        String[] tokens = normalized.split("[_\\s]+");
-        score += Math.min(0.4, tokens.length * 0.05);
-        for (String token : tokens) {
-            if (isContainerToken(token)) {
-                score -= 0.35;
-            }
-        }
-        return score;
-    }
-
-    private boolean isContainerToken(String token) {
-        if (token == null || token.isBlank()) {
-            return false;
-        }
-        return switch (token) {
-            case "spacecraft", "system", "mechanism", "device", "entity",
-                    "object", "thing", "relationship", "process", "event",
-                    "information", "data", "component" -> true;
-            default -> false;
-        };
-    }
-
-    private double assertionSpecificity(RelationAssertion assertion) {
-        if (assertion == null) {
-            return 0.0;
-        }
-        return Math.max(specificityScore(assertion.subject().value()),
-                specificityScore(assertion.object().value()));
-    }
-
-    private double assertionExplanationScore(RelationAssertion assertion) {
-        if (assertion == null) {
-            return 0.0;
-        }
-        return assertionSpecificity(assertion)
-                + predicateDynamismScore(localName(assertion.predicate()));
-    }
-
-    private double ruleSpecificity(RuleAssertion rule) {
-        if (rule == null) {
-            return 0.0;
-        }
-        RelationAssertion consequent = rule.consequent();
-        if (consequent == null) {
-            return 0.0;
-        }
-        return Math.max(specificityScore(consequent.subject().value()),
-                specificityScore(consequent.object().value()));
-    }
-
-    private double ruleExplanationScore(RuleAssertion rule) {
-        if (rule == null) {
-            return 0.0;
-        }
-        RelationAssertion consequent = rule.consequent();
-        if (consequent == null) {
-            return 0.0;
-        }
-        return ruleSpecificity(rule)
-                + predicateDynamismScore(localName(consequent.predicate()));
-    }
-
-    private String formatAssertionSentence(RelationAssertion assertion) {
-        return formatAssertionClause(assertion) + ".";
-    }
-
-    private String formatAssertionClause(RelationAssertion assertion) {
-        if (assertion == null) {
-            return "unknown";
-        }
-        SymbolId subject = assertion.subject();
-        SymbolId object = assertion.object();
-        String predicate = localName(assertion.predicate());
-        Boolean booleanValue = booleanConcept(object);
-        String subjectText = displayValue(subject);
-        if (booleanValue != null) {
-            if ("fail".equals(predicate)) {
-                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "fail" : "does not fail");
-            }
-            if ("operate".equals(predicate) || "function".equals(predicate)
-                    || "work".equals(predicate) || "respond".equals(predicate)
-                    || "stop_responding".equals(predicate) || "stop".equals(predicate)) {
-                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "operate" : "does not operate");
-            }
-            if ("become_unstable".equals(predicate) || "unstable".equals(predicate)) {
-                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "becomes unstable" : "remains stable");
-            }
-            return subjectText + (booleanValue ? " " + displayPredicate(assertion.predicate())
-                    : " does not " + displayPredicate(assertion.predicate()));
-        }
-        if ("backupfor".equals(predicate) || "backup_for".equals(predicate)) {
-            return subjectText + " is a backup for " + displayValue(object);
-        }
-        if ("poweredby".equals(predicate) || "powered_by".equals(predicate)) {
-            return subjectText + " is powered by " + displayValue(object);
-        }
-        if ("restore".equals(predicate)) {
-            return subjectText + " restores " + displayValue(object);
-        }
-        return subjectText + " " + displayPredicate(assertion.predicate()) + " " + displayValue(object);
-    }
-
     private Boolean booleanConcept(SymbolId id) {
         if (id == null || id.value() == null) {
             return null;
@@ -2056,62 +1445,6 @@ public final class SahrAgent {
             return Boolean.FALSE;
         }
         return null;
-    }
-
-    private String selectVerbForm(String subjectText, String base) {
-        if (subjectText == null || subjectText.isBlank()) {
-            return base;
-        }
-        String normalized = subjectText.trim().toLowerCase(java.util.Locale.ROOT);
-        String[] tokens = normalized.split("\\s+");
-        String last = tokens[tokens.length - 1];
-        boolean plural = last.endsWith("s") && !last.endsWith("ss");
-        if (!plural) {
-            if (base.startsWith("does not ")) {
-                return base;
-            }
-            if (base.startsWith("do not ")) {
-                return base.replaceFirst("do not ", "does not ");
-            }
-            if (!base.contains(" ") && !base.endsWith("s")) {
-                return base + "s";
-            }
-            return base;
-        }
-        if (base.startsWith("does not ")) {
-            return base.replaceFirst("does not ", "do not ");
-        }
-        if (base.endsWith("s") && base.split("\\s+").length == 1) {
-            return base.substring(0, base.length() - 1);
-        }
-        if ("is".equals(base)) {
-            return "are";
-        }
-        if ("was".equals(base)) {
-            return "were";
-        }
-        return base;
-    }
-
-    private String displayValue(SymbolId id) {
-        if (id == null || id.value() == null) {
-            return "unknown";
-        }
-        String value = id.value();
-        if (value.startsWith("entity:")) {
-            value = value.substring("entity:".length());
-        } else if (value.startsWith("concept:")) {
-            value = value.substring("concept:".length());
-        }
-        return value.replace('_', ' ');
-    }
-
-    private String displayPredicate(String predicate) {
-        String local = localName(predicate);
-        if (local.isBlank()) {
-            return "related to";
-        }
-        return local.replace('_', ' ');
     }
 
     private void applyAnswerAsAssertion(Object payload) {
@@ -2234,7 +1567,9 @@ public final class SahrAgent {
         if (query == null || query.discourseModifier() != null || query.type() != QueryGoal.Type.RELATION) {
             return null;
         }
-        java.util.List<String> values = rankAnswerValues(filterEchoValues(extractAnswerValues(candidates), query));
+        java.util.List<String> values = answerRanker.rankAnswerValues(
+                answerRanker.filterEchoValues(extractAnswerValues(candidates), query)
+        );
         if (values.size() <= 1) {
             return null;
         }

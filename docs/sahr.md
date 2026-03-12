@@ -425,6 +425,10 @@ improve sequence-oriented explanations.
 Explanation-chain construction and cause selection are now centralized
 in `ExplanationChainBuilder` to keep `SahrAgent` focused on orchestration
 and reduce method sprawl.
+`SahrAgent` now delegates answer formatting to `AnswerRenderer`, alias
+bridging to `AliasBridge`, forward explanation search to
+`ForwardChainSearch`, predicate-level explanation lookup to
+`PredicateExplainer`, and answer scoring/selection to `AnswerRanker`.
 
 Working Memory
 ---------------

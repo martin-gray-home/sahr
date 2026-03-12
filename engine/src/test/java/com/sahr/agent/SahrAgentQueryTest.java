@@ -180,15 +180,46 @@ class SahrAgentQueryTest {
                 new SymbolId("concept:true"),
                 0.9
         );
-        try {
-            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("formatAssertionClause", RelationAssertion.class);
-            method.setAccessible(true);
-            String clause = (String) method.invoke(SahrTestAgentFactory.newAgent(new InMemoryKnowledgeBase()), assertion);
-            assertTrue(clause.contains("wheel motor"));
-            assertTrue(clause.contains("fails"));
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Failed to invoke formatAssertionClause", e);
-        }
+        AnswerRenderer renderer = new AnswerRenderer(new AnswerRenderer.DisplayFormatter() {
+            @Override
+            public String localName(String predicate) {
+                if (predicate == null || predicate.isBlank()) {
+                    return "";
+                }
+                int hashIdx = predicate.lastIndexOf('#');
+                int slashIdx = predicate.lastIndexOf('/');
+                int idx = Math.max(hashIdx, slashIdx);
+                String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
+                return local.toLowerCase(java.util.Locale.ROOT);
+            }
+
+            @Override
+            public Boolean booleanConcept(SymbolId id) {
+                if (id == null || id.value() == null) {
+                    return null;
+                }
+                String value = id.value();
+                if (value.startsWith("concept:")) {
+                    value = value.substring("concept:".length());
+                }
+                value = value.toLowerCase(java.util.Locale.ROOT);
+                if ("true".equals(value)) {
+                    return Boolean.TRUE;
+                }
+                if ("false".equals(value)) {
+                    return Boolean.FALSE;
+                }
+                return null;
+            }
+
+            @Override
+            public String normalizeTypeToken(String raw) {
+                return raw == null ? "" : raw;
+            }
+        });
+        String clause = renderer.formatAssertionSentence(assertion);
+        assertTrue(clause.contains("wheel motor"));
+        assertTrue(clause.contains("fails"));
     }
 
     @Test
@@ -199,15 +230,46 @@ class SahrAgentQueryTest {
                 new SymbolId("concept:true"),
                 0.9
         );
-        try {
-            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("formatAssertionClause", RelationAssertion.class);
-            method.setAccessible(true);
-            String clause = (String) method.invoke(SahrTestAgentFactory.newAgent(new InMemoryKnowledgeBase()), assertion);
-            assertTrue(clause.contains("actuators"));
-            assertTrue(clause.contains("fail"));
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Failed to invoke formatAssertionClause", e);
-        }
+        AnswerRenderer renderer = new AnswerRenderer(new AnswerRenderer.DisplayFormatter() {
+            @Override
+            public String localName(String predicate) {
+                if (predicate == null || predicate.isBlank()) {
+                    return "";
+                }
+                int hashIdx = predicate.lastIndexOf('#');
+                int slashIdx = predicate.lastIndexOf('/');
+                int idx = Math.max(hashIdx, slashIdx);
+                String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
+                return local.toLowerCase(java.util.Locale.ROOT);
+            }
+
+            @Override
+            public Boolean booleanConcept(SymbolId id) {
+                if (id == null || id.value() == null) {
+                    return null;
+                }
+                String value = id.value();
+                if (value.startsWith("concept:")) {
+                    value = value.substring("concept:".length());
+                }
+                value = value.toLowerCase(java.util.Locale.ROOT);
+                if ("true".equals(value)) {
+                    return Boolean.TRUE;
+                }
+                if ("false".equals(value)) {
+                    return Boolean.FALSE;
+                }
+                return null;
+            }
+
+            @Override
+            public String normalizeTypeToken(String raw) {
+                return raw == null ? "" : raw;
+            }
+        });
+        String clause = renderer.formatAssertionSentence(assertion);
+        assertTrue(clause.contains("actuators"));
+        assertTrue(clause.contains("fail"));
     }
 
     @Test
