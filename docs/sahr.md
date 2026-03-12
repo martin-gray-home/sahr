@@ -422,9 +422,26 @@ consequents preserve the correct polarity for failure reasoning.
 Positive stoppage predicates (e.g., “stopped responding”, “stop
 functioning”) are normalized into `fail` so failure chains are
 canonicalized even when phrased as stoppage events.
+Failure-chain assembly also treats negated capability predicates
+(`operate=false`, `function=false`, `respond=false`) as failures so
+subsystem outages are captured even when they are expressed as
+non-operation instead of explicit `fail`.
+Failure extraction also accepts self-referential `fail` assertions
+(`subject` == `object`) to handle legacy rules that mark failure without
+a boolean object.
+Loss-of subjects (e.g., “loss of spacecraft orientation control”) are
+normalized into failure assertions so causal links are expressed as
+failure causes rather than opaque “loss” entities.
+Cause-chain responses now build structured role-based chains (precursor
+signals, failures, capability losses, outcomes, recovery agents) when a
+question asks for a chain/explanation, so “chain of events” prompts do
+not collapse to a single generic node.
 Cause-chain ranking now prefers candidates with temporal or telemetry
 support, and will emit temporal evidence sentences when available to
 improve sequence-oriented explanations.
+Evidence-aligned ranking boosts chains that connect telemetry precursors
+to failure and outcome via temporal links, so “best fit” and telemetry
+sequence questions prefer explanations tied to observed signals.
 Explanation-chain construction and cause selection are now centralized
 in `ExplanationChainBuilder` to keep `SahrAgent` focused on orchestration
 and reduce method sprawl.
@@ -442,6 +459,8 @@ instead of the generic subject.
 Explanation candidates also track precursor signals, component failures,
 subsystem failures, capability losses, and outcomes so later ranking and
 role‑projection can select the correct answer target per question.
+Specificity scoring now penalizes generic loss tokens to prefer
+mechanistic failures over broad loss entities in explanation chains.
 
 Annotation Policy
 -----------------

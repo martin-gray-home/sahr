@@ -30,6 +30,7 @@ import com.sahr.nlp.Statement;
 import com.sahr.nlp.StatementBatch;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
+import com.sahr.ontology.SahrAnnotationVocabulary;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -454,6 +455,7 @@ public final class SahrAgent {
         Set<String> subjectTypes = mapTypes(statement.subjectTypes());
         Set<String> objectTypes = mapTypes(statement.objectTypes());
         SymbolId objectId = statement.object();
+        SymbolId subjectId = statement.subject();
         if (statement.objectIsConcept()) {
             Optional<String> mapped = termMapper.mapToken(stripPrefix(statement.object().value()));
             if (mapped.isPresent()) {
@@ -476,9 +478,28 @@ public final class SahrAgent {
         for (Statement extra : statement.additionalStatements()) {
             mappedExtras.add(mapStatement(extra));
         }
+        if (subjectId != null && subjectId.value() != null) {
+            LossNormalization lossNormalization = normalizeLossSubject(subjectId, predicate);
+            if (lossNormalization != null) {
+                subjectId = lossNormalization.normalized;
+                mappedExtras.add(lossNormalization.failureStatement);
+            }
+        }
+        if ("control".equals(localName(predicate)) && isBooleanFalse(objectId)) {
+            mappedExtras.add(new Statement(
+                    subjectId,
+                    new SymbolId("concept:true"),
+                    "fail",
+                    subjectTypes,
+                    java.util.Set.of("true"),
+                    true,
+                    statement.confidence(),
+                    List.of()
+            ));
+        }
         if (predicateIri.isPresent() && !predicateIri.get().equals(predicate)) {
             mappedExtras.add(new Statement(
-                    statement.subject(),
+                    subjectId,
                     objectId,
                     surfacePredicate,
                     subjectTypes,
@@ -491,7 +512,7 @@ public final class SahrAgent {
         }
 
         return new Statement(
-                statement.subject(),
+                subjectId,
                 objectId,
                 predicate,
                 subjectTypes,
@@ -537,6 +558,58 @@ public final class SahrAgent {
             return new NormalizedPredicate("fail", newObject, java.util.Set.of("true"));
         }
         return new NormalizedPredicate(predicate, null, null);
+    }
+
+    private static final class LossNormalization {
+        private final SymbolId normalized;
+        private final Statement failureStatement;
+
+        private LossNormalization(SymbolId normalized, Statement failureStatement) {
+            this.normalized = normalized;
+            this.failureStatement = failureStatement;
+        }
+    }
+
+    private LossNormalization normalizeLossSubject(SymbolId subjectId, String predicate) {
+        String value = subjectId.value();
+        if (value == null) {
+            return null;
+        }
+        String stripped = stripPrefix(value);
+        if (!stripped.startsWith("loss_of_")) {
+            return null;
+        }
+        String remainder = stripped.substring("loss_of_".length());
+        if (remainder.isBlank()) {
+            return null;
+        }
+        String normalized = "entity:" + remainder;
+        SymbolId normalizedId = new SymbolId(normalized);
+        if ("cause".equals(localName(predicate)) || "causedby".equals(localName(predicate))) {
+            Statement failure = new Statement(
+                    normalizedId,
+                    new SymbolId("concept:true"),
+                    "fail",
+                    java.util.Set.of(),
+                    java.util.Set.of("true"),
+                    true,
+                    0.8,
+                    List.of()
+            );
+            return new LossNormalization(normalizedId, failure);
+        }
+        return null;
+    }
+
+    private boolean isBooleanFalse(SymbolId id) {
+        if (id == null || id.value() == null) {
+            return false;
+        }
+        String value = id.value();
+        if (value.startsWith("concept:")) {
+            value = value.substring("concept:".length());
+        }
+        return "false".equalsIgnoreCase(value);
     }
 
     private static final class NormalizedPredicate {
@@ -1328,7 +1401,11 @@ public final class SahrAgent {
         }
         ExplanationCandidate structuredCandidate = explanationChains.buildExplanationCandidate(target, 4);
         if (structuredCandidate != null && (wantsChainExplanation(goal) || "cause".equals(predicate) || "causedby".equals(predicate))) {
-            String chain = bestFailureChainToOutcome(structuredCandidate, target);
+            java.util.List<String> structured = buildStructuredChain(structuredCandidate, goal, target, predicate);
+            if (!structured.isEmpty()) {
+                return String.join("\n", structured);
+            }
+            String chain = bestFailureChainToOutcome(structuredCandidate, target, goal);
             if (chain != null) {
                 return chain;
             }
@@ -1463,6 +1540,10 @@ public final class SahrAgent {
     }
 
     private String bestFailureChainToOutcome(ExplanationCandidate candidate, SymbolId outcome) {
+        return bestFailureChainToOutcome(candidate, outcome, null);
+    }
+
+    private String bestFailureChainToOutcome(ExplanationCandidate candidate, SymbolId outcome, QueryGoal goal) {
         if (candidate == null || outcome == null) {
             return null;
         }
@@ -1470,13 +1551,19 @@ public final class SahrAgent {
         failures.addAll(candidate.componentFailures());
         failures.addAll(candidate.subsystemFailures());
         ForwardChainSearch.ChainResult best = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
         for (SymbolId failure : failures) {
+            if (answerRanker.isGenericLossValue(failure.value())) {
+                continue;
+            }
             ForwardChainSearch.ChainResult result = forwardChainSearch.search(failure, outcome, 4);
             if (result == null || result.sentences().isEmpty()) {
                 continue;
             }
-            if (best == null || result.score() > best.score()) {
+            double score = result.score() + evidenceAlignmentScore(candidate, failure, outcome, goal);
+            if (best == null || score > bestScore) {
                 best = result;
+                bestScore = score;
             }
         }
         if (best != null && !best.sentences().isEmpty()) {
@@ -1498,8 +1585,23 @@ public final class SahrAgent {
         if (failures.isEmpty()) {
             return null;
         }
-        SymbolId best = failures.get(0);
-        double bestScore = answerRanker.specificityScore(best.value());
+        SymbolId best = null;
+        double bestScore = -1.0;
+        for (SymbolId failure : failures) {
+            if (answerRanker.isGenericLossValue(failure.value())) {
+                continue;
+            }
+            double score = answerRanker.specificityScore(failure.value());
+            if (score > bestScore) {
+                best = failure;
+                bestScore = score;
+            }
+        }
+        if (best != null) {
+            return best;
+        }
+        best = failures.get(0);
+        bestScore = answerRanker.specificityScore(best.value());
         for (SymbolId failure : failures) {
             double score = answerRanker.specificityScore(failure.value());
             if (score > bestScore) {
@@ -1508,6 +1610,515 @@ public final class SahrAgent {
             }
         }
         return best;
+    }
+
+    private double evidenceAlignmentScore(ExplanationCandidate candidate,
+                                          SymbolId failure,
+                                          SymbolId outcome,
+                                          QueryGoal goal) {
+        if (candidate == null || failure == null) {
+            return 0.0;
+        }
+        double score = 0.0;
+        score += evidenceSupportScore(failure);
+        if (outcome != null) {
+            score += evidenceSupportScore(outcome) * 0.4;
+        }
+        boolean wantsEvidence = wantsEvidenceAlignedChain(goal);
+        java.util.List<SymbolId> precursors = candidate.precursorSignals();
+        if (!precursors.isEmpty()) {
+            for (SymbolId signal : precursors) {
+                score += temporalSupportScore(signal, failure) * 0.6;
+                if (outcome != null) {
+                    score += temporalSupportScore(signal, outcome) * 0.4;
+                }
+            }
+            if (wantsEvidence) {
+                score += 0.4;
+            }
+        } else if (wantsEvidence) {
+            for (SymbolId evidence : candidate.evidenceNodes()) {
+                score += temporalSupportScore(evidence, failure) * 0.4;
+                if (outcome != null) {
+                    score += temporalSupportScore(evidence, outcome) * 0.2;
+                }
+            }
+            if (hasTemporalContext(failure)) {
+                score += 0.4;
+            }
+            if (outcome != null && hasTemporalContext(outcome)) {
+                score += 0.2;
+            }
+        }
+        return score;
+    }
+
+    private boolean wantsEvidenceAlignedChain(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        String modifier = goal.modifier();
+        String predicateText = goal.predicateText();
+        String subjectText = goal.subjectText();
+        String objectText = goal.objectText();
+        return containsEvidenceCue(modifier)
+                || containsEvidenceCue(predicateText)
+                || containsEvidenceCue(subjectText)
+                || containsEvidenceCue(objectText);
+    }
+
+    private boolean containsEvidenceCue(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String normalized = text.toLowerCase(java.util.Locale.ROOT);
+        return normalized.contains("telemetry")
+                || normalized.contains("sequence")
+                || normalized.contains("evidence")
+                || normalized.contains("best fit")
+                || normalized.contains("plausible")
+                || normalized.contains("likely");
+    }
+
+    private double evidenceSupportScore(SymbolId node) {
+        if (node == null || annotationResolver == null) {
+            return 0.0;
+        }
+        double score = 0.0;
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            Double weight = annotationResolver.resolveObjectPropertyIri(assertion.predicate())
+                    .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
+                    .orElse(null);
+            if (weight == null || weight == 0.0) {
+                continue;
+            }
+            if (assertion.subject().equals(node) || assertion.object().equals(node)) {
+                score += weight;
+            }
+        }
+        return score;
+    }
+
+    private double temporalSupportScore(SymbolId cause, SymbolId effect) {
+        if (cause == null || effect == null) {
+            return 0.0;
+        }
+        double score = 0.0;
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
+                continue;
+            }
+            if (assertion.subject().equals(cause) && assertion.object().equals(effect)) {
+                score += 0.4;
+            } else if ("after".equals(predicate) && assertion.subject().equals(effect) && assertion.object().equals(cause)) {
+                score += 0.4;
+            } else if ("before".equals(predicate) && assertion.subject().equals(effect) && assertion.object().equals(cause)) {
+                score += 0.2;
+            } else if ("during".equals(predicate)
+                    && (assertion.subject().equals(cause) || assertion.subject().equals(effect))) {
+                score += 0.2;
+            }
+        }
+        return score;
+    }
+
+    private java.util.List<String> buildStructuredChain(ExplanationCandidate candidate,
+                                                        QueryGoal goal,
+                                                        SymbolId target,
+                                                        String predicate) {
+        java.util.List<String> sentences = new java.util.ArrayList<>();
+        if (candidate == null) {
+            return sentences;
+        }
+        SymbolId precursor = selectBestSpecific(candidate.precursorSignals(), true);
+        if (precursor != null) {
+            sentences.add(roleSentence("Precursor signal", precursor));
+        }
+        boolean evidenceAligned = wantsEvidenceAlignedChain(goal)
+                || "cause".equals(predicate)
+                || "causedby".equals(predicate)
+                || hasTemporalContext(target);
+        SymbolId componentFailure = null;
+        SymbolId subsystemFailure = null;
+        if (evidenceAligned) {
+            SymbolId bestFailure = selectEvidenceAlignedFailure(candidate, target, goal);
+            if (bestFailure != null && candidate.componentFailures().contains(bestFailure)) {
+                componentFailure = bestFailure;
+            } else {
+                subsystemFailure = bestFailure;
+            }
+        }
+        if (componentFailure == null) {
+            componentFailure = selectBestSpecific(candidate.componentFailures(), true);
+        }
+        if (candidate.componentFailures().isEmpty()) {
+            java.util.List<SymbolId> subsystemTop = selectTopSpecific(candidate.subsystemFailures(), 2, true, null);
+            for (SymbolId failure : subsystemTop) {
+                sentences.add(formatFailureSentence(failure));
+            }
+        } else {
+            if (componentFailure != null) {
+                sentences.add(formatFailureSentence(componentFailure));
+            }
+            if (subsystemFailure == null) {
+                subsystemFailure = selectBestSpecificExcluding(candidate.subsystemFailures(), componentFailure, true);
+            }
+            if (subsystemFailure != null && !subsystemFailure.equals(componentFailure)) {
+                sentences.add(formatFailureSentence(subsystemFailure));
+            }
+        }
+        SymbolId capabilityLoss = selectBestSpecific(candidate.capabilityLosses(), false);
+        if (capabilityLoss != null) {
+            sentences.add(formatCapabilityLossSentence(capabilityLoss));
+        }
+        if (target != null) {
+            sentences.add("Outcome: " + displayValue(target) + ".");
+        }
+        if (shouldIncludeRecovery(goal, predicate, target)) {
+            SymbolId agent = selectBestRecoveryAgent(candidate, target);
+            if (agent != null) {
+                sentences.add(formatRecoverySentence(agent, target));
+            }
+        }
+        appendEvidenceLines(candidate, componentFailure, subsystemFailure, target, evidenceAligned, sentences);
+        return sentences;
+    }
+
+    private SymbolId selectBestSpecific(java.util.List<SymbolId> candidates, boolean avoidLoss) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        SymbolId best = null;
+        double bestScore = -1.0;
+        for (SymbolId candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            if (avoidLoss && answerRanker.isGenericLossValue(candidate.value())) {
+                continue;
+            }
+            double score = answerRanker.specificityScore(candidate.value());
+            if (score > bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        if (best != null) {
+            return best;
+        }
+        best = candidates.get(0);
+        bestScore = answerRanker.specificityScore(best.value());
+        for (SymbolId candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            double score = answerRanker.specificityScore(candidate.value());
+            if (score > bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private SymbolId selectBestSpecificExcluding(java.util.List<SymbolId> candidates,
+                                                 SymbolId exclude,
+                                                 boolean avoidLoss) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        SymbolId best = null;
+        double bestScore = -1.0;
+        for (SymbolId candidate : candidates) {
+            if (candidate == null || candidate.equals(exclude)) {
+                continue;
+            }
+            if (avoidLoss && answerRanker.isGenericLossValue(candidate.value())) {
+                continue;
+            }
+            double score = answerRanker.specificityScore(candidate.value());
+            if (score > bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        if (best != null) {
+            return best;
+        }
+        return selectBestSpecific(candidates, avoidLoss);
+    }
+
+    private SymbolId selectEvidenceAlignedFailure(ExplanationCandidate candidate, SymbolId outcome, QueryGoal goal) {
+        if (candidate == null) {
+            return null;
+        }
+        java.util.List<SymbolId> failures = new java.util.ArrayList<>();
+        failures.addAll(candidate.componentFailures());
+        failures.addAll(candidate.subsystemFailures());
+        if (failures.isEmpty()) {
+            return null;
+        }
+        SymbolId best = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (SymbolId failure : failures) {
+            if (failure == null || answerRanker.isGenericLossValue(failure.value())) {
+                continue;
+            }
+            double score = evidenceAlignmentScore(candidate, failure, outcome, goal)
+                    + answerRanker.specificityScore(failure.value());
+            if (score > bestScore) {
+                best = failure;
+                bestScore = score;
+            }
+        }
+        return best != null ? best : selectBestSpecific(failures, true);
+    }
+
+    private void appendEvidenceLines(ExplanationCandidate candidate,
+                                     SymbolId componentFailure,
+                                     SymbolId subsystemFailure,
+                                     SymbolId outcome,
+                                     boolean evidenceAligned,
+                                     java.util.List<String> sentences) {
+        if (!evidenceAligned) {
+            java.util.List<SymbolId> evidence = candidate.evidenceNodes();
+            int evidenceAdded = 0;
+            for (SymbolId node : evidence) {
+                if (node == null) {
+                    continue;
+                }
+                sentences.add("Evidence: " + displayValue(node) + ".");
+                evidenceAdded++;
+                if (evidenceAdded >= 2) {
+                    break;
+                }
+            }
+            return;
+        }
+        java.util.List<SymbolId> evidenceNodes = new java.util.ArrayList<>();
+        if (componentFailure != null) {
+            evidenceNodes.add(componentFailure);
+        }
+        if (subsystemFailure != null) {
+            evidenceNodes.add(subsystemFailure);
+        }
+        if (outcome != null) {
+            evidenceNodes.add(outcome);
+        }
+        java.util.List<RelationAssertion> temporalEvidence = collectTemporalEvidenceAssertions(evidenceNodes);
+        for (RelationAssertion assertion : temporalEvidence) {
+            sentences.add(answerRenderer.formatAssertionSentence(assertion));
+            if (sentences.size() >= 6) {
+                return;
+            }
+        }
+        java.util.LinkedHashSet<SymbolId> evidence = new java.util.LinkedHashSet<>();
+        evidence.addAll(findEvidenceForNode(componentFailure));
+        evidence.addAll(findEvidenceForNode(subsystemFailure));
+        evidence.addAll(findEvidenceForNode(outcome));
+        int added = 0;
+        for (SymbolId node : evidence) {
+            if (node == null) {
+                continue;
+            }
+            sentences.add("Evidence: " + displayValue(node) + ".");
+            added++;
+            if (added >= 2) {
+                break;
+            }
+        }
+    }
+
+    private java.util.List<RelationAssertion> collectTemporalEvidenceAssertions(java.util.List<SymbolId> nodes) {
+        if (nodes == null || nodes.isEmpty()) {
+            return java.util.List.of();
+        }
+        java.util.LinkedHashSet<RelationAssertion> matches = new java.util.LinkedHashSet<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
+                continue;
+            }
+            for (SymbolId node : nodes) {
+                if (node == null) {
+                    continue;
+                }
+                if (assertion.subject().equals(node) || assertion.object().equals(node)) {
+                    matches.add(assertion);
+                    break;
+                }
+            }
+        }
+        return new java.util.ArrayList<>(matches);
+    }
+
+    private boolean hasTemporalContext(SymbolId node) {
+        if (node == null) {
+            return false;
+        }
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
+                continue;
+            }
+            if (assertion.subject().equals(node) || assertion.object().equals(node)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private java.util.List<SymbolId> findEvidenceForNode(SymbolId node) {
+        if (node == null || annotationResolver == null) {
+            return java.util.List.of();
+        }
+        java.util.List<SymbolId> evidence = new java.util.ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            Double weight = annotationResolver.resolveObjectPropertyIri(assertion.predicate())
+                    .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
+                    .orElse(null);
+            if (weight == null || weight == 0.0) {
+                continue;
+            }
+            if (assertion.object().equals(node)) {
+                evidence.add(assertion.subject());
+            } else if (assertion.subject().equals(node)) {
+                evidence.add(assertion.object());
+            }
+        }
+        return evidence;
+    }
+
+    private java.util.List<SymbolId> selectTopSpecific(java.util.List<SymbolId> candidates,
+                                                       int limit,
+                                                       boolean avoidLoss,
+                                                       SymbolId exclude) {
+        if (candidates == null || candidates.isEmpty() || limit <= 0) {
+            return java.util.List.of();
+        }
+        java.util.List<SymbolId> pool = new java.util.ArrayList<>();
+        for (SymbolId candidate : candidates) {
+            if (candidate == null || candidate.equals(exclude)) {
+                continue;
+            }
+            if (avoidLoss && answerRanker.isGenericLossValue(candidate.value())) {
+                continue;
+            }
+            pool.add(candidate);
+        }
+        pool.sort((left, right) -> Double.compare(
+                answerRanker.specificityScore(right.value()),
+                answerRanker.specificityScore(left.value())
+        ));
+        if (pool.size() <= limit) {
+            return pool;
+        }
+        return new java.util.ArrayList<>(pool.subList(0, limit));
+    }
+
+    private String roleSentence(String label, SymbolId value) {
+        return label + " was " + displayValue(value) + ".";
+    }
+
+    private String formatFailureSentence(SymbolId subject) {
+        RelationAssertion assertion = findBooleanAssertion(subject, "fail", true);
+        if (assertion != null) {
+            return answerRenderer.formatAssertionSentence(assertion);
+        }
+        assertion = findFailureLikeAssertion(subject);
+        if (assertion != null) {
+            return answerRenderer.formatAssertionSentence(assertion);
+        }
+        return "Failure: " + displayValue(subject) + ".";
+    }
+
+    private String formatCapabilityLossSentence(SymbolId subject) {
+        RelationAssertion assertion = findBooleanAssertion(subject, "control", false);
+        if (assertion != null) {
+            return answerRenderer.formatAssertionSentence(assertion);
+        }
+        return "Capability loss: " + displayValue(subject) + ".";
+    }
+
+    private String formatRecoverySentence(SymbolId agent, SymbolId target) {
+        RelationAssertion assertion = findRestoreAssertion(agent, target);
+        if (assertion != null) {
+            return answerRenderer.formatAssertionSentence(assertion);
+        }
+        return "Recovery: " + displayValue(agent) + " was active during recovery.";
+    }
+
+    private RelationAssertion findRestoreAssertion(SymbolId agent, SymbolId target) {
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"restore".equals(predicate) && !"regain".equals(predicate)) {
+                continue;
+            }
+            if (agent != null && !assertion.subject().equals(agent)) {
+                continue;
+            }
+            if (target != null && !assertion.object().equals(target)) {
+                continue;
+            }
+            return assertion;
+        }
+        return null;
+    }
+
+    private RelationAssertion findBooleanAssertion(SymbolId subject, String predicate, boolean value) {
+        if (subject == null) {
+            return null;
+        }
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (!subject.equals(assertion.subject())) {
+                continue;
+            }
+            if (!predicate.equals(localName(assertion.predicate()))) {
+                continue;
+            }
+            Boolean objectValue = booleanConcept(assertion.object());
+            if (objectValue != null && objectValue == value) {
+                return assertion;
+            }
+        }
+        return null;
+    }
+
+    private RelationAssertion findFailureLikeAssertion(SymbolId subject) {
+        if (subject == null) {
+            return null;
+        }
+        String[] predicates = {"operate", "function", "work", "respond", "stop", "stop_responding"};
+        for (String predicate : predicates) {
+            RelationAssertion assertion = findBooleanAssertion(subject, predicate, false);
+            if (assertion != null) {
+                return assertion;
+            }
+        }
+        return null;
+    }
+
+    private boolean shouldIncludeRecovery(QueryGoal goal, String predicate, SymbolId target) {
+        if ("restore".equals(predicate) || "regain".equals(predicate)) {
+            return true;
+        }
+        if (target != null) {
+            String value = target.value().toLowerCase(java.util.Locale.ROOT);
+            if (value.contains("instability")) {
+                return false;
+            }
+            if (value.contains("stable") || value.contains("stability")) {
+                return true;
+            }
+        }
+        if (goal != null && goal.modifier() != null) {
+            String modifier = goal.modifier().toLowerCase(java.util.Locale.ROOT);
+            if (modifier.contains("recovery")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private SymbolId findEntityByToken(String token) {
@@ -1588,6 +2199,13 @@ public final class SahrAgent {
             value = value.substring("concept:".length());
         }
         return value.replace('_', ' ');
+    }
+
+    private String displayValue(SymbolId id) {
+        if (id == null) {
+            return "unknown";
+        }
+        return displayValue(id.value());
     }
 
     private boolean isPlural(String text) {

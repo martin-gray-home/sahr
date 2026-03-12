@@ -46,6 +46,9 @@ final class AnswerRanker {
             if (isContainerToken(token)) {
                 score -= 0.35;
             }
+            if (isLossToken(token)) {
+                score -= 0.3;
+            }
         }
         return score;
     }
@@ -192,6 +195,22 @@ final class AnswerRanker {
         return filtered.isEmpty() ? values : filtered;
     }
 
+    boolean isGenericLossValue(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        normalized = normalized.replace("entity:", "").replace("concept:", "");
+        normalized = normalized.replaceAll("[^a-z0-9_ ]", "");
+        String[] tokens = normalized.split("[_\\s]+");
+        for (String token : tokens) {
+            if (isLossToken(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean isContainerToken(String token) {
         if (token == null || token.isBlank()) {
             return false;
@@ -202,5 +221,12 @@ final class AnswerRanker {
                     "information", "data", "component" -> true;
             default -> false;
         };
+    }
+
+    private boolean isLossToken(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        return "loss".equals(token) || token.startsWith("loss");
     }
 }

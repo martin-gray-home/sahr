@@ -275,29 +275,33 @@ final class ExplanationChainBuilder {
         List<SymbolId> failures = new ArrayList<>();
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String predicate = formatter.localName(assertion.predicate());
-            if (!"fail".equals(predicate)) {
+            if ("fail".equals(predicate)) {
+                if (isBooleanTrue(assertion.object()) || failureSelfReference(assertion)) {
+                    failures.add(assertion.subject());
+                }
                 continue;
             }
-            if (!isBooleanTrue(assertion.object())) {
-                continue;
+            if (isFailureLike(predicate) && isBooleanFalse(assertion.object())) {
+                failures.add(assertion.subject());
             }
-            failures.add(assertion.subject());
         }
         if (includeRules) {
             for (RuleAssertion rule : graph.getAllRules()) {
                 RelationAssertion consequent = rule.consequent();
                 RelationAssertion antecedent = rule.antecedent();
                 String predicate = formatter.localName(consequent.predicate());
-                if (!"fail".equals(predicate)) {
+                if ("fail".equals(predicate)) {
+                    if (isBooleanTrue(consequent.object()) || failureSelfReference(consequent)) {
+                        failures.add(consequent.subject());
+                    }
+                    if ("fail".equals(formatter.localName(antecedent.predicate()))
+                            && (isBooleanTrue(antecedent.object()) || failureSelfReference(antecedent))) {
+                        failures.add(antecedent.subject());
+                    }
                     continue;
                 }
-                if (!isBooleanTrue(consequent.object())) {
-                    continue;
-                }
-                failures.add(consequent.subject());
-                if ("fail".equals(formatter.localName(antecedent.predicate()))
-                        && isBooleanTrue(antecedent.object())) {
-                    failures.add(antecedent.subject());
+                if (isFailureLike(predicate) && isBooleanFalse(consequent.object())) {
+                    failures.add(consequent.subject());
                 }
             }
         }
@@ -348,6 +352,25 @@ final class ExplanationChainBuilder {
             value = value.substring("concept:".length());
         }
         return "false".equalsIgnoreCase(value);
+    }
+
+    private boolean failureSelfReference(RelationAssertion assertion) {
+        if (assertion == null) {
+            return false;
+        }
+        SymbolId subject = assertion.subject();
+        SymbolId object = assertion.object();
+        return subject != null && subject.equals(object);
+    }
+
+    private boolean isFailureLike(String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return false;
+        }
+        return switch (predicate) {
+            case "operate", "function", "work", "respond", "stop", "stop_responding" -> true;
+            default -> false;
+        };
     }
 
     private double causeEvidenceScore(SymbolId cause, SymbolId effect) {
