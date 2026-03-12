@@ -1137,19 +1137,19 @@ public final class SahrAgent {
     }
 
     private String executeCauseChain(QueryGoal goal) {
-        SymbolId target = goal.object() != null ? new SymbolId(goal.object()) : null;
-        if (target == null && goal.subject() != null) {
-            target = new SymbolId(goal.subject());
-        }
-        if (target == null) {
-            return "No candidates produced.";
-        }
         String predicate = localName(goal.predicate());
         if (!predicate.isBlank() && !"cause".equals(predicate) && !"causedby".equals(predicate)) {
             java.util.List<String> predicateExplanation = buildPredicateExplanation(goal, predicate, 3);
             if (!predicateExplanation.isEmpty()) {
                 return String.join("\n", predicateExplanation);
             }
+        }
+        SymbolId target = goal.object() != null ? new SymbolId(goal.object()) : null;
+        if (target == null && goal.subject() != null) {
+            target = new SymbolId(goal.subject());
+        }
+        if (target == null) {
+            return "No candidates produced.";
         }
         java.util.List<String> explanation = buildExplanationChain(target, 4);
         if (!explanation.isEmpty()) {

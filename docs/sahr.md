@@ -375,6 +375,24 @@ Explanation chains can now extend beyond a single matching rule by
 continuing to follow causal or rule-based links from antecedent entities,
 so “why” answers can surface multi-step reasoning instead of stopping at
 the first rule.
+Planner phrase overrides now normalize explanation, relationship, and
+condition phrasing (e.g., “explains the loss of”, “relationship between”,
+“under what conditions”, “did not depend on”) into executable predicates
+and plan kinds, reducing malformed predicate shapes.
+Phrase overrides now also bias “plausible/likely causes” and “ruled out”
+questions toward causal plans, and fall back to likely causal targets
+like `spacecraft_orientation_control` or `spacecraft_instability` when
+the loss/cause object is implicit.
+Planner overrides now clear weak subject/object slots when they come from
+scaffolding tokens (e.g., “not”, “between”) to avoid polluting query
+plans, and relationship queries fall back to `with` when no stronger
+predicate is found.
+Condition-style queries (“under what conditions…”) now force a cause-chain
+plan so the engine returns explanatory predicate sentences rather than
+raw subject lists.
+Cause-chain execution now returns predicate-based explanations even when
+no subject/object is present, so condition queries can still yield
+poweredBy evidence without a target entity.
 
 Working Memory
 ---------------

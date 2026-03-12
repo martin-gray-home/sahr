@@ -113,6 +113,15 @@ class ReasoningScenarioSuiteTest {
     }
 
     @Test
+    void answersRelationshipBetweenEntities() {
+        SahrAgent agent = newAgent(new InMemoryKnowledgeBase());
+
+        assertEquals("Assertion recorded.", agent.handle("The cat is on the table"));
+        String answer = agent.handle("What is the relationship between the cat and the table");
+        assertTrue(!"No candidates produced.".equals(answer));
+    }
+
+    @Test
     void infersLocationForHeldObject() {
         SahrAgent agent = newAgent(new InMemoryKnowledgeBase());
 

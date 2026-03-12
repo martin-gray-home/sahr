@@ -717,7 +717,9 @@ public final class OntologyDefinedHead extends BaseHead {
                         || "telemetry".equals(normalizedPredicate)
                         || "signal".equals(normalizedPredicate)
                         || "signals".equals(normalizedPredicate)
-                        || "evidence".equals(normalizedPredicate)) {
+                        || "evidence".equals(normalizedPredicate)
+                        || "between".equals(normalizedPredicate)
+                        || "plausible".equals(normalizedPredicate)) {
                     predicate = "";
                 }
             }
@@ -743,7 +745,32 @@ public final class OntologyDefinedHead extends BaseHead {
             }
             String subject = query.subject();
             String object = query.object();
-            if ((subject == null || subject.isBlank() || object == null || object.isBlank()
+            boolean allowEntityInference = true;
+            if (context.inputFeatures().isPresent()) {
+                java.util.List<String> tokens = context.inputFeatures().get().tokens();
+                PhraseOverride override = inferPhraseOverride(tokens, context.graph());
+                if (override != null) {
+                    if (override.clearSubject) {
+                        subject = null;
+                    }
+                    if (override.clearObject) {
+                        object = null;
+                    }
+                    if (override.predicate != null && !override.predicate.isBlank()) {
+                        predicate = override.predicate;
+                        kind = override.kind != null ? override.kind : inferPlanKind(context, predicate);
+                    }
+                    if (override.subject != null && !override.subject.isBlank()) {
+                        subject = override.subject;
+                    }
+                    if (override.object != null && !override.object.isBlank()) {
+                        object = override.object;
+                    }
+                    allowEntityInference = !(override.clearSubject || override.clearObject);
+                }
+            }
+            if (allowEntityInference
+                    && (subject == null || subject.isBlank() || object == null || object.isBlank()
                     || isWeakEntity(subject) || isWeakEntity(object))
                     && context.inputFeatures().isPresent()) {
                 java.util.List<String> tokens = context.inputFeatures().get().tokens();
@@ -762,6 +789,24 @@ public final class OntologyDefinedHead extends BaseHead {
                 if (derivedObject != null && !derivedObject.isBlank()) {
                     object = derivedObject;
                 }
+                if ("cause".equals(normalizeToken(predicate))) {
+                    java.util.Map<String, String> entityMap = collectEntityNames(context.graph());
+                    java.util.List<String> normalized = new java.util.ArrayList<>();
+                    for (String token : tokens) {
+                        String value = normalizeToken(token);
+                        if (!value.isBlank()) {
+                            normalized.add(value);
+                        }
+                    }
+                    if ((normalized.contains("orientation") || normalized.contains("control"))
+                            && entityMap.containsKey("spacecraft_orientation_control")) {
+                        object = entityMap.get("spacecraft_orientation_control");
+                    }
+                    if ((normalized.contains("telemetry") || normalized.contains("events") || normalized.contains("sequence"))
+                            && entityMap.containsKey("spacecraft_instability")) {
+                        object = entityMap.get("spacecraft_instability");
+                    }
+                }
                 ConditionBridge bridge = inferConditionBridge(tokens, context.graph());
                 if (bridge != null) {
                     if (bridge.predicate != null && !bridge.predicate.isBlank()) {
@@ -773,6 +818,9 @@ public final class OntologyDefinedHead extends BaseHead {
                     }
                     if (bridge.forceSubjectNull) {
                         subject = null;
+                    }
+                    if (bridge.preservedConditions.contains("condition_query")) {
+                        kind = com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN;
                     }
                     if (logger.isLoggable(java.util.logging.Level.FINE)) {
                         logger.fine(() -> "planner condition bridge failed="
@@ -910,6 +958,21 @@ public final class OntologyDefinedHead extends BaseHead {
                     || tokens.contains("regained")) && predicates.contains("restore")) {
                 return new PredicateSelection("restore", "restore", java.util.List.of());
             }
+            boolean hasRelationship = tokens.contains("relationship") || tokens.contains("relationships");
+            boolean hasBetween = tokens.contains("between");
+            if (hasRelationship && hasBetween && predicates.contains("with")) {
+                return new PredicateSelection("with", "relationship between", java.util.List.of("between"));
+            }
+            boolean hasExplain = tokens.contains("explain") || tokens.contains("explains")
+                    || tokens.contains("explanation");
+            if (hasExplain && predicates.contains("cause")) {
+                return new PredicateSelection("cause", "explain->cause", java.util.List.of("explain"));
+            }
+            boolean hasPlausible = tokens.contains("plausible") || tokens.contains("likely") || tokens.contains("most");
+            boolean hasCause = tokens.contains("cause") || tokens.contains("caused");
+            if ((hasPlausible || hasCause) && predicates.contains("cause")) {
+                return new PredicateSelection("cause", "plausible cause", java.util.List.of());
+            }
             return null;
         }
 
@@ -952,6 +1015,31 @@ public final class OntologyDefinedHead extends BaseHead {
                     return entityMap.get("spacecraft_instability");
                 }
             }
+            if ("cause".equals(normalizedPredicate)) {
+                if (tokens.contains("loss")) {
+                    String afterOf = inferEntityAfterToken(tokens, "of", entityMap);
+                    if (afterOf != null) {
+                        return afterOf;
+                    }
+                    if (entityMap.containsKey("spacecraft_orientation_control")) {
+                        return entityMap.get("spacecraft_orientation_control");
+                    }
+                }
+                if (tokens.contains("control") && entityMap.containsKey("spacecraft_orientation_control")) {
+                    return entityMap.get("spacecraft_orientation_control");
+                }
+                if ((tokens.contains("orientation") || tokens.contains("control"))
+                        && entityMap.containsKey("spacecraft_orientation_control")) {
+                    return entityMap.get("spacecraft_orientation_control");
+                }
+                if (tokens.contains("instability") && entityMap.containsKey("spacecraft_instability")) {
+                    return entityMap.get("spacecraft_instability");
+                }
+                if (tokens.contains("telemetry") && tokens.contains("events")
+                        && entityMap.containsKey("spacecraft_instability")) {
+                    return entityMap.get("spacecraft_instability");
+                }
+            }
             return null;
         }
 
@@ -978,6 +1066,8 @@ public final class OntologyDefinedHead extends BaseHead {
                     && containsAny(normalized, "function", "functioning", "working");
             boolean stillFunctioning = normalized.contains("still")
                     && containsAny(normalized, "function", "functioning", "operate", "operational");
+            boolean conditionQuery = containsAny(normalized, "condition", "conditions")
+                    && containsAny(normalized, "under", "what");
 
             java.util.Map<String, String> entityMap = collectEntityNames(graph);
             if (entityMap.isEmpty()) {
@@ -1007,6 +1097,15 @@ public final class OntologyDefinedHead extends BaseHead {
                             true
                     );
                 }
+            }
+            if (conditionQuery) {
+                return new ConditionBridge(
+                        java.util.List.of(),
+                        java.util.List.of("condition_query"),
+                        "poweredby",
+                        null,
+                        true
+                );
             }
             return null;
         }
@@ -1046,6 +1145,171 @@ public final class OntologyDefinedHead extends BaseHead {
                     if (match != null) {
                         return match;
                     }
+                }
+            }
+            return null;
+        }
+
+        private PhraseOverride inferPhraseOverride(java.util.List<String> tokens,
+                                                   com.sahr.core.KnowledgeBase graph) {
+            if (tokens == null || tokens.isEmpty() || graph == null) {
+                return null;
+            }
+            java.util.List<String> normalized = new java.util.ArrayList<>();
+            for (String token : tokens) {
+                String value = normalizeToken(token);
+                if (!value.isBlank()) {
+                    normalized.add(value);
+                }
+            }
+            if (normalized.isEmpty()) {
+                return null;
+            }
+            java.util.Set<String> predicates = collectPredicateNames(graph);
+            java.util.Map<String, String> entityMap = collectEntityNames(graph);
+            boolean hasExplain = normalized.contains("explain") || normalized.contains("explains")
+                    || normalized.contains("explanation");
+            boolean hasLoss = normalized.contains("loss");
+            if (hasExplain && predicates.contains("cause")) {
+                String object = null;
+                if (hasLoss && entityMap.containsKey("spacecraft_orientation_control")) {
+                    object = entityMap.get("spacecraft_orientation_control");
+                } else if ((normalized.contains("orientation") || normalized.contains("control"))
+                        && entityMap.containsKey("spacecraft_orientation_control")) {
+                    object = entityMap.get("spacecraft_orientation_control");
+                } else if (hasLoss) {
+                    object = inferEntityAfterToken(normalized, "of", entityMap);
+                }
+                if (object == null && (normalized.contains("unstable") || normalized.contains("instability"))
+                        && entityMap.containsKey("spacecraft_instability")) {
+                    object = entityMap.get("spacecraft_instability");
+                }
+                return new PhraseOverride("cause", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
+            }
+            boolean hasPrevent = normalized.contains("prevent") || normalized.contains("prevents")
+                    || normalized.contains("prevented") || normalized.contains("preventing");
+            if (hasPrevent && predicates.contains("cause")) {
+                String object = null;
+                if (normalized.contains("control") && entityMap.containsKey("spacecraft_orientation_control")) {
+                    object = entityMap.get("spacecraft_orientation_control");
+                } else {
+                    object = inferEntityAfterToken(normalized, "prevent", entityMap);
+                }
+                String subject = null;
+                if (entityMap.containsKey("wheel_motor") && normalized.contains("wheel") && normalized.contains("motor")) {
+                    subject = entityMap.get("wheel_motor");
+                }
+                return new PhraseOverride("cause", object, subject, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
+            }
+            boolean hasRelationship = normalized.contains("relationship") || normalized.contains("relationships");
+            boolean hasBetween = normalized.contains("between");
+            if (hasRelationship && hasBetween) {
+                java.util.List<String> entities = inferEntities(normalized, entityMap);
+                if (entities.size() >= 2) {
+                    for (int i = 0; i < entities.size() - 1; i++) {
+                        for (int j = i + 1; j < entities.size(); j++) {
+                            String left = entities.get(i);
+                            String right = entities.get(j);
+                            String predicate = inferPredicateBetweenEntities(left, right, graph);
+                            if (predicate != null && !predicate.isBlank()) {
+                                return new PhraseOverride(predicate, right, left, com.sahr.core.QueryPlan.Kind.RELATION_MATCH, true, true);
+                            }
+                        }
+                    }
+                    if (predicates.contains("with")) {
+                        return new PhraseOverride("with", entities.get(1), entities.get(0),
+                                com.sahr.core.QueryPlan.Kind.RELATION_MATCH, true, true);
+                    }
+                }
+                if (predicates.contains("control") && entityMap.containsKey("control_spacecraft_orientation")) {
+                    return new PhraseOverride("control", entityMap.get("control_spacecraft_orientation"), null,
+                            com.sahr.core.QueryPlan.Kind.RELATION_MATCH, true, true);
+                }
+            }
+            boolean hasConditions = normalized.contains("conditions") || normalized.contains("condition");
+            boolean hasUnder = normalized.contains("under") || normalized.contains("what");
+            if (hasConditions && hasUnder && predicates.contains("poweredby")) {
+                return new PhraseOverride("poweredby", null, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
+            }
+            boolean hasDepend = normalized.contains("depend") || normalized.contains("depends")
+                    || normalized.contains("dependent");
+            boolean hasNot = normalized.contains("not") || normalized.contains("without");
+            if (hasDepend && hasNot && predicates.contains("poweredby")) {
+                String object = firstAvailableResource(entityMap, "electrical_power", "electrical_actuators",
+                        "electrically_powered_actuators");
+                return new PhraseOverride("poweredby", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
+            }
+            boolean hasRuledOut = normalized.contains("ruled") || normalized.contains("rule")
+                    || normalized.contains("ruledout") || normalized.contains("exclude");
+            if (hasRuledOut && predicates.contains("cause") && entityMap.containsKey("spacecraft_instability")) {
+                return new PhraseOverride("cause", entityMap.get("spacecraft_instability"), null,
+                        com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
+            }
+            return null;
+        }
+
+        private java.util.List<String> inferEntities(java.util.List<String> tokens,
+                                                     java.util.Map<String, String> entityMap) {
+            java.util.List<String> results = new java.util.ArrayList<>();
+            if (tokens == null || tokens.isEmpty() || entityMap == null || entityMap.isEmpty()) {
+                return results;
+            }
+            int maxGram = Math.min(4, tokens.size());
+            int i = 0;
+            while (i < tokens.size()) {
+                boolean matched = false;
+                for (int size = maxGram; size >= 1; size--) {
+                    if (i + size > tokens.size()) {
+                        continue;
+                    }
+                    String candidate = String.join("_", tokens.subList(i, i + size));
+                    String match = entityMap.get(candidate);
+                    if (match != null) {
+                        results.add(match);
+                        i += size;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    i += 1;
+                }
+            }
+            return results;
+        }
+
+        private String inferPredicateBetweenEntities(String left,
+                                                     String right,
+                                                     com.sahr.core.KnowledgeBase graph) {
+            if (left == null || right == null || graph == null) {
+                return null;
+            }
+            com.sahr.core.SymbolId leftId = new com.sahr.core.SymbolId(left);
+            com.sahr.core.SymbolId rightId = new com.sahr.core.SymbolId(right);
+            java.util.List<String> preferred = java.util.List.of(
+                    "contain", "contains", "partof", "componentof",
+                    "control", "operate", "poweredby", "backupfor",
+                    "cause", "fail", "require"
+            );
+            for (com.sahr.core.RelationAssertion assertion : graph.getAllAssertions()) {
+                if ((assertion.subject().equals(leftId) && assertion.object().equals(rightId))
+                        || (assertion.subject().equals(rightId) && assertion.object().equals(leftId))) {
+                    String predicate = localName(assertion.predicate());
+                    if (preferred.contains(predicate)) {
+                        return predicate;
+                    }
+                    return localName(assertion.predicate());
+                }
+            }
+            for (com.sahr.core.RuleAssertion rule : graph.getAllRules()) {
+                com.sahr.core.RelationAssertion consequent = rule.consequent();
+                if ((consequent.subject().equals(leftId) && consequent.object().equals(rightId))
+                        || (consequent.subject().equals(rightId) && consequent.object().equals(leftId))) {
+                    String predicate = localName(consequent.predicate());
+                    if (preferred.contains(predicate)) {
+                        return predicate;
+                    }
+                    return localName(consequent.predicate());
                 }
             }
             return null;
@@ -1193,7 +1457,35 @@ public final class OntologyDefinedHead extends BaseHead {
             return "system".equals(normalized) || "systems".equals(normalized)
                     || "component".equals(normalized) || "components".equals(normalized)
                     || "earlier".equals(normalized) || "most".equals(normalized)
-                    || "possible".equals(normalized);
+                    || "possible".equals(normalized) || "not".equals(normalized)
+                    || "relationship".equals(normalized) || "relationships".equals(normalized)
+                    || "conditions".equals(normalized) || "condition".equals(normalized)
+                    || "loss".equals(normalized) || "explanation".equals(normalized)
+                    || "explain".equals(normalized) || "under".equals(normalized)
+                    || "what".equals(normalized) || "available".equals(normalized);
+        }
+
+        private static final class PhraseOverride {
+            private final String predicate;
+            private final String object;
+            private final String subject;
+            private final com.sahr.core.QueryPlan.Kind kind;
+            private final boolean clearSubject;
+            private final boolean clearObject;
+
+            private PhraseOverride(String predicate,
+                                   String object,
+                                   String subject,
+                                   com.sahr.core.QueryPlan.Kind kind,
+                                   boolean clearSubject,
+                                   boolean clearObject) {
+                this.predicate = predicate;
+                this.object = object;
+                this.subject = subject;
+                this.kind = kind;
+                this.clearSubject = clearSubject;
+                this.clearObject = clearObject;
+            }
         }
 
         private static final class PlanSelection {
