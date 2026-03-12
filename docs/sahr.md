@@ -419,6 +419,9 @@ answers surface operational context alongside the restored state.
 Statement parsing now normalizes negated ability/control patterns (e.g.,
 “cannot operate”, “cannot be controlled”) into boolean predicates so rule
 consequents preserve the correct polarity for failure reasoning.
+Positive stoppage predicates (e.g., “stopped responding”, “stop
+functioning”) are normalized into `fail` so failure chains are
+canonicalized even when phrased as stoppage events.
 Cause-chain ranking now prefers candidates with temporal or telemetry
 support, and will emit temporal evidence sentences when available to
 improve sequence-oriented explanations.
@@ -433,6 +436,12 @@ Answer scoring and rendering now consult ontology annotations (e.g.,
 `ann:dynamicWeight`, `ann:temporalWeight`, `ann:evidenceWeight`,
 `ann:answerTemplate`) so domain packs can control ranking and output
 without hard-coded engine rules.
+Explanation candidates now include recovery agents and evidence nodes so
+“which system restored …” queries can return the most specific agent
+instead of the generic subject.
+Explanation candidates also track precursor signals, component failures,
+subsystem failures, capability losses, and outcomes so later ranking and
+role‑projection can select the correct answer target per question.
 
 Annotation Policy
 -----------------

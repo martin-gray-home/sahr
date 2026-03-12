@@ -7,11 +7,11 @@ import com.sahr.core.RuleAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.SahrAnnotationVocabulary;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.ToDoubleFunction;
+import java.util.ArrayList;
 
 final class ExplanationChainBuilder {
     interface Formatter {
@@ -58,6 +58,27 @@ final class ExplanationChainBuilder {
         return sentences;
     }
 
+    ExplanationCandidate buildExplanationCandidate(SymbolId target, int maxDepth) {
+        List<String> sentences = buildExplanationChain(target, maxDepth);
+        List<SymbolId> recoveryAgents = collectRecoveryAgents();
+        List<SymbolId> evidenceNodes = collectEvidenceNodes(target);
+        List<SymbolId> precursorSignals = collectPrecursorSignals(target);
+        List<SymbolId> componentFailures = collectFailures(false);
+        List<SymbolId> subsystemFailures = collectFailures(true);
+        List<SymbolId> capabilityLosses = collectCapabilityLosses();
+        List<SymbolId> outcomes = target == null ? List.of() : List.of(target);
+        return new ExplanationCandidate(
+                sentences,
+                precursorSignals,
+                componentFailures,
+                subsystemFailures,
+                capabilityLosses,
+                outcomes,
+                recoveryAgents,
+                evidenceNodes
+        );
+    }
+
     List<String> buildExplanationChainFrom(SymbolId start, int maxDepth, Set<String> seen) {
         List<String> sentences = new ArrayList<>();
         if (start == null) {
@@ -68,6 +89,22 @@ final class ExplanationChainBuilder {
         visited.add(current);
         for (int depth = 0; depth < maxDepth; depth++) {
             RelationAssertion causeAssertion = selectBestCauseAssertion(current);
+            RuleAssertion rule = selectBestRuleForConsequent(current);
+            double assertionScore = scoreCauseAssertion(causeAssertion, current);
+            double ruleScore = scoreRuleConsequent(rule, current);
+            if (rule != null && ruleScore >= assertionScore) {
+                String sentence = formatter.formatRuleSentence(rule);
+                if (seen.add(sentence)) {
+                    sentences.add(sentence);
+                }
+                SymbolId cause = selectCauseNode(rule.antecedent());
+                if (cause == null || !visited.add(cause)) {
+                    break;
+                }
+                sentences.addAll(collectTemporalEvidence(cause, current, maxDepth, seen));
+                current = cause;
+                continue;
+            }
             if (causeAssertion != null) {
                 SymbolId cause = causeFromAssertion(causeAssertion, current);
                 if (cause == null) {
@@ -81,20 +118,6 @@ final class ExplanationChainBuilder {
                 if (!visited.add(cause)) {
                     break;
                 }
-                current = cause;
-                continue;
-            }
-            RuleAssertion rule = selectBestRuleForConsequent(current);
-            if (rule != null) {
-                String sentence = formatter.formatRuleSentence(rule);
-                if (seen.add(sentence)) {
-                    sentences.add(sentence);
-                }
-                SymbolId cause = selectCauseNode(rule.antecedent());
-                if (cause == null || !visited.add(cause)) {
-                    break;
-                }
-                sentences.addAll(collectTemporalEvidence(cause, current, maxDepth, seen));
                 current = cause;
                 continue;
             }
@@ -186,6 +209,142 @@ final class ExplanationChainBuilder {
         return sentences;
     }
 
+    List<SymbolId> collectRecoveryAgents() {
+        List<SymbolId> agents = new ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = formatter.localName(assertion.predicate());
+            if (!"during".equals(predicate) && !"after".equals(predicate)) {
+                continue;
+            }
+            String objectValue = assertion.object().value().toLowerCase(java.util.Locale.ROOT);
+            if (!objectValue.contains("recovery")) {
+                continue;
+            }
+            SymbolId subject = assertion.subject();
+            if (subject == null || subject.value() == null) {
+                continue;
+            }
+            String subjectToken = formatter.normalizeTypeToken(subject.value());
+            if (subjectToken.contains("telemetry") || subjectToken.contains("time")) {
+                continue;
+            }
+            agents.add(subject);
+        }
+        return agents;
+    }
+
+    List<SymbolId> collectEvidenceNodes(SymbolId target) {
+        if (annotationResolver == null || target == null) {
+            return List.of();
+        }
+        List<SymbolId> evidence = new ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            double weight = annotationResolver.resolveObjectPropertyIri(assertion.predicate())
+                    .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
+                    .orElse(0.0);
+            if (weight <= 0.0) {
+                continue;
+            }
+            if (assertion.object().equals(target) || assertion.subject().equals(target)) {
+                evidence.add(assertion.subject());
+            }
+        }
+        return evidence;
+    }
+
+    List<SymbolId> collectPrecursorSignals(SymbolId target) {
+        if (annotationResolver == null || target == null) {
+            return List.of();
+        }
+        List<SymbolId> signals = new ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            double weight = annotationResolver.resolveObjectPropertyIri(assertion.predicate())
+                    .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
+                    .orElse(0.0);
+            if (weight <= 0.0) {
+                continue;
+            }
+            if (assertion.object().equals(target)) {
+                signals.add(assertion.subject());
+            }
+        }
+        return signals;
+    }
+
+    List<SymbolId> collectFailures(boolean includeRules) {
+        List<SymbolId> failures = new ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = formatter.localName(assertion.predicate());
+            if (!"fail".equals(predicate)) {
+                continue;
+            }
+            if (!isBooleanTrue(assertion.object())) {
+                continue;
+            }
+            failures.add(assertion.subject());
+        }
+        if (includeRules) {
+            for (RuleAssertion rule : graph.getAllRules()) {
+                RelationAssertion consequent = rule.consequent();
+                String predicate = formatter.localName(consequent.predicate());
+                if (!"fail".equals(predicate)) {
+                    continue;
+                }
+                if (!isBooleanTrue(consequent.object())) {
+                    continue;
+                }
+                failures.add(consequent.subject());
+            }
+        }
+        return failures;
+    }
+
+    List<SymbolId> collectCapabilityLosses() {
+        List<SymbolId> losses = new ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = formatter.localName(assertion.predicate());
+            if (!"control".equals(predicate)) {
+                continue;
+            }
+            if (isBooleanFalse(assertion.object())) {
+                losses.add(assertion.subject());
+            }
+        }
+        for (RuleAssertion rule : graph.getAllRules()) {
+            RelationAssertion consequent = rule.consequent();
+            String predicate = formatter.localName(consequent.predicate());
+            if (!"control".equals(predicate)) {
+                continue;
+            }
+            if (isBooleanFalse(consequent.object())) {
+                losses.add(consequent.subject());
+            }
+        }
+        return losses;
+    }
+
+    private boolean isBooleanTrue(SymbolId id) {
+        if (id == null || id.value() == null) {
+            return false;
+        }
+        String value = id.value();
+        if (value.startsWith("concept:")) {
+            value = value.substring("concept:".length());
+        }
+        return "true".equalsIgnoreCase(value);
+    }
+
+    private boolean isBooleanFalse(SymbolId id) {
+        if (id == null || id.value() == null) {
+            return false;
+        }
+        String value = id.value();
+        if (value.startsWith("concept:")) {
+            value = value.substring("concept:".length());
+        }
+        return "false".equalsIgnoreCase(value);
+    }
+
     private double causeEvidenceScore(SymbolId cause, SymbolId effect) {
         if (cause == null) {
             return 0.0;
@@ -194,6 +353,37 @@ final class ExplanationChainBuilder {
         score += temporalSupportScore(cause, effect);
         score += telemetrySupportScore(cause);
         return score;
+    }
+
+    private double scoreCauseAssertion(RelationAssertion assertion, SymbolId effect) {
+        if (assertion == null) {
+            return 0.0;
+        }
+        SymbolId cause = causeFromAssertion(assertion, effect);
+        if (cause == null) {
+            return 0.0;
+        }
+        return causeEvidenceScore(cause, effect) + predicateDynamicWeight(assertion.predicate());
+    }
+
+    private double scoreRuleConsequent(RuleAssertion rule, SymbolId effect) {
+        if (rule == null) {
+            return 0.0;
+        }
+        SymbolId cause = selectCauseNode(rule.antecedent());
+        if (cause == null) {
+            return 0.0;
+        }
+        return causeEvidenceScore(cause, effect) + predicateDynamicWeight(rule.consequent().predicate());
+    }
+
+    private double predicateDynamicWeight(String predicate) {
+        if (annotationResolver == null || predicate == null || predicate.isBlank()) {
+            return 0.0;
+        }
+        return annotationResolver.resolveObjectPropertyIri(predicate)
+                .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.DYNAMIC_WEIGHT))
+                .orElse(0.0);
     }
 
     private double temporalSupportScore(SymbolId cause, SymbolId effect) {

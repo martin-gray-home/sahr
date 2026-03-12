@@ -507,11 +507,21 @@ public final class SahrAgent {
             return new NormalizedPredicate(predicate, null, null);
         }
         if (!statement.objectIsConcept()) {
+            String rawObject = stripPrefix(statement.object().value());
+            if (STOP_FAILURE_PREDICATES.contains(predicate.toLowerCase(java.util.Locale.ROOT))
+                    && STOP_FAILURE_OBJECTS.contains(rawObject.toLowerCase(java.util.Locale.ROOT))) {
+                SymbolId newObject = new SymbolId("concept:true");
+                return new NormalizedPredicate("fail", newObject, java.util.Set.of("true"));
+            }
             return new NormalizedPredicate(predicate, null, null);
         }
         String rawObject = stripPrefix(statement.object().value());
+        String loweredPredicate = predicate.toLowerCase(java.util.Locale.ROOT);
+        if (STOP_FAILURE_PREDICATES.contains(loweredPredicate)) {
+            SymbolId newObject = new SymbolId("concept:true");
+            return new NormalizedPredicate("fail", newObject, java.util.Set.of("true"));
+        }
         if (!NEGATED_OBJECTS.contains(rawObject)) {
-            String loweredPredicate = predicate.toLowerCase(java.util.Locale.ROOT);
             if ("use".equals(loweredPredicate) || "used".equals(loweredPredicate)) {
                 if (rawObject.contains("backup")) {
                     return new NormalizedPredicate("backupFor", null, null);
@@ -522,8 +532,7 @@ public final class SahrAgent {
             }
             return new NormalizedPredicate(predicate, null, null);
         }
-        String normalized = predicate.toLowerCase(java.util.Locale.ROOT);
-        if (NEGATED_OPERATIONS.contains(normalized)) {
+        if (NEGATED_OPERATIONS.contains(loweredPredicate)) {
             SymbolId newObject = new SymbolId("concept:true");
             return new NormalizedPredicate("fail", newObject, java.util.Set.of("true"));
         }
@@ -553,6 +562,23 @@ public final class SahrAgent {
             "function",
             "work",
             "respond"
+    );
+
+    private static final java.util.Set<String> STOP_FAILURE_PREDICATES = java.util.Set.of(
+            "stop",
+            "stop_responding",
+            "stop_functioning",
+            "stop_working",
+            "stop_operating",
+            "stopped",
+            "stopped_responding"
+    );
+
+    private static final java.util.Set<String> STOP_FAILURE_OBJECTS = java.util.Set.of(
+            "responding",
+            "functioning",
+            "working",
+            "operating"
     );
 
     private Set<String> mapTypes(Set<String> types) {
@@ -1263,16 +1289,31 @@ public final class SahrAgent {
 
     private String executeCauseChain(QueryGoal goal) {
         String predicate = localName(goal.predicate());
+        SymbolId subject = (goal.subject() != null && !goal.subject().isBlank())
+                ? new SymbolId(goal.subject())
+                : null;
+        SymbolId target = (goal.object() != null && !goal.object().isBlank())
+                ? new SymbolId(goal.object())
+                : null;
+        if (target == null && goal.subject() != null) {
+            target = new SymbolId(goal.subject());
+        }
         if (!predicate.isBlank() && !"cause".equals(predicate) && !"causedby".equals(predicate)) {
             java.util.List<String> predicateExplanation = predicateExplainer.buildPredicateExplanation(goal, predicate, 3);
             if (!predicateExplanation.isEmpty()) {
+                ExplanationCandidate candidate = explanationChains.buildExplanationCandidate(target, 4);
+                if (wantsRecoveryAgent(goal, predicate)) {
+                    SymbolId agent = selectBestRecoveryAgent(candidate, target);
+                    if (agent != null) {
+                        return agent.value();
+                    }
+                }
+                String explanation = summarizeRecoveryExplanation(goal, predicate, candidate, predicateExplanation);
+                if (explanation != null) {
+                    return explanation;
+                }
                 return String.join("\n", predicateExplanation);
             }
-        }
-        SymbolId subject = goal.subject() != null ? new SymbolId(goal.subject()) : null;
-        SymbolId target = goal.object() != null ? new SymbolId(goal.object()) : null;
-        if (target == null && goal.subject() != null) {
-            target = new SymbolId(goal.subject());
         }
         if (target == null) {
             return "No candidates produced.";
@@ -1304,8 +1345,10 @@ public final class SahrAgent {
             }
         }
         ForwardChainSearch.ChainResult bestExplanation = null;
+        ExplanationCandidate bestExplanationCandidate = null;
         for (SymbolId targetCandidate : targetCandidates) {
-            java.util.List<String> explanation = explanationChains.buildExplanationChain(targetCandidate, 4);
+            ExplanationCandidate explanationCandidate = explanationChains.buildExplanationCandidate(targetCandidate, 4);
+            java.util.List<String> explanation = explanationCandidate.sentences();
             if (explanation.isEmpty()) {
                 continue;
             }
@@ -1315,9 +1358,22 @@ public final class SahrAgent {
             );
             if (bestExplanation == null || candidate.score() > bestExplanation.score()) {
                 bestExplanation = candidate;
+                bestExplanationCandidate = explanationCandidate;
             }
         }
         if (bestExplanation != null && !bestExplanation.sentences().isEmpty()) {
+            if (bestExplanationCandidate != null) {
+                if (wantsRecoveryAgent(goal, predicate)) {
+                    SymbolId agent = selectBestRecoveryAgent(bestExplanationCandidate, target);
+                    if (agent != null) {
+                        return agent.value();
+                    }
+                }
+                String explanation = summarizeRecoveryExplanation(goal, predicate, bestExplanationCandidate, bestExplanation.sentences());
+                if (explanation != null) {
+                    return explanation;
+                }
+            }
             return String.join("\n", bestExplanation.sentences());
         }
         java.util.Set<SymbolId> visited = new java.util.HashSet<>();
@@ -1367,6 +1423,122 @@ public final class SahrAgent {
             }
         }
         return "No candidates produced.";
+    }
+
+    private boolean wantsRecoveryAgent(QueryGoal goal, String predicate) {
+        if (goal == null) {
+            return false;
+        }
+        if (!"restore".equals(predicate) && !"regain".equals(predicate)) {
+            return false;
+        }
+        return goal.subject() == null || goal.subject().isBlank();
+    }
+
+    private String summarizeRecoveryExplanation(QueryGoal goal,
+                                                String predicate,
+                                                ExplanationCandidate candidate,
+                                                java.util.List<String> fallback) {
+        if (goal == null || candidate == null) {
+            return null;
+        }
+        if (!"restore".equals(predicate) && !"regain".equals(predicate)) {
+            return null;
+        }
+        SymbolId agent = selectBestRecoveryAgent(candidate, goal.object() == null ? null : new SymbolId(goal.object()));
+        if (agent == null) {
+            return null;
+        }
+        String agentText = agent.value();
+        String prefix = "Stability was restored because ";
+        StringBuilder builder = new StringBuilder(prefix);
+        String agentDisplay = displayValue(agentText);
+        builder.append(agentDisplay).append(" ").append(isPlural(agentDisplay) ? "were" : "was").append(" ");
+        String recoveryHint = firstRecoveryHint(fallback);
+        if (recoveryHint != null) {
+            builder.append("active ").append(recoveryHint);
+        } else {
+            builder.append("active during recovery.");
+        }
+        if (!builder.toString().endsWith(".")) {
+            builder.append(".");
+        }
+        return builder.toString();
+    }
+
+    private String firstRecoveryHint(java.util.List<String> sentences) {
+        if (sentences == null) {
+            return null;
+        }
+        for (String sentence : sentences) {
+            if (sentence == null) {
+                continue;
+            }
+            if (sentence.contains("during recovery")) {
+                return "during recovery";
+            }
+            if (sentence.contains("during recovery period")) {
+                return "during recovery period";
+            }
+        }
+        return null;
+    }
+
+    private String displayValue(String raw) {
+        if (raw == null) {
+            return "unknown";
+        }
+        String value = raw;
+        if (value.startsWith("entity:")) {
+            value = value.substring("entity:".length());
+        } else if (value.startsWith("concept:")) {
+            value = value.substring("concept:".length());
+        }
+        return value.replace('_', ' ');
+    }
+
+    private boolean isPlural(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String normalized = text.trim().toLowerCase(java.util.Locale.ROOT);
+        String[] tokens = normalized.split("\\s+");
+        String last = tokens[tokens.length - 1];
+        return last.endsWith("s") && !last.endsWith("ss");
+    }
+
+    private SymbolId selectBestRecoveryAgent(ExplanationCandidate candidate, SymbolId target) {
+        java.util.List<SymbolId> agents = new java.util.ArrayList<>(candidate.recoveryAgents());
+        if (agents.isEmpty() && target != null) {
+            agents.addAll(findRestoreSubjects(target));
+        }
+        if (agents.isEmpty()) {
+            return null;
+        }
+        SymbolId best = agents.get(0);
+        double bestScore = answerRanker.specificityScore(best.value());
+        for (SymbolId agent : agents) {
+            double score = answerRanker.specificityScore(agent.value());
+            if (score > bestScore) {
+                best = agent;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private java.util.List<SymbolId> findRestoreSubjects(SymbolId target) {
+        java.util.List<SymbolId> subjects = new java.util.ArrayList<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"restore".equals(predicate) && !"regain".equals(predicate)) {
+                continue;
+            }
+            if (assertion.object().equals(target)) {
+                subjects.add(assertion.subject());
+            }
+        }
+        return subjects;
     }
 
     private String ruleChainFallback(SymbolId target) {
