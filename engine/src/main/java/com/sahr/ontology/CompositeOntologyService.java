@@ -75,4 +75,42 @@ public final class CompositeOntologyService implements OntologyService {
         }
         return results;
     }
+
+    @Override
+    public Set<String> getObjectPropertiesByLabel(String label) {
+        Set<String> results = new LinkedHashSet<>();
+        for (OntologyService service : delegates) {
+            results.addAll(service.getObjectPropertiesByLabel(label));
+        }
+        return results;
+    }
+
+    @Override
+    public Set<String> getEntityIrisByLabel(String label) {
+        Set<String> results = new LinkedHashSet<>();
+        for (OntologyService service : delegates) {
+            results.addAll(service.getEntityIrisByLabel(label));
+        }
+        return results;
+    }
+
+    @Override
+    public Set<String> getLabels(String iri) {
+        Set<String> results = new LinkedHashSet<>();
+        for (OntologyService service : delegates) {
+            results.addAll(service.getLabels(iri));
+        }
+        return results;
+    }
+
+    @Override
+    public Optional<String> getAnnotationValue(String iri, String annotationIri) {
+        for (OntologyService service : delegates) {
+            Optional<String> value = service.getAnnotationValue(iri, annotationIri);
+            if (value.isPresent()) {
+                return value;
+            }
+        }
+        return Optional.empty();
+    }
 }

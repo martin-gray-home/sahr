@@ -63,6 +63,7 @@ public final class SahrAgent {
     private final ForwardChainSearch forwardChainSearch;
     private final PredicateExplainer predicateExplainer;
     private final AnswerRanker answerRanker;
+    private final OntologyAnnotationResolver annotationResolver;
 
     public SahrAgent(
             KnowledgeBase graph,
@@ -101,6 +102,7 @@ public final class SahrAgent {
         this.termMapper = termMapper;
         this.trace = new ReasoningTrace();
         this.workingMemory = new WorkingMemory(phases);
+        this.annotationResolver = new OntologyAnnotationResolver(this.ontology);
         this.answerRenderer = new AnswerRenderer(
                 new AnswerRenderer.DisplayFormatter() {
                     @Override
@@ -117,7 +119,8 @@ public final class SahrAgent {
                     public String normalizeTypeToken(String raw) {
                         return SahrAgent.this.normalizeTypeToken(raw);
                     }
-                }
+                },
+                annotationResolver
         );
         this.aliasBridge = new AliasBridge(
                 this.graph,
@@ -129,7 +132,7 @@ public final class SahrAgent {
                     }
                 }
         );
-        this.answerRanker = new AnswerRanker();
+        this.answerRanker = new AnswerRanker(annotationResolver);
         this.explanationChains = new ExplanationChainBuilder(
                 this.graph,
                 this.ontology,
@@ -159,7 +162,8 @@ public final class SahrAgent {
                         return SahrAgent.this.normalizeTypeToken(raw);
                     }
                 },
-                answerRanker::specificityScore
+                answerRanker::specificityScore,
+                annotationResolver
         );
         this.forwardChainSearch = new ForwardChainSearch(
                 this.graph,

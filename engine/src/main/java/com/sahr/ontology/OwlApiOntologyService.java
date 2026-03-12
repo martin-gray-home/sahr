@@ -5,8 +5,11 @@ import org.semanticweb.elk.owlapi.ElkReasonerFactory;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.IRI;
 import org.semanticweb.owlapi.model.OWLClass;
+import org.semanticweb.owlapi.model.OWLAnnotationAssertionAxiom;
+import org.semanticweb.owlapi.model.OWLAnnotationProperty;
 import org.semanticweb.owlapi.model.OWLObjectProperty;
 import org.semanticweb.owlapi.model.OWLObjectPropertyRangeAxiom;
+import org.semanticweb.owlapi.model.OWLNamedIndividual;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
 import org.semanticweb.owlapi.reasoner.NodeSet;
@@ -15,6 +18,8 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 import org.semanticweb.owlapi.reasoner.InferenceType;
 
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -130,7 +135,114 @@ public final class OwlApiOntologyService implements OntologyService {
                 .collect(Collectors.toSet());
     }
 
+    @Override
+    public Set<String> getObjectPropertiesByLabel(String label) {
+        if (label == null || label.isBlank()) {
+            return Set.of();
+        }
+        String normalized = normalizeLabel(label);
+        Set<String> matches = new HashSet<>();
+        for (OWLObjectProperty property : ontology.getObjectPropertiesInSignature()) {
+            Set<String> labels = labelsForIri(property.getIRI());
+            for (String candidate : labels) {
+                if (normalizeLabel(candidate).equals(normalized)) {
+                    matches.add(property.getIRI().toString());
+                    break;
+                }
+            }
+        }
+        return matches;
+    }
+
+    @Override
+    public Set<String> getEntityIrisByLabel(String label) {
+        if (label == null || label.isBlank()) {
+            return Set.of();
+        }
+        String normalized = normalizeLabel(label);
+        Set<String> matches = new HashSet<>();
+        for (OWLClass cls : ontology.getClassesInSignature()) {
+            if (matchesLabel(cls.getIRI(), normalized)) {
+                matches.add(cls.getIRI().toString());
+            }
+        }
+        for (OWLNamedIndividual individual : ontology.getIndividualsInSignature()) {
+            if (matchesLabel(individual.getIRI(), normalized)) {
+                matches.add(individual.getIRI().toString());
+            }
+        }
+        return matches;
+    }
+
+    @Override
+    public Set<String> getLabels(String iri) {
+        if (!isIri(iri)) {
+            return Set.of();
+        }
+        return labelsForIri(IRI.create(iri));
+    }
+
+    @Override
+    public Optional<String> getAnnotationValue(String iri, String annotationIri) {
+        if (!isIri(iri) || !isIri(annotationIri)) {
+            return Optional.empty();
+        }
+        IRI subject = IRI.create(iri);
+        IRI annotation = IRI.create(annotationIri);
+        OWLAnnotationProperty property = manager.getOWLDataFactory().getOWLAnnotationProperty(annotation);
+        return ontology.getAnnotationAssertionAxioms(subject).stream()
+                .filter(ax -> ax.getProperty().equals(property))
+                .map(OWLAnnotationAssertionAxiom::getValue)
+                .filter(value -> value.isLiteral())
+                .map(value -> value.asLiteral().orElse(null))
+                .filter(literal -> literal != null)
+                .map(literal -> literal.getLiteral())
+                .findFirst();
+    }
+
     private boolean isIri(String value) {
         return value != null && (value.startsWith("http://") || value.startsWith("https://"));
+    }
+
+    private boolean matchesLabel(IRI iri, String normalized) {
+        for (String label : labelsForIri(iri)) {
+            if (normalizeLabel(label).equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Set<String> labelsForIri(IRI iri) {
+        Set<String> labels = new HashSet<>();
+        OWLAnnotationProperty rdfsLabel = manager.getOWLDataFactory()
+                .getOWLAnnotationProperty(IRI.create("http://www.w3.org/2000/01/rdf-schema#label"));
+        OWLAnnotationProperty skosPrefLabel = manager.getOWLDataFactory()
+                .getOWLAnnotationProperty(IRI.create("http://www.w3.org/2004/02/skos/core#prefLabel"));
+        OWLAnnotationProperty skosAltLabel = manager.getOWLDataFactory()
+                .getOWLAnnotationProperty(IRI.create("http://www.w3.org/2004/02/skos/core#altLabel"));
+        OWLAnnotationProperty ontolexWrittenRep = manager.getOWLDataFactory()
+                .getOWLAnnotationProperty(IRI.create("http://www.w3.org/ns/lemon/ontolex#writtenRep"));
+        for (OWLAnnotationAssertionAxiom axiom : ontology.getAnnotationAssertionAxioms(iri)) {
+            OWLAnnotationProperty property = axiom.getProperty();
+            if (!property.equals(rdfsLabel)
+                    && !property.equals(skosPrefLabel)
+                    && !property.equals(skosAltLabel)
+                    && !property.equals(ontolexWrittenRep)) {
+                continue;
+            }
+            axiom.getValue().asLiteral().ifPresent(literal -> labels.add(literal.getLiteral()));
+        }
+        return labels;
+    }
+
+    private String normalizeLabel(String label) {
+        if (label == null) {
+            return "";
+        }
+        String normalized = label.trim().toLowerCase(Locale.ROOT);
+        normalized = normalized.replace('_', ' ');
+        normalized = normalized.replaceAll("\\s+", " ");
+        return normalized;
     }
 }

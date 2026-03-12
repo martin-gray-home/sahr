@@ -97,13 +97,7 @@ final class AliasBridge {
         }
         List<SymbolId> aliases = new ArrayList<>();
         String value = node.value();
-        if ("entity:spacecraft_orientation_control".equals(value)
-                || "concept:control_spacecraft_orientation".equals(value)) {
-            addKnownAlias(aliases, knownSymbols, "entity:spacecraft_orientation_control");
-            addKnownAlias(aliases, knownSymbols, "concept:control_spacecraft_orientation");
-            addKnownAlias(aliases, knownSymbols, "entity:spacecraft_orientation");
-            addKnownAlias(aliases, knownSymbols, "concept:spacecraft_orientation");
-        }
+        addOntologyAliases(aliases, knownSymbols, value);
         if (value.startsWith("entity:")) {
             String local = value.substring("entity:".length());
             addKnownAlias(aliases, knownSymbols, "concept:" + local);
@@ -203,6 +197,44 @@ final class AliasBridge {
                 aliases.add(candidate);
             }
         }
+    }
+
+    private void addOntologyAliases(List<SymbolId> aliases,
+                                    Set<SymbolId> knownSymbols,
+                                    String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        String local = value;
+        if (local.startsWith("entity:")) {
+            local = local.substring("entity:".length());
+        } else if (local.startsWith("concept:")) {
+            local = local.substring("concept:".length());
+        }
+        String normalized = local.replace('_', ' ').trim();
+        if (normalized.isBlank()) {
+            return;
+        }
+        for (String iri : ontology.getEntityIrisByLabel(normalized)) {
+            for (String label : ontology.getLabels(iri)) {
+                String token = normalizeLabelToToken(label);
+                if (token.isBlank()) {
+                    continue;
+                }
+                addKnownAlias(aliases, knownSymbols, "entity:" + token);
+                addKnownAlias(aliases, knownSymbols, "concept:" + token);
+            }
+        }
+    }
+
+    private String normalizeLabelToToken(String label) {
+        if (label == null) {
+            return "";
+        }
+        String normalized = label.trim().toLowerCase(java.util.Locale.ROOT);
+        normalized = normalized.replaceAll("[^a-z0-9]+", "_");
+        normalized = normalized.replaceAll("^_+", "").replaceAll("_+$", "");
+        return normalized;
     }
 
     private boolean endsWithTokens(String[] candidateTokens, String[] localTokens) {

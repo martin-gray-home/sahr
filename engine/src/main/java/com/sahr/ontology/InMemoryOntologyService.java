@@ -16,6 +16,10 @@ public final class InMemoryOntologyService implements OntologyService {
     private final Map<String, String> inverseProperties = new HashMap<>();
     private final Map<String, Set<String>> propertyRanges = new HashMap<>();
     private final Map<String, Set<String>> subproperties = new HashMap<>();
+    private final Map<String, Set<String>> propertyLabels = new HashMap<>();
+    private final Map<String, Set<String>> entityLabels = new HashMap<>();
+    private final Map<String, Set<String>> labelsByIri = new HashMap<>();
+    private final Map<String, Map<String, String>> annotations = new HashMap<>();
 
     public void addSubclass(String child, String parent) {
         subclassMap.computeIfAbsent(child, key -> new HashSet<>()).add(parent);
@@ -40,6 +44,22 @@ public final class InMemoryOntologyService implements OntologyService {
 
     public void addSubproperty(String child, String parent) {
         subproperties.computeIfAbsent(parent, key -> new HashSet<>()).add(child);
+    }
+
+    public void addObjectPropertyLabel(String label, String iri) {
+        propertyLabels.computeIfAbsent(label, key -> new HashSet<>()).add(iri);
+    }
+
+    public void addEntityLabel(String label, String iri) {
+        entityLabels.computeIfAbsent(label, key -> new HashSet<>()).add(iri);
+    }
+
+    public void addLabelForIri(String iri, String label) {
+        labelsByIri.computeIfAbsent(iri, key -> new HashSet<>()).add(label);
+    }
+
+    public void addAnnotation(String iri, String annotationIri, String value) {
+        annotations.computeIfAbsent(iri, key -> new HashMap<>()).put(annotationIri, value);
     }
 
     @Override
@@ -86,5 +106,25 @@ public final class InMemoryOntologyService implements OntologyService {
     @Override
     public Set<String> getObjectPropertyRanges(String property) {
         return Collections.unmodifiableSet(propertyRanges.getOrDefault(property, Collections.emptySet()));
+    }
+
+    @Override
+    public Set<String> getObjectPropertiesByLabel(String label) {
+        return Collections.unmodifiableSet(propertyLabels.getOrDefault(label, Collections.emptySet()));
+    }
+
+    @Override
+    public Set<String> getEntityIrisByLabel(String label) {
+        return Collections.unmodifiableSet(entityLabels.getOrDefault(label, Collections.emptySet()));
+    }
+
+    @Override
+    public Set<String> getLabels(String iri) {
+        return Collections.unmodifiableSet(labelsByIri.getOrDefault(iri, Collections.emptySet()));
+    }
+
+    @Override
+    public Optional<String> getAnnotationValue(String iri, String annotationIri) {
+        return Optional.ofNullable(annotations.getOrDefault(iri, Collections.emptyMap()).get(annotationIri));
     }
 }

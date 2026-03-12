@@ -1,0 +1,48 @@
+@prefix sahr: <https://sahr.ai/ontology/relations#> .
+@prefix ann: <https://sahr.ai/ontology/annotations#> .
+@prefix sc: <https://sahr.ai/ontology/spacecraft#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://sahr.ai/ontology/spacecraft>
+    a owl:Ontology ;
+    rdfs:label "SAHR Spacecraft Domain" .
+
+ann:answerTemplate a owl:AnnotationProperty .
+ann:answerTemplateTrue a owl:AnnotationProperty .
+ann:answerTemplateFalse a owl:AnnotationProperty .
+ann:dynamicWeight a owl:AnnotationProperty .
+ann:temporalWeight a owl:AnnotationProperty .
+ann:evidenceWeight a owl:AnnotationProperty .
+
+sc:ControlSpacecraftOrientation a owl:Class ;
+    rdfs:label "spacecraft orientation control" ;
+    skos:altLabel "control spacecraft orientation" ;
+    skos:altLabel "spacecraft orientation" .
+
+sahr:fail ann:dynamicWeight "0.55"^^xsd:decimal ;
+    ann:answerTemplateTrue "{subject} fails." ;
+    ann:answerTemplateFalse "{subject} does not fail." .
+
+sahr:restore ann:dynamicWeight "0.55"^^xsd:decimal ;
+    ann:answerTemplate "{subject} restores {object}." .
+
+sahr:backupFor ann:dynamicWeight "0.55"^^xsd:decimal ;
+    ann:answerTemplate "{subject} is a backup for {object}." .
+
+sahr:poweredBy ann:dynamicWeight "-0.25"^^xsd:decimal ;
+    ann:answerTemplate "{subject} is powered by {object}." .
+
+sahr:cause ann:dynamicWeight "0.55"^^xsd:decimal ;
+    ann:answerTemplate "{cause} causes {effect}." .
+
+sahr:causedBy ann:dynamicWeight "0.55"^^xsd:decimal ;
+    ann:answerTemplate "{effect} is caused by {cause}." .
+
+sahr:before ann:temporalWeight "0.20"^^xsd:decimal .
+sahr:after ann:temporalWeight "0.40"^^xsd:decimal .
+sahr:during ann:temporalWeight "0.20"^^xsd:decimal .
+
+sahr:indicate ann:evidenceWeight "0.35"^^xsd:decimal .

@@ -429,6 +429,10 @@ and reduce method sprawl.
 bridging to `AliasBridge`, forward explanation search to
 `ForwardChainSearch`, predicate-level explanation lookup to
 `PredicateExplainer`, and answer scoring/selection to `AnswerRanker`.
+Answer scoring and rendering now consult ontology annotations (e.g.,
+`ann:dynamicWeight`, `ann:temporalWeight`, `ann:evidenceWeight`,
+`ann:answerTemplate`) so domain packs can control ranking and output
+without hard-coded engine rules.
 
 Working Memory
 ---------------
@@ -588,6 +592,10 @@ Example:
 ```
 ontologies=core,lexinfo,oewn,mydomain
 ontology.mydomain.resources=ontology/mydomain.owl
+
+The default distribution now includes a spacecraft domain module
+`sahr-spacecraft.ttl`. It contributes domain labels, alias labels, and
+annotation-driven scoring/output templates without changing engine code.
 ```
 
 The `applications` module will package the ontology into the classpath, and the engine will load it on startup.

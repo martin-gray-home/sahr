@@ -3,6 +3,7 @@ package com.sahr.agent;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.RuleAssertion;
 import com.sahr.core.SymbolId;
+import com.sahr.ontology.SahrAnnotationVocabulary;
 
 import java.util.Locale;
 
@@ -16,13 +17,19 @@ final class AnswerRenderer {
     }
 
     private final DisplayFormatter formatter;
+    private final OntologyAnnotationResolver resolver;
 
-    AnswerRenderer(DisplayFormatter formatter) {
+    AnswerRenderer(DisplayFormatter formatter, OntologyAnnotationResolver resolver) {
         this.formatter = formatter;
+        this.resolver = resolver;
     }
 
     String formatCausalSentence(RelationAssertion assertion, SymbolId cause, SymbolId effect) {
         String predicate = formatter.localName(assertion.predicate());
+        String template = resolveTemplate(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE);
+        if (template != null) {
+            return applyTemplate(template, null, null, assertion.predicate(), cause, effect);
+        }
         if ("causedby".equals(predicate)) {
             return displayValue(effect) + " is caused by " + displayValue(cause) + ".";
         }
@@ -48,6 +55,19 @@ final class AnswerRenderer {
         String predicate = formatter.localName(assertion.predicate());
         Boolean booleanValue = formatter.booleanConcept(object);
         String subjectText = displayValue(subject);
+        if (booleanValue != null) {
+            String template = booleanValue
+                    ? resolveTemplate(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE_TRUE)
+                    : resolveTemplate(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE_FALSE);
+            if (template != null) {
+                return applyTemplate(template, subject, object, assertion.predicate(), null, null);
+            }
+        } else {
+            String template = resolveTemplate(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE);
+            if (template != null) {
+                return applyTemplate(template, subject, object, assertion.predicate(), null, null);
+            }
+        }
         if (booleanValue != null) {
             if ("fail".equals(predicate)) {
                 return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "fail" : "does not fail");
@@ -128,5 +148,39 @@ final class AnswerRenderer {
             return "related to";
         }
         return local.replace('_', ' ');
+    }
+
+    private String resolveTemplate(String predicate, String annotationIri) {
+        if (resolver == null) {
+            return null;
+        }
+        return resolver.resolveObjectPropertyIri(predicate)
+                .flatMap(iri -> resolver.annotationValue(iri, annotationIri))
+                .orElse(null);
+    }
+
+    private String applyTemplate(String template,
+                                 SymbolId subject,
+                                 SymbolId object,
+                                 String predicate,
+                                 SymbolId cause,
+                                 SymbolId effect) {
+        String rendered = template;
+        if (subject != null) {
+            rendered = rendered.replace("{subject}", displayValue(subject));
+        }
+        if (object != null) {
+            rendered = rendered.replace("{object}", displayValue(object));
+        }
+        if (predicate != null) {
+            rendered = rendered.replace("{predicate}", displayPredicate(predicate));
+        }
+        if (cause != null) {
+            rendered = rendered.replace("{cause}", displayValue(cause));
+        }
+        if (effect != null) {
+            rendered = rendered.replace("{effect}", displayValue(effect));
+        }
+        return rendered;
     }
 }

@@ -5,12 +5,19 @@ import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RuleAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.QueryGoal;
+import com.sahr.ontology.SahrAnnotationVocabulary;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 final class AnswerRanker {
+    private final OntologyAnnotationResolver resolver;
+
+    AnswerRanker(OntologyAnnotationResolver resolver) {
+        this.resolver = resolver;
+    }
+
     List<String> rankAnswerValues(List<String> values) {
         if (values == null || values.size() <= 1) {
             return values == null ? List.of() : values;
@@ -102,32 +109,13 @@ final class AnswerRanker {
         if (predicate == null || predicate.isBlank()) {
             return 0.0;
         }
-        return switch (predicate) {
-            case "fail", "fails", "stop", "stops", "operate", "operates", "restore", "restores",
-                    "regain", "regains", "fire", "fires", "fired", "respond", "responds", "drop",
-                    "drops", "spike", "spikes", "cause", "causes", "causedby" -> 0.55;
-            case "poweredby", "require", "requires", "contain", "contains", "type", "rdf:type" -> -0.25;
-            default -> 0.0;
-        };
+        return resolver.resolveObjectPropertyIri(predicate)
+                .flatMap(iri -> resolver.annotationDouble(iri, SahrAnnotationVocabulary.DYNAMIC_WEIGHT))
+                .orElse(0.0);
     }
 
     double sentenceDynamismScore(String sentence) {
-        if (sentence == null || sentence.isBlank()) {
-            return 0.0;
-        }
-        String normalized = sentence.toLowerCase(Locale.ROOT);
-        double score = 0.0;
-        if (normalized.contains("fail") || normalized.contains("stop")
-                || normalized.contains("restore") || normalized.contains("regain")
-                || normalized.contains("fired") || normalized.contains("respond")
-                || normalized.contains("drop") || normalized.contains("spike")) {
-            score += 0.4;
-        }
-        if (normalized.contains("powered by") || normalized.contains("requires")
-                || normalized.contains("contains")) {
-            score -= 0.2;
-        }
-        return score;
+        return 0.0;
     }
 
     ReasoningCandidate selectBestAnswerCandidate(List<ReasoningCandidate> candidates) {

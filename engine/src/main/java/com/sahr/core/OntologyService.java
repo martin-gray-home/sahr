@@ -19,4 +19,12 @@ public interface OntologyService {
     Set<String> getSubproperties(String property);
 
     Set<String> getObjectPropertyRanges(String property);
+
+    Set<String> getObjectPropertiesByLabel(String label);
+
+    Set<String> getEntityIrisByLabel(String label);
+
+    Set<String> getLabels(String iri);
+
+    Optional<String> getAnnotationValue(String iri, String annotationIri);
 }

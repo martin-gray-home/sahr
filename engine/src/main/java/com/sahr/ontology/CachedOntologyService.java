@@ -19,6 +19,10 @@ public final class CachedOntologyService implements OntologyService {
     private final ConcurrentMap<String, Set<String>> subCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<String>> subPropertyCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<String>> rangeCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Set<String>> propertyLabelCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Set<String>> entityLabelCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Set<String>> labelsCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Optional<String>> annotationCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ConcurrentMap<String, Boolean>> subclassCache = new ConcurrentHashMap<>();
 
     public CachedOntologyService(OntologyService delegate) {
@@ -66,5 +70,26 @@ public final class CachedOntologyService implements OntologyService {
     @Override
     public Set<String> getObjectPropertyRanges(String property) {
         return rangeCache.computeIfAbsent(property, delegate::getObjectPropertyRanges);
+    }
+
+    @Override
+    public Set<String> getObjectPropertiesByLabel(String label) {
+        return propertyLabelCache.computeIfAbsent(label, delegate::getObjectPropertiesByLabel);
+    }
+
+    @Override
+    public Set<String> getEntityIrisByLabel(String label) {
+        return entityLabelCache.computeIfAbsent(label, delegate::getEntityIrisByLabel);
+    }
+
+    @Override
+    public Set<String> getLabels(String iri) {
+        return labelsCache.computeIfAbsent(iri, delegate::getLabels);
+    }
+
+    @Override
+    public Optional<String> getAnnotationValue(String iri, String annotationIri) {
+        String key = iri + "|" + annotationIri;
+        return annotationCache.computeIfAbsent(key, ignored -> delegate.getAnnotationValue(iri, annotationIri));
     }
 }

@@ -216,7 +216,7 @@ class SahrAgentQueryTest {
             public String normalizeTypeToken(String raw) {
                 return raw == null ? "" : raw;
             }
-        });
+        }, null);
         String clause = renderer.formatAssertionSentence(assertion);
         assertTrue(clause.contains("wheel motor"));
         assertTrue(clause.contains("fails"));
@@ -266,7 +266,7 @@ class SahrAgentQueryTest {
             public String normalizeTypeToken(String raw) {
                 return raw == null ? "" : raw;
             }
-        });
+        }, null);
         String clause = renderer.formatAssertionSentence(assertion);
         assertTrue(clause.contains("actuators"));
         assertTrue(clause.contains("fail"));

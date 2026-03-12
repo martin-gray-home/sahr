@@ -5,6 +5,7 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.RuleAssertion;
 import com.sahr.core.SymbolId;
+import com.sahr.ontology.SahrAnnotationVocabulary;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -30,15 +31,18 @@ final class ExplanationChainBuilder {
     private final OntologyService ontology;
     private final Formatter formatter;
     private final ToDoubleFunction<String> specificityScore;
+    private final OntologyAnnotationResolver annotationResolver;
 
     ExplanationChainBuilder(KnowledgeBase graph,
                             OntologyService ontology,
                             Formatter formatter,
-                            ToDoubleFunction<String> specificityScore) {
+                            ToDoubleFunction<String> specificityScore,
+                            OntologyAnnotationResolver annotationResolver) {
         this.graph = graph;
         this.ontology = ontology;
         this.formatter = formatter;
         this.specificityScore = specificityScore;
+        this.annotationResolver = annotationResolver;
     }
 
     List<String> buildExplanationChain(SymbolId target, int maxDepth) {
@@ -223,15 +227,17 @@ final class ExplanationChainBuilder {
         double score = 0.0;
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String predicate = formatter.localName(assertion.predicate());
-            if ("indicate".equals(predicate) || "signal".equals(predicate) || "suggest".equals(predicate)) {
-                if (assertion.object().equals(cause) || assertion.subject().equals(cause)) {
-                    score += 0.35;
-                }
+            if (annotationResolver == null) {
+                continue;
             }
-            if ("telemetry".equals(formatter.normalizeTypeToken(assertion.subject().value()))) {
-                if (assertion.object().equals(cause)) {
-                    score += 0.2;
-                }
+            Double weight = annotationResolver.resolveObjectPropertyIri(assertion.predicate())
+                    .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
+                    .orElse(null);
+            if (weight == null || weight == 0.0) {
+                continue;
+            }
+            if (assertion.object().equals(cause) || assertion.subject().equals(cause)) {
+                score += weight;
             }
         }
         return score;
