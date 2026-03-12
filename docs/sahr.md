@@ -203,6 +203,8 @@ re-running interpretation heads.
 • Relationship-chain extraction now consults ontology labels when mapping question phrases to known entities, improving multi-entity relationship answers without hard-coded symbols.
 • Explanation chains include explicit recovery clauses when the prompt asks “how stability was restored,” even if the primary outcome is instability.
 • Dependency-contrast answers now add a short inference sentence when recovery evidence and electrical dependency facts are both present, improving “did not depend on electrical actuators” questions.
+• Answer composition logic has been centralized in `AnswerComposer`, reducing domain-specific routing inside `SahrAgent`.
+• `SahrAgent` now keeps only orchestration + parsing utilities; explanation/relationship helpers live in `AnswerComposer`.
 
 Statement Normalization
 -----------------------

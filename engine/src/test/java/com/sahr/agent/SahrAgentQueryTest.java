@@ -133,10 +133,11 @@ class SahrAgentQueryTest {
         graph.addRule(reactionToInstability);
 
         try {
-            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
+            AnswerComposer composer = extractAnswerComposer(agent);
+            java.lang.reflect.Method method = AnswerComposer.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
             method.setAccessible(true);
             QueryGoal goal = QueryGoal.relation(null, "cause", "entity:instability", null);
-            String answer = (String) method.invoke(agent, goal);
+            String answer = (String) method.invoke(composer, goal);
             assertTrue(answer.contains("wheel motor"));
             assertTrue(answer.contains("reaction wheel"));
         } catch (ReflectiveOperationException e) {
@@ -159,10 +160,11 @@ class SahrAgentQueryTest {
         graph.addRule(backupRule);
 
         try {
-            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
+            AnswerComposer composer = extractAnswerComposer(agent);
+            java.lang.reflect.Method method = AnswerComposer.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
             method.setAccessible(true);
             QueryGoal goal = QueryGoal.relation("entity:thrusters", "backupFor", "concept:attitude_control", null);
-            String answer = (String) method.invoke(agent, goal);
+            String answer = (String) method.invoke(composer, goal);
             assertTrue(answer.contains("thrusters"));
             assertTrue(answer.contains("backup"));
             assertTrue(answer.contains("attitude control"));
@@ -295,15 +297,22 @@ class SahrAgentQueryTest {
         graph.addRule(wheelToControl);
 
         try {
-            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
+            AnswerComposer composer = extractAnswerComposer(agent);
+            java.lang.reflect.Method method = AnswerComposer.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
             method.setAccessible(true);
             QueryGoal goal = QueryGoal.relation("entity:wheel_motor", "cause", "entity:spacecraft_orientation_control", null);
-            String answer = (String) method.invoke(agent, goal);
+            String answer = (String) method.invoke(composer, goal);
             assertTrue(answer.contains("wheel motor"));
             assertTrue(answer.contains("reaction wheel"));
             assertTrue(answer.contains("orientation control"));
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed to invoke executeCauseChain", e);
         }
+    }
+
+    private AnswerComposer extractAnswerComposer(SahrAgent agent) throws ReflectiveOperationException {
+        java.lang.reflect.Field field = SahrAgent.class.getDeclaredField("answerComposer");
+        field.setAccessible(true);
+        return (AnswerComposer) field.get(agent);
     }
 }
