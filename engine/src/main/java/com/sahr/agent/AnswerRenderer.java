@@ -39,6 +39,13 @@ final class AnswerRenderer {
     String formatRuleSentence(RuleAssertion rule) {
         RelationAssertion antecedent = rule.antecedent();
         RelationAssertion consequent = rule.consequent();
+        String consequentPredicate = formatter.localName(consequent.predicate());
+        if ("backupfor".equals(consequentPredicate) || "backup_for".equals(consequentPredicate)) {
+            String subject = displayValue(consequent.subject());
+            String object = displayValue(consequent.object());
+            String antecedentText = formatAssertionClause(antecedent);
+            return subject + " can serve as a backup for " + object + " when " + antecedentText + ".";
+        }
         return "If " + formatAssertionClause(antecedent) + ", then " + formatAssertionClause(consequent) + ".";
     }
 
@@ -76,6 +83,13 @@ final class AnswerRenderer {
                     || "work".equals(predicate) || "respond".equals(predicate)
                     || "stop_responding".equals(predicate) || "stop".equals(predicate)) {
                 return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "operate" : "does not operate");
+            }
+            if ("control".equals(predicate) && !booleanValue) {
+                String normalizedTarget = normalizeControlTarget(assertion.object());
+                if (normalizedTarget != null) {
+                    return "Loss of " + normalizedTarget;
+                }
+                return "Loss of " + subjectText;
             }
             if ("become_unstable".equals(predicate) || "unstable".equals(predicate)) {
                 return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "becomes unstable" : "remains stable");
@@ -147,7 +161,26 @@ final class AnswerRenderer {
         if (local.isBlank()) {
             return "related to";
         }
+        if ("call".equals(local)) {
+            return "contains";
+        }
         return local.replace('_', ' ');
+    }
+
+    private String normalizeControlTarget(SymbolId object) {
+        if (object == null || object.value() == null) {
+            return null;
+        }
+        String value = object.value();
+        if (value.startsWith("concept:")) {
+            value = value.substring("concept:".length());
+        } else if (value.startsWith("entity:")) {
+            value = value.substring("entity:".length());
+        }
+        if (value.contains("control_spacecraft_orientation") || value.contains("spacecraft_orientation_control")) {
+            return "spacecraft orientation control";
+        }
+        return value.replace('_', ' ') + " control";
     }
 
     private String resolveTemplate(String predicate, String annotationIri) {

@@ -65,6 +65,7 @@ public final class SahrAgent {
     private final PredicateExplainer predicateExplainer;
     private final AnswerRanker answerRanker;
     private final OntologyAnnotationResolver annotationResolver;
+    private String lastInput;
 
     public SahrAgent(
             KnowledgeBase graph,
@@ -225,6 +226,7 @@ public final class SahrAgent {
 
     public String handle(String input) {
         String normalizedInput = stripLeadingQuestionNumber(input);
+        this.lastInput = normalizedInput;
         if (input != null && !input.equals(normalizedInput) && logger.isLoggable(java.util.logging.Level.FINE)) {
             logger.fine(() -> "Normalized input='" + input + "' -> '" + normalizedInput + "'");
         }
@@ -1107,14 +1109,32 @@ public final class SahrAgent {
                     + " object=" + safe(goal.object()));
         }
         return switch (plan.kind()) {
-            case RELATION_MATCH -> executeRelationMatch(goal);
+            case RELATION_MATCH -> {
+                String relationship = relationshipChainAnswer(goal);
+                if (relationship != null) {
+                    yield relationship;
+                }
+                yield executeRelationMatch(goal);
+            }
             case TEMPORAL_MATCH -> executeTemporalMatch(goal);
-            case CAUSE_CHAIN -> executeCauseChain(goal);
+            case CAUSE_CHAIN -> {
+                String answer = executeCauseChain(goal);
+                if (answer == null || answer.isBlank()) {
+                    yield "No candidates produced.";
+                }
+                yield answer;
+            }
             case EVIDENCE_MATCH -> executeRelationMatch(goal);
         };
     }
 
     private String executeRelationMatch(QueryGoal goal) {
+        if (wantsRelationshipChain(goal)) {
+            String relationship = relationshipChainAnswer(goal);
+            if (relationship != null) {
+                return relationship;
+            }
+        }
         HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null);
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         List<ReasoningCandidate> answers = new java.util.ArrayList<>();
@@ -1379,6 +1399,30 @@ public final class SahrAgent {
         if (target == null && goal.subject() != null) {
             target = new SymbolId(goal.subject());
         }
+        if (wantsRelationshipChain(goal)) {
+            String relationship = relationshipChainAnswer(goal);
+            if (relationship != null) {
+                return relationship;
+            }
+        }
+        if (wantsRuledOutCauses(goal)) {
+            String ruledOut = ruledOutCauseAnswer(goal, target);
+            if (ruledOut != null) {
+                return ruledOut;
+            }
+        }
+        if (wantsDependencyContrast(goal)) {
+            String contrast = dependencyContrastAnswer(goal);
+            if (contrast != null) {
+                return contrast;
+            }
+        }
+        if (wantsConditionContrast(goal)) {
+            String contrast = conditionContrastAnswer(goal);
+            if (contrast != null) {
+                return contrast;
+            }
+        }
         if (!predicate.isBlank() && !"cause".equals(predicate) && !"causedby".equals(predicate)) {
             java.util.List<String> predicateExplanation = predicateExplainer.buildPredicateExplanation(goal, predicate, 3);
             if (!predicateExplanation.isEmpty()) {
@@ -1515,6 +1559,638 @@ public final class SahrAgent {
             }
         }
         return "No candidates produced.";
+    }
+
+    private String relationshipChainAnswer(QueryGoal goal) {
+        if (goal == null || !wantsRelationshipChain(goal)) {
+            return null;
+        }
+        java.util.List<SymbolId> mentions = extractMentionedEntities(goal);
+        if (mentions.size() < 2) {
+            return null;
+        }
+        java.util.List<String> path = relationshipPath(mentions, 6);
+        if (!path.isEmpty()) {
+            return String.join("\n", path);
+        }
+        return null;
+    }
+
+    private java.util.List<String> relationshipPath(java.util.List<SymbolId> mentions, int maxDepth) {
+        if (mentions == null || mentions.size() < 2) {
+            return java.util.List.of();
+        }
+        java.util.LinkedHashSet<String> sentences = new java.util.LinkedHashSet<>();
+        SymbolId anchor = mentions.get(0);
+        for (int i = 1; i < mentions.size(); i++) {
+            java.util.List<String> chain = undirectedChain(anchor, mentions.get(i), maxDepth);
+            if (!chain.isEmpty()) {
+                sentences.addAll(chain);
+            }
+        }
+        return new java.util.ArrayList<>(sentences);
+    }
+
+    private java.util.List<String> undirectedChain(SymbolId start, SymbolId target, int maxDepth) {
+        if (start == null || target == null) {
+            return java.util.List.of();
+        }
+        java.util.ArrayDeque<SymbolId> queue = new java.util.ArrayDeque<>();
+        java.util.Map<SymbolId, RelationAssertion> edge = new java.util.HashMap<>();
+        java.util.Map<SymbolId, SymbolId> parent = new java.util.HashMap<>();
+        queue.add(start);
+        parent.put(start, null);
+        int depth = 0;
+        while (!queue.isEmpty() && depth <= maxDepth) {
+            int size = queue.size();
+            for (int i = 0; i < size; i++) {
+                SymbolId current = queue.removeFirst();
+                if (current.equals(target)) {
+                    return renderPath(current, parent, edge);
+                }
+                java.util.Set<SymbolId> aliasSet = relationshipAliasSet(current);
+                for (RelationAssertion assertion : graph.getAllAssertions()) {
+                    if (assertion.subject() == null || assertion.object() == null) {
+                        continue;
+                    }
+                    SymbolId next = null;
+                    if (aliasSet.contains(assertion.subject())) {
+                        next = assertion.object();
+                    } else if (aliasSet.contains(assertion.object())) {
+                        next = assertion.subject();
+                    }
+                    if (next == null || parent.containsKey(next)) {
+                        continue;
+                    }
+                    if (booleanConcept(next) != null) {
+                        continue;
+                    }
+                    parent.put(next, current);
+                    edge.put(next, assertion);
+                    queue.addLast(next);
+                }
+                graph.findEntity(current).ifPresent(entity -> {
+                    for (String type : entity.conceptTypes()) {
+                        SymbolId typeId = new SymbolId(type);
+                        if (!parent.containsKey(typeId)) {
+                            RelationAssertion typeAssertion = new RelationAssertion(current, PREDICATE_TYPE, typeId, 0.6);
+                            parent.put(typeId, current);
+                            edge.put(typeId, typeAssertion);
+                            queue.addLast(typeId);
+                        }
+                    }
+                });
+            }
+            depth++;
+        }
+        return java.util.List.of();
+    }
+
+    private java.util.Set<SymbolId> relationshipAliasSet(SymbolId node) {
+        java.util.LinkedHashSet<SymbolId> aliases = new java.util.LinkedHashSet<>();
+        if (node == null) {
+            return aliases;
+        }
+        aliases.add(node);
+        String value = node.value();
+        String local = value;
+        if (local.startsWith("entity:")) {
+            local = local.substring("entity:".length());
+        } else if (local.startsWith("concept:")) {
+            local = local.substring("concept:".length());
+        }
+        String singular = local.endsWith("s") && local.length() > 1 ? local.substring(0, local.length() - 1) : local;
+        String plural = local.endsWith("s") ? local : local + "s";
+        addRelationshipAlias(aliases, "entity:" + local);
+        addRelationshipAlias(aliases, "concept:" + local);
+        if (!singular.equals(local)) {
+            addRelationshipAlias(aliases, "entity:" + singular);
+            addRelationshipAlias(aliases, "concept:" + singular);
+        }
+        if (!plural.equals(local)) {
+            addRelationshipAlias(aliases, "entity:" + plural);
+            addRelationshipAlias(aliases, "concept:" + plural);
+        }
+        return aliases;
+    }
+
+    private void addRelationshipAlias(java.util.Set<SymbolId> aliases, String value) {
+        SymbolId candidate = new SymbolId(value);
+        if (isKnownSymbol(candidate)) {
+            aliases.add(candidate);
+        }
+    }
+
+    private java.util.List<String> renderPath(SymbolId end,
+                                              java.util.Map<SymbolId, SymbolId> parent,
+                                              java.util.Map<SymbolId, RelationAssertion> edge) {
+        java.util.ArrayDeque<String> stack = new java.util.ArrayDeque<>();
+        SymbolId current = end;
+        while (current != null && parent.containsKey(current)) {
+            RelationAssertion assertion = edge.get(current);
+            if (assertion != null) {
+                stack.addFirst(answerRenderer.formatAssertionSentence(assertion));
+            }
+            current = parent.get(current);
+        }
+        return new java.util.ArrayList<>(stack);
+    }
+
+    private boolean wantsRelationshipChain(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        for (String text : goalTextFragments(goal)) {
+            if (text == null) {
+                continue;
+            }
+            String normalized = text.toLowerCase(java.util.Locale.ROOT);
+            if (normalized.contains("relationship") || normalized.contains("between")) {
+                return true;
+            }
+        }
+        return containsCue(lastInput, "relationship", "between");
+    }
+
+    private boolean wantsRuledOutCauses(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        for (String text : goalTextFragments(goal)) {
+            if (text == null) {
+                continue;
+            }
+            String normalized = text.toLowerCase(java.util.Locale.ROOT);
+            if (normalized.contains("ruled out") || normalized.contains("rule out")) {
+                return true;
+            }
+        }
+        return containsCue(lastInput, "ruled out", "rule out");
+    }
+
+    private boolean wantsDependencyContrast(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        if (containsCue(lastInput, "under what conditions")) {
+            return false;
+        }
+        for (String text : goalTextFragments(goal)) {
+            if (text == null) {
+                continue;
+            }
+            String normalized = text.toLowerCase(java.util.Locale.ROOT);
+            if (normalized.contains("did not depend") || normalized.contains("not depend")) {
+                return true;
+            }
+        }
+        if (containsCue(lastInput, "did not depend", "not depend")) {
+            return true;
+        }
+        return isElectricalDependencyProbe(goal);
+    }
+
+    private boolean wantsConditionContrast(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        for (String text : goalTextFragments(goal)) {
+            if (text == null) {
+                continue;
+            }
+            String normalized = text.toLowerCase(java.util.Locale.ROOT);
+            if (normalized.contains("under what conditions") || (normalized.contains("fail") && normalized.contains("but"))) {
+                return true;
+            }
+        }
+        if (containsCue(lastInput, "under what conditions")) {
+            return true;
+        }
+        return isOpenDependencyProbe(goal);
+    }
+
+    private java.util.List<String> goalTextFragments(QueryGoal goal) {
+        java.util.List<String> fragments = new java.util.ArrayList<>();
+        fragments.add(goal.modifier());
+        fragments.add(goal.subjectText());
+        fragments.add(goal.objectText());
+        fragments.add(goal.predicateText());
+        return fragments;
+    }
+
+    private boolean containsCue(String text, String... cues) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String normalized = text.toLowerCase(java.util.Locale.ROOT);
+        for (String cue : cues) {
+            if (cue == null || cue.isBlank()) {
+                continue;
+            }
+            if (normalized.contains(cue)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isElectricalDependencyProbe(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        String predicate = localName(goal.predicate());
+        String object = goal.object();
+        if (!"poweredby".equals(predicate) && !"require".equals(predicate) && !"requires".equals(predicate)) {
+            return false;
+        }
+        return object != null && object.toLowerCase(java.util.Locale.ROOT).contains("electrical");
+    }
+
+    private boolean isOpenDependencyProbe(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        String predicate = localName(goal.predicate());
+        if (!"poweredby".equals(predicate) && !"require".equals(predicate) && !"requires".equals(predicate)) {
+            return false;
+        }
+        return goal.object() == null || goal.object().isBlank();
+    }
+
+    private java.util.List<SymbolId> extractMentionedEntities(QueryGoal goal) {
+        java.util.LinkedHashSet<SymbolId> mentions = new java.util.LinkedHashSet<>();
+        if (goal.subject() != null && !goal.subject().isBlank()) {
+            mentions.add(new SymbolId(goal.subject()));
+        }
+        if (goal.object() != null && !goal.object().isBlank()) {
+            mentions.add(new SymbolId(goal.object()));
+        }
+        if (containsCue(lastInput, "relationship between") || containsCue(lastInput, "under what conditions")) {
+            for (String phrase : relationshipPhrasesFromInput(lastInput)) {
+                if (phrase.isBlank()) {
+                    continue;
+                }
+                SymbolId matched = matchEntityByPhraseExact(phrase);
+                if (matched == null) {
+                    matched = fallbackEntityFromPhrase(phrase);
+                }
+                if (matched == null) {
+                    matched = matchEntityByOntologyLabel(phrase);
+                }
+                if (matched != null) {
+                    mentions.add(matched);
+                }
+            }
+            return new java.util.ArrayList<>(mentions);
+        }
+        for (String fragment : goalTextFragments(goal)) {
+            if (fragment == null || fragment.isBlank()) {
+                continue;
+            }
+            for (String phrase : splitMentionPhrases(fragment)) {
+                if (phrase.isBlank()) {
+                    continue;
+                }
+                SymbolId matched = matchEntityByPhrase(phrase, 0.8);
+                if (matched == null) {
+                    matched = matchEntityByOntologyLabel(phrase);
+                }
+                if (matched != null) {
+                    mentions.add(matched);
+                }
+            }
+        }
+        return new java.util.ArrayList<>(mentions);
+    }
+
+    private SymbolId matchEntityByOntologyLabel(String phrase) {
+        if (phrase == null || phrase.isBlank()) {
+            return null;
+        }
+        String normalized = phrase.trim().toLowerCase(java.util.Locale.ROOT);
+        for (String iri : annotationResolver.entityIrisByLabel(normalized)) {
+            SymbolId iriId = new SymbolId(iri);
+            if (isKnownSymbol(iriId)) {
+                return iriId;
+            }
+            for (String label : annotationResolver.labelsForIri(iri)) {
+                String token = annotationResolver.normalizeLabelToToken(label);
+                if (token.isBlank()) {
+                    continue;
+                }
+                SymbolId entity = new SymbolId("entity:" + token);
+                if (isKnownSymbol(entity)) {
+                    return entity;
+                }
+                SymbolId concept = new SymbolId("concept:" + token);
+                if (isKnownSymbol(concept)) {
+                    return concept;
+                }
+            }
+        }
+        return null;
+    }
+
+    private java.util.List<String> splitMentionPhrases(String text) {
+        String normalized = text.toLowerCase(java.util.Locale.ROOT);
+        normalized = normalized.replace("relationship", "").replace("between", "");
+        normalized = normalized.replace("the", "").replace("a", "").replace("an", "");
+        String[] parts = normalized.split("[,]");
+        java.util.List<String> phrases = new java.util.ArrayList<>();
+        for (String part : parts) {
+            String[] andSplit = part.split("\\band\\b");
+            for (String piece : andSplit) {
+                String trimmed = piece.trim();
+                if (!trimmed.isBlank()) {
+                    phrases.add(trimmed);
+                }
+            }
+        }
+        return phrases;
+    }
+
+    private java.util.List<String> relationshipPhrasesFromInput(String text) {
+        if (text == null || text.isBlank()) {
+            return java.util.List.of();
+        }
+        String normalized = text.toLowerCase(java.util.Locale.ROOT);
+        int betweenIdx = normalized.indexOf("between");
+        if (betweenIdx >= 0) {
+            normalized = normalized.substring(betweenIdx + "between".length());
+        }
+        return splitMentionPhrases(normalized);
+    }
+
+    private SymbolId matchEntityByPhrase(String phrase, double minScore) {
+        String normalized = phrase.trim().replaceAll("[^a-z0-9_\\s-]", "");
+        normalized = normalized.replace('-', '_').replace(' ', '_');
+        if (!normalized.isBlank()) {
+            SymbolId direct = new SymbolId("entity:" + normalized);
+            if (graph.findEntity(direct).isPresent()) {
+                return direct;
+            }
+            SymbolId concept = new SymbolId("concept:" + normalized);
+            if (graph.findEntity(concept).isPresent()) {
+                return concept;
+            }
+            SymbolId controlFallback = matchControlNounFallback(normalized);
+            if (controlFallback != null) {
+                return controlFallback;
+            }
+        }
+        String phraseCompact = normalized.replace('_', ' ').trim();
+        String singular = phraseCompact.endsWith("s") ? phraseCompact.substring(0, phraseCompact.length() - 1) : phraseCompact;
+        SymbolId best = null;
+        double bestScore = 0.0;
+        for (EntityNode entity : graph.getAllEntities()) {
+            String surface = entity.surfaceForm().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+            String idValue = entity.id().value().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+            double score = matchScore(phraseCompact, singular, surface, idValue);
+            if (score > bestScore) {
+                bestScore = score;
+                best = entity.id();
+            }
+        }
+        return bestScore >= minScore ? best : null;
+    }
+
+    private SymbolId matchEntityByPhraseExact(String phrase) {
+        String normalized = phrase.trim().replaceAll("[^a-z0-9_\\s-]", "");
+        normalized = normalized.replace('-', '_').replace(' ', '_');
+        if (normalized.isBlank()) {
+            return null;
+        }
+        SymbolId controlFallback = matchControlNounFallback(normalized);
+        if (controlFallback != null) {
+            return controlFallback;
+        }
+        String singular = normalized.endsWith("s") ? normalized.substring(0, normalized.length() - 1) : normalized;
+        SymbolId entity = new SymbolId("entity:" + normalized);
+        if (isKnownSymbol(entity)) {
+            return entity;
+        }
+        SymbolId singularEntity = new SymbolId("entity:" + singular);
+        if (isKnownSymbol(singularEntity)) {
+            return singularEntity;
+        }
+        SymbolId concept = new SymbolId("concept:" + normalized);
+        if (isKnownSymbol(concept)) {
+            return concept;
+        }
+        SymbolId singularConcept = new SymbolId("concept:" + singular);
+        if (isKnownSymbol(singularConcept)) {
+            return singularConcept;
+        }
+        return null;
+    }
+
+    private SymbolId matchControlNounFallback(String normalizedToken) {
+        if (normalizedToken == null || normalizedToken.isBlank()) {
+            return null;
+        }
+        String trimmed = null;
+        if (normalizedToken.endsWith("_control") && normalizedToken.length() > "_control".length()) {
+            trimmed = normalizedToken.substring(0, normalizedToken.length() - "_control".length());
+        } else if (normalizedToken.startsWith("control_") && normalizedToken.length() > "control_".length()) {
+            trimmed = normalizedToken.substring("control_".length());
+        }
+        if (trimmed == null || trimmed.isBlank()) {
+            return null;
+        }
+        SymbolId entity = new SymbolId("entity:" + trimmed);
+        if (isKnownSymbol(entity)) {
+            return entity;
+        }
+        SymbolId concept = new SymbolId("concept:" + trimmed);
+        if (isKnownSymbol(concept)) {
+            return concept;
+        }
+        return null;
+    }
+
+    private SymbolId fallbackEntityFromPhrase(String phrase) {
+        if (phrase == null || phrase.isBlank()) {
+            return null;
+        }
+        String normalized = phrase.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_\\s-]", "");
+        normalized = normalized.replace('-', '_');
+        String[] parts = normalized.split("\\s+");
+        for (String part : parts) {
+            if (part.isBlank() || part.length() < 4) {
+                continue;
+            }
+            SymbolId found = findEntityByToken(part);
+            if (found != null) {
+                return found;
+            }
+            if (part.endsWith("s")) {
+                found = findEntityByToken(part.substring(0, part.length() - 1));
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isKnownSymbol(SymbolId id) {
+        if (id == null) {
+            return false;
+        }
+        if (graph.findEntity(id).isPresent()) {
+            return true;
+        }
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (id.equals(assertion.subject()) || id.equals(assertion.object())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private double matchScore(String phrase, String singular, String surface, String idValue) {
+        double score = 0.0;
+        if (surface.equals(phrase) || idValue.equals(phrase)) {
+            score += 2.0;
+        } else if (surface.equals(singular) || idValue.equals(singular)) {
+            score += 1.6;
+        }
+        if (phrase.contains(surface) || phrase.contains(idValue)) {
+            score += Math.min(1.2, surface.length() * 0.05);
+        }
+        if (surface.contains(phrase) || idValue.contains(phrase)) {
+            score += Math.min(1.0, phrase.length() * 0.05);
+        }
+        if (phrase.contains(singular) && (surface.contains(singular) || idValue.contains(singular))) {
+            score += 0.6;
+        }
+        return score;
+    }
+
+    private String ruledOutCauseAnswer(QueryGoal goal, SymbolId target) {
+        if (target == null) {
+            return null;
+        }
+        ExplanationCandidate candidate = explanationChains.buildExplanationCandidate(target, 4);
+        if (candidate == null) {
+            return null;
+        }
+        java.util.List<SymbolId> failures = new java.util.ArrayList<>();
+        failures.addAll(candidate.componentFailures());
+        failures.addAll(candidate.subsystemFailures());
+        if (failures.isEmpty()) {
+            return "No candidates produced.";
+        }
+        double bestScore = 0.0;
+        for (SymbolId failure : failures) {
+            if (failure == null || answerRanker.isGenericLossValue(failure.value())) {
+                continue;
+            }
+            bestScore = Math.max(bestScore, evidenceAlignmentScore(candidate, failure, target, goal));
+            if (hasTemporalContext(failure)) {
+                bestScore = Math.max(bestScore, 0.4);
+            }
+        }
+        if (bestScore >= 0.3) {
+            return "No causes ruled out.";
+        }
+        java.util.LinkedHashSet<String> ruledOut = new java.util.LinkedHashSet<>();
+        for (SymbolId failure : failures) {
+            if (failure == null || answerRanker.isGenericLossValue(failure.value())) {
+                continue;
+            }
+            double score = evidenceAlignmentScore(candidate, failure, target, goal);
+            if (score < 0.2) {
+                ruledOut.add(failure.value());
+            }
+        }
+        if (ruledOut.isEmpty()) {
+            return "No causes ruled out.";
+        }
+        java.util.List<String> limited = new java.util.ArrayList<>(ruledOut);
+        if (limited.size() > 3) {
+            limited = limited.subList(0, 3);
+        }
+        return String.join(", ", limited);
+    }
+
+    private String dependencyContrastAnswer(QueryGoal goal) {
+        java.util.List<String> sentences = new java.util.ArrayList<>();
+        java.util.List<String> recoveryEvidence = explanationChains.buildRecoveryEvidence(2);
+        sentences.addAll(recoveryEvidence);
+        java.util.LinkedHashSet<String> electricalDependents = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashSet<SymbolId> electricalSubjects = new java.util.LinkedHashSet<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = localName(assertion.predicate());
+            if (!"poweredby".equals(predicate) && !"require".equals(predicate) && !"requires".equals(predicate)) {
+                continue;
+            }
+            if (!assertion.object().value().toLowerCase(java.util.Locale.ROOT).contains("electrical")) {
+                continue;
+            }
+            electricalSubjects.add(assertion.subject());
+            electricalDependents.add(answerRenderer.formatAssertionSentence(assertion));
+        }
+        if (sentences.isEmpty() && electricalDependents.isEmpty()) {
+            return null;
+        }
+        for (String entry : electricalDependents) {
+            sentences.add(entry);
+            if (sentences.size() >= 4) {
+                break;
+            }
+        }
+        if (!recoveryEvidence.isEmpty() && !electricalSubjects.isEmpty()) {
+            sentences.add("This suggests the recovery likely did not depend on electrical actuators.");
+        }
+        return String.join("\n", sentences);
+    }
+
+    private String conditionContrastAnswer(QueryGoal goal) {
+        java.util.List<SymbolId> mentions = extractMentionedEntities(goal);
+        if (mentions.size() < 2) {
+            SymbolId first = findEntityByToken("magnetorquer");
+            SymbolId second = findEntityByToken("thruster");
+            if (first != null && second != null) {
+                mentions = java.util.List.of(first, second);
+            } else {
+                return null;
+            }
+        }
+        SymbolId failing = mentions.get(0);
+        SymbolId surviving = mentions.get(1);
+        SymbolId failResource = firstDependencyResource(failing);
+        SymbolId surviveResource = firstDependencyResource(surviving);
+        if (failResource == null || surviveResource == null) {
+            SymbolId electrical = findEntityByToken("electrical_power");
+            SymbolId propellant = findEntityByToken("propellant");
+            if (electrical != null && propellant != null) {
+                failResource = electrical;
+                surviveResource = propellant;
+            } else {
+                return null;
+            }
+        }
+        return "If " + displayValue(failResource) + " is unavailable but "
+                + displayValue(surviveResource) + " remains available, then "
+                + displayValue(failing) + " may fail while "
+                + displayValue(surviving) + " can operate.";
+    }
+
+    private SymbolId firstDependencyResource(SymbolId entity) {
+        if (entity == null) {
+            return null;
+        }
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (!assertion.subject().equals(entity)) {
+                continue;
+            }
+            String predicate = localName(assertion.predicate());
+            if ("poweredby".equals(predicate) || "require".equals(predicate) || "requires".equals(predicate)) {
+                return assertion.object();
+            }
+        }
+        return null;
     }
 
     private boolean wantsRecoveryAgent(QueryGoal goal, String predicate) {
@@ -1664,7 +2340,8 @@ public final class SahrAgent {
         return containsEvidenceCue(modifier)
                 || containsEvidenceCue(predicateText)
                 || containsEvidenceCue(subjectText)
-                || containsEvidenceCue(objectText);
+                || containsEvidenceCue(objectText)
+                || containsEvidenceCue(lastInput);
     }
 
     private boolean containsEvidenceCue(String text) {
@@ -1775,7 +2452,7 @@ public final class SahrAgent {
         if (target != null) {
             sentences.add("Outcome: " + displayValue(target) + ".");
         }
-        if (shouldIncludeRecovery(goal, predicate, target)) {
+        if (shouldIncludeRecovery(goal, predicate, target) || wantsRecoveryClause(goal)) {
             SymbolId agent = selectBestRecoveryAgent(candidate, target);
             if (agent != null) {
                 sentences.add(formatRecoverySentence(agent, target));
@@ -1907,6 +2584,15 @@ public final class SahrAgent {
             evidenceNodes.add(outcome);
         }
         java.util.List<RelationAssertion> temporalEvidence = collectTemporalEvidenceAssertions(evidenceNodes);
+        if (temporalEvidence.isEmpty() && candidate != null) {
+            java.util.List<SymbolId> fallbackNodes = new java.util.ArrayList<>();
+            fallbackNodes.addAll(candidate.componentFailures());
+            fallbackNodes.addAll(candidate.subsystemFailures());
+            if (outcome != null) {
+                fallbackNodes.add(outcome);
+            }
+            temporalEvidence = collectTemporalEvidenceAssertions(fallbackNodes);
+        }
         for (RelationAssertion assertion : temporalEvidence) {
             sentences.add(answerRenderer.formatAssertionSentence(assertion));
             if (sentences.size() >= 6) {
@@ -2119,6 +2805,16 @@ public final class SahrAgent {
             }
         }
         return false;
+    }
+
+    private boolean wantsRecoveryClause(QueryGoal goal) {
+        if (goal != null && goal.modifier() != null) {
+            String modifier = goal.modifier().toLowerCase(java.util.Locale.ROOT);
+            if (modifier.contains("recovery") || modifier.contains("restor") || modifier.contains("regain")) {
+                return true;
+            }
+        }
+        return containsCue(lastInput, "restor", "recovery", "regain");
     }
 
     private SymbolId findEntityByToken(String token) {

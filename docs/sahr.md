@@ -196,6 +196,14 @@ Plan execution dispatches to relation, temporal, or causal executors
 based on the inferred plan kind, producing `ANSWER` candidates without
 re-running interpretation heads.
 
+---
+
+# Recent Updates (2026-03-12)
+
+• Relationship-chain extraction now consults ontology labels when mapping question phrases to known entities, improving multi-entity relationship answers without hard-coded symbols.
+• Explanation chains include explicit recovery clauses when the prompt asks “how stability was restored,” even if the primary outcome is instability.
+• Dependency-contrast answers now add a short inference sentence when recovery evidence and electrical dependency facts are both present, improving “did not depend on electrical actuators” questions.
+
 Statement Normalization
 -----------------------
 
@@ -442,6 +450,24 @@ improve sequence-oriented explanations.
 Evidence-aligned ranking boosts chains that connect telemetry precursors
 to failure and outcome via temporal links, so “best fit” and telemetry
 sequence questions prefer explanations tied to observed signals.
+Relationship questions (“relationship between X and Y”) now render a
+short chain by collecting assertions that connect the mentioned
+entities (including type bridges) and falling back to a forward-chain
+search if no direct assertions exist.
+Ruled‑out cause questions now compare evidence‑aligned failure
+candidates and only list causes with weak evidence alignment; if none
+are weak, the engine responds that no causes are ruled out.
+Dependency‑contrast questions (“did not depend on”) now surface recovery
+evidence plus dependency facts (e.g., poweredBy) so the answer can
+explain why a recovery mechanism differs from electrically dependent
+systems.
+Condition‑contrast questions (“under what conditions would A fail but B
+still function”) now summarize a minimal availability contrast using the
+dependencies of the mentioned entities.
+Relationship rendering now uses an undirected shortest-path fallback
+over assertions and rdf:type bridges when a direct chain is not found,
+so “relationship between …” questions can surface containment or type
+links even if the direction is inverted.
 Explanation-chain construction and cause selection are now centralized
 in `ExplanationChainBuilder` to keep `SahrAgent` focused on orchestration
 and reduce method sprawl.

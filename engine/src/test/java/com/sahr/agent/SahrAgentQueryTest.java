@@ -163,9 +163,9 @@ class SahrAgentQueryTest {
             method.setAccessible(true);
             QueryGoal goal = QueryGoal.relation("entity:thrusters", "backupFor", "concept:attitude_control", null);
             String answer = (String) method.invoke(agent, goal);
-            assertTrue(answer.contains("If"));
             assertTrue(answer.contains("thrusters"));
             assertTrue(answer.contains("backup"));
+            assertTrue(answer.contains("attitude control"));
             assertTrue(answer.contains("fail"));
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed to invoke executeCauseChain", e);
