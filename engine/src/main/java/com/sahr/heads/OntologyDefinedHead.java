@@ -1016,6 +1016,11 @@ public final class OntologyDefinedHead extends BaseHead {
                 }
             }
             if ("cause".equals(normalizedPredicate)) {
+                if (tokens.contains("loss")
+                        && (tokens.contains("orientation") || tokens.contains("control"))
+                        && entityMap.containsKey("control_spacecraft_orientation")) {
+                    return entityMap.get("control_spacecraft_orientation");
+                }
                 if (tokens.contains("loss")) {
                     String afterOf = inferEntityAfterToken(tokens, "of", entityMap);
                     if (afterOf != null) {
@@ -1172,10 +1177,10 @@ public final class OntologyDefinedHead extends BaseHead {
             boolean hasLoss = normalized.contains("loss");
             if (hasExplain && predicates.contains("cause")) {
                 String object = null;
-                if (hasLoss && entityMap.containsKey("spacecraft_orientation_control")) {
-                    object = entityMap.get("spacecraft_orientation_control");
-                } else if ((normalized.contains("orientation") || normalized.contains("control"))
-                        && entityMap.containsKey("spacecraft_orientation_control")) {
+                if ((hasLoss || normalized.contains("orientation") || normalized.contains("control"))
+                        && entityMap.containsKey("control_spacecraft_orientation")) {
+                    object = entityMap.get("control_spacecraft_orientation");
+                } else if (hasLoss && entityMap.containsKey("spacecraft_orientation_control")) {
                     object = entityMap.get("spacecraft_orientation_control");
                 } else if (hasLoss) {
                     object = inferEntityAfterToken(normalized, "of", entityMap);
@@ -1190,7 +1195,10 @@ public final class OntologyDefinedHead extends BaseHead {
                     || normalized.contains("prevented") || normalized.contains("preventing");
             if (hasPrevent && predicates.contains("cause")) {
                 String object = null;
-                if (normalized.contains("control") && entityMap.containsKey("spacecraft_orientation_control")) {
+                if ((normalized.contains("orientation") || normalized.contains("control"))
+                        && entityMap.containsKey("control_spacecraft_orientation")) {
+                    object = entityMap.get("control_spacecraft_orientation");
+                } else if (normalized.contains("control") && entityMap.containsKey("spacecraft_orientation_control")) {
                     object = entityMap.get("spacecraft_orientation_control");
                 } else {
                     object = inferEntityAfterToken(normalized, "prevent", entityMap);

@@ -1152,15 +1152,41 @@ public final class SahrAgent {
         if (target == null) {
             return "No candidates produced.";
         }
+        java.util.List<SymbolId> subjectCandidates = expandAliasSymbols(subject);
+        java.util.List<SymbolId> targetCandidates = expandAliasSymbols(target);
         if (subject != null && target != null && !subject.equals(target)) {
-            java.util.List<String> forward = buildForwardExplanationChain(subject, target, 4);
-            if (!forward.isEmpty()) {
-                return String.join("\n", forward);
+            ChainResult best = null;
+            for (SymbolId subjectCandidate : subjectCandidates) {
+                for (SymbolId targetCandidate : targetCandidates) {
+                    if (subjectCandidate.equals(targetCandidate)) {
+                        continue;
+                    }
+                    ChainResult forward = buildForwardExplanationChain(subjectCandidate, targetCandidate, 4);
+                    if (forward == null || forward.sentences().isEmpty()) {
+                        continue;
+                    }
+                    if (best == null || forward.score() > best.score()) {
+                        best = forward;
+                    }
+                }
+            }
+            if (best != null && !best.sentences().isEmpty()) {
+                return String.join("\n", best.sentences());
             }
         }
-        java.util.List<String> explanation = buildExplanationChain(target, 4);
-        if (!explanation.isEmpty()) {
-            return String.join("\n", explanation);
+        ChainResult bestExplanation = null;
+        for (SymbolId targetCandidate : targetCandidates) {
+            java.util.List<String> explanation = buildExplanationChain(targetCandidate, 4);
+            if (explanation.isEmpty()) {
+                continue;
+            }
+            ChainResult candidate = new ChainResult(explanation, explanationSpecificity(explanation));
+            if (bestExplanation == null || candidate.score() > bestExplanation.score()) {
+                bestExplanation = candidate;
+            }
+        }
+        if (bestExplanation != null && !bestExplanation.sentences().isEmpty()) {
+            return String.join("\n", bestExplanation.sentences());
         }
         java.util.Set<SymbolId> visited = new java.util.HashSet<>();
         java.util.ArrayDeque<SymbolId> queue = new java.util.ArrayDeque<>();
@@ -1202,53 +1228,87 @@ public final class SahrAgent {
         if (ruleFallback != null) {
             return ruleFallback;
         }
-        String ruleChain = ruleChainFallback(target);
-        if (ruleChain != null) {
-            return ruleChain;
+        for (SymbolId targetCandidate : targetCandidates) {
+            String ruleChain = ruleChainFallback(targetCandidate);
+            if (ruleChain != null) {
+                return ruleChain;
+            }
         }
         return "No candidates produced.";
     }
 
-    private java.util.List<String> buildForwardExplanationChain(SymbolId start,
-                                                                SymbolId target,
-                                                                int maxDepth) {
+    private ChainResult buildForwardExplanationChain(SymbolId start,
+                                                     SymbolId target,
+                                                     int maxDepth) {
         java.util.List<String> sentences = new java.util.ArrayList<>();
         if (start == null || target == null) {
-            return sentences;
+            return new ChainResult(sentences, 0.0);
         }
-        java.util.Set<SymbolId> visited = new java.util.HashSet<>();
-        java.util.ArrayDeque<ChainStep> queue = new java.util.ArrayDeque<>();
-        queue.add(new ChainStep(start, null));
-        visited.add(start);
+        java.util.Map<SymbolId, Double> bestScore = new java.util.HashMap<>();
+        java.util.PriorityQueue<ChainStep> queue = new java.util.PriorityQueue<>(
+                java.util.Comparator.<ChainStep>comparingDouble(step -> -step.score)
+                        .thenComparingInt(step -> step.depth)
+        );
+        java.util.Set<SymbolId> knownSymbols = collectKnownSymbols();
+        queue.add(new ChainStep(start, null, null, null, 0.0));
+        bestScore.put(start, 0.0);
+        ChainResult bestResult = null;
         while (!queue.isEmpty() && maxDepth > 0) {
-            ChainStep current = queue.removeFirst();
+            ChainStep current = queue.remove();
             if (current.node.equals(target)) {
-                sentences.addAll(renderChainSteps(current));
-                break;
+                java.util.List<String> chain = renderChainSteps(current);
+                double chainScore = current.score;
+                if (!chain.isEmpty()) {
+                    if (bestResult == null || chainScore > bestResult.score()) {
+                        bestResult = new ChainResult(chain, chainScore);
+                    }
+                }
+                continue;
             }
             if (current.depth >= maxDepth) {
                 continue;
             }
+            for (SymbolId next : aliasNodes(current.node, knownSymbols)) {
+                enqueueChainStep(queue, bestScore, current, next, 0.05, null, null);
+            }
+            for (SymbolId next : typeNodes(current.node, knownSymbols)) {
+                enqueueChainStep(queue, bestScore, current, next, 0.15, null, null);
+            }
             for (RelationAssertion assertion : graph.getAllAssertions()) {
                 java.util.List<SymbolId> nextNodes = nextNodesFromAssertion(current.node, assertion);
                 for (SymbolId next : nextNodes) {
-                    if (!visited.add(next)) {
-                        continue;
-                    }
-                    queue.addLast(new ChainStep(next, current, assertion, null));
+                    double stepScore = assertionSpecificity(assertion);
+                    enqueueChainStep(queue, bestScore, current, next, stepScore, assertion, null);
                 }
             }
             for (RuleAssertion rule : graph.getAllRules()) {
                 java.util.List<SymbolId> nextNodes = nextNodesFromRule(current.node, rule);
                 for (SymbolId next : nextNodes) {
-                    if (!visited.add(next)) {
-                        continue;
-                    }
-                    queue.addLast(new ChainStep(next, current, null, rule));
+                    double stepScore = ruleSpecificity(rule);
+                    enqueueChainStep(queue, bestScore, current, next, stepScore, null, rule);
                 }
             }
         }
-        return sentences;
+        return bestResult == null ? new ChainResult(sentences, 0.0) : bestResult;
+    }
+
+    private void enqueueChainStep(java.util.PriorityQueue<ChainStep> queue,
+                                  java.util.Map<SymbolId, Double> bestScore,
+                                  ChainStep current,
+                                  SymbolId next,
+                                  double stepScore,
+                                  RelationAssertion assertion,
+                                  RuleAssertion rule) {
+        if (next == null) {
+            return;
+        }
+        double score = current.score + stepScore;
+        Double existing = bestScore.get(next);
+        if (existing != null && existing >= score) {
+            return;
+        }
+        bestScore.put(next, score);
+        queue.add(new ChainStep(next, current, assertion, rule, score));
     }
 
     private java.util.List<SymbolId> nextNodesFromAssertion(SymbolId node, RelationAssertion assertion) {
@@ -1292,6 +1352,109 @@ public final class SahrAgent {
         nextNodes.add(candidate);
     }
 
+    private java.util.List<SymbolId> aliasNodes(SymbolId node, java.util.Set<SymbolId> knownSymbols) {
+        if (node == null) {
+            return java.util.List.of();
+        }
+        java.util.List<SymbolId> aliases = new java.util.ArrayList<>();
+        String value = node.value();
+        if (value.startsWith("entity:")) {
+            String local = value.substring("entity:".length());
+            addKnownAlias(aliases, knownSymbols, "concept:" + local);
+            String singular = singularize(local);
+            if (!singular.equals(local)) {
+                addKnownAlias(aliases, knownSymbols, "entity:" + singular);
+                addKnownAlias(aliases, knownSymbols, "concept:" + singular);
+            }
+        } else if (value.startsWith("concept:")) {
+            String local = value.substring("concept:".length());
+            addKnownAlias(aliases, knownSymbols, "entity:" + local);
+            String plural = pluralize(local);
+            if (!plural.equals(local)) {
+                addKnownAlias(aliases, knownSymbols, "entity:" + plural);
+            }
+        }
+        return aliases;
+    }
+
+    private java.util.List<SymbolId> typeNodes(SymbolId node, java.util.Set<SymbolId> knownSymbols) {
+        java.util.List<SymbolId> next = new java.util.ArrayList<>();
+        if (node == null) {
+            return next;
+        }
+        graph.findEntity(node).ifPresent(entity -> {
+            for (String type : entity.conceptTypes()) {
+                SymbolId typeId = symbolFromType(type);
+                if (typeId != null) {
+                    if (knownSymbols.contains(typeId) || typeId.value().startsWith("concept:")
+                            || typeId.value().startsWith("http")) {
+                        next.add(typeId);
+                    }
+                    if (typeId.value().startsWith("http")) {
+                        for (String superclass : ontology.getSuperclasses(typeId.value())) {
+                            SymbolId superId = new SymbolId(superclass);
+                            if (!superId.equals(node)) {
+                                next.add(superId);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        return next;
+    }
+
+    private SymbolId symbolFromType(String type) {
+        if (type == null || type.isBlank()) {
+            return null;
+        }
+        if (type.startsWith("concept:") || type.startsWith("entity:")
+                || type.startsWith("http://") || type.startsWith("https://")) {
+            return new SymbolId(type);
+        }
+        return new SymbolId("concept:" + type);
+    }
+
+    private void addKnownAlias(java.util.List<SymbolId> aliases,
+                               java.util.Set<SymbolId> knownSymbols,
+                               String candidate) {
+        SymbolId id = new SymbolId(candidate);
+        if (knownSymbols.contains(id)) {
+            aliases.add(id);
+        }
+    }
+
+    private String singularize(String value) {
+        if (value.endsWith("ss") || !value.endsWith("s") || value.length() <= 1) {
+            return value;
+        }
+        return value.substring(0, value.length() - 1);
+    }
+
+    private String pluralize(String value) {
+        if (value.endsWith("s")) {
+            return value;
+        }
+        return value + "s";
+    }
+
+    private java.util.Set<SymbolId> collectKnownSymbols() {
+        java.util.Set<SymbolId> known = new java.util.HashSet<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            known.add(assertion.subject());
+            known.add(assertion.object());
+        }
+        for (RuleAssertion rule : graph.getAllRules()) {
+            RelationAssertion antecedent = rule.antecedent();
+            RelationAssertion consequent = rule.consequent();
+            known.add(antecedent.subject());
+            known.add(antecedent.object());
+            known.add(consequent.subject());
+            known.add(consequent.object());
+        }
+        return known;
+    }
+
     private java.util.List<String> renderChainSteps(ChainStep end) {
         java.util.ArrayDeque<String> stack = new java.util.ArrayDeque<>();
         ChainStep current = end;
@@ -1312,18 +1475,47 @@ public final class SahrAgent {
         private final RelationAssertion assertion;
         private final RuleAssertion rule;
         private final int depth;
+        private final double score;
 
         private ChainStep(SymbolId node, ChainStep parent) {
-            this(node, parent, null, null);
+            this(node, parent, null, null, 0.0);
         }
 
-        private ChainStep(SymbolId node, ChainStep parent, RelationAssertion assertion, RuleAssertion rule) {
+        private ChainStep(SymbolId node, ChainStep parent, RelationAssertion assertion, RuleAssertion rule, double score) {
             this.node = node;
             this.parent = parent;
             this.assertion = assertion;
             this.rule = rule;
             this.depth = parent == null ? 0 : parent.depth + 1;
+            this.score = score;
         }
+    }
+
+    private record ChainResult(java.util.List<String> sentences, double score) {}
+
+    private java.util.List<SymbolId> expandAliasSymbols(SymbolId node) {
+        if (node == null) {
+            return java.util.List.of();
+        }
+        java.util.Set<SymbolId> known = collectKnownSymbols();
+        java.util.LinkedHashSet<SymbolId> expanded = new java.util.LinkedHashSet<>();
+        expanded.add(node);
+        expanded.addAll(aliasNodes(node, known));
+        return new java.util.ArrayList<>(expanded);
+    }
+
+    private double explanationSpecificity(java.util.List<String> sentences) {
+        if (sentences == null || sentences.isEmpty()) {
+            return 0.0;
+        }
+        double score = 0.0;
+        for (String sentence : sentences) {
+            if (sentence == null) {
+                continue;
+            }
+            score += specificityScore(sentence);
+        }
+        return score;
     }
 
     private java.util.List<String> buildPredicateExplanation(QueryGoal goal, String predicate, int limit) {

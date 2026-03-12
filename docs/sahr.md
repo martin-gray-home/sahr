@@ -383,6 +383,9 @@ Phrase overrides now also bias “plausible/likely causes” and “ruled out”
 questions toward causal plans, and fall back to likely causal targets
 like `spacecraft_orientation_control` or `spacecraft_instability` when
 the loss/cause object is implicit.
+Loss-of-control phrasing now prefers the canonical
+`control_spacecraft_orientation` target when it is available in the
+graph, so “orientation control” queries align to control predicates.
 Planner overrides now clear weak subject/object slots when they come from
 scaffolding tokens (e.g., “not”, “between”) to avoid polluting query
 plans, and relationship queries fall back to `with` when no stronger
@@ -396,6 +399,10 @@ poweredBy evidence without a target entity.
 Cause-chain execution can now build forward chains from a given subject
 to a target entity using rule consequents and assertions, enabling
 multi-hop “why” answers even when explicit causal facts are missing.
+Forward-chain traversal now considers lightweight alias and type bridges
+(entity/concept aliases, singular/plural variants, and entity type links)
+when expanding nodes, so explanation chains can cross from instances to
+their types and still prioritize the most specific path available.
 
 Working Memory
 ---------------
