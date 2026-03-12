@@ -66,6 +66,10 @@ public final class StatementParser {
         if (usage.isPresent()) {
             return usage;
         }
+        Optional<Statement> containsNamed = parseContainsNamedComponent(normalized);
+        if (containsNamed.isPresent()) {
+            return containsNamed;
+        }
         Optional<Statement> negatedControl = parseNegatedControl(normalized);
         if (negatedControl.isPresent()) {
             return negatedControl;
@@ -134,6 +138,35 @@ public final class StatementParser {
         }
 
         return Optional.empty();
+    }
+
+    private Optional<Statement> parseContainsNamedComponent(String normalized) {
+        if (normalized == null || normalized.isBlank()) {
+            return Optional.empty();
+        }
+        String marker = null;
+        if (normalized.contains(" contain a component called ")) {
+            marker = " contain a component called ";
+        } else if (normalized.contains(" contains a component called ")) {
+            marker = " contains a component called ";
+        } else if (normalized.contains(" contain a component named ")) {
+            marker = " contain a component named ";
+        } else if (normalized.contains(" contains a component named ")) {
+            marker = " contains a component named ";
+        }
+        if (marker == null) {
+            return Optional.empty();
+        }
+        String[] parts = normalized.split(java.util.regex.Pattern.quote(marker), 2);
+        if (parts.length != 2) {
+            return Optional.empty();
+        }
+        String subjectToken = normalizeToken(parts[0].trim());
+        String objectToken = normalizeToken(parts[1].trim());
+        if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(buildStatement(subjectToken, objectToken, "contain", false));
     }
 
     private Optional<Statement> parseUsagePattern(String normalized) {
@@ -581,6 +614,12 @@ public final class StatementParser {
             }
 
             String predicate = resolveVerbPredicate(graph, verbNode);
+            if (("contain".equals(predicate) || "contains".equals(predicate)) && isComponentToken(objectToken)) {
+                String named = resolveNamedComponent(graph, object);
+                if (named != null && !named.isBlank()) {
+                    objectToken = named;
+                }
+            }
             statements.add(buildStatement(subjectToken, objectToken, predicate, false));
             CoreLabel indirect = findIndirectObject(graph, verbNode);
             if (indirect != null) {
@@ -1163,6 +1202,50 @@ public final class StatementParser {
         }
         String normalized = governorWord.toLowerCase(Locale.ROOT);
         return "part".equals(normalized) || "member".equals(normalized);
+    }
+
+    private boolean isComponentToken(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        return "component".equals(token) || "part".equals(token)
+                || token.endsWith("_component") || token.endsWith("_part");
+    }
+
+    private String resolveNamedComponent(SemanticGraph graph, CoreLabel component) {
+        if (graph == null || component == null) {
+            return null;
+        }
+        var node = graph.getNodeByIndexSafe(component.index());
+        if (node == null) {
+            return null;
+        }
+        for (SemanticGraphEdge edge : graph.outgoingEdgeList(node)) {
+            if (!"acl".equals(edge.getRelation().getShortName())) {
+                continue;
+            }
+            String specific = edge.getRelation().getSpecific();
+            if (specific != null && !"relcl".equals(specific)) {
+                continue;
+            }
+            var verbNode = edge.getDependent();
+            String verbLemma = verbNode.lemma() == null ? "" : verbNode.lemma().toLowerCase(Locale.ROOT);
+            if (!verbLemma.startsWith("call") && !verbLemma.startsWith("name")) {
+                continue;
+            }
+            CoreLabel named = findDependent(graph, verbNode, "obj");
+            if (named == null) {
+                named = findDependent(graph, verbNode, "xcomp");
+            }
+            if (named == null) {
+                continue;
+            }
+            String token = normalizeToken(composeCompoundToken(graph, named));
+            if (!token.isBlank()) {
+                return token;
+            }
+        }
+        return null;
     }
 
     private Statement buildStatement(String subjectToken, String objectToken, String predicate, boolean objectIsConcept) {

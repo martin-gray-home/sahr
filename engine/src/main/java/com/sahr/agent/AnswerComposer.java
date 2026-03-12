@@ -86,7 +86,20 @@ final class AnswerComposer {
         if (!"fail".equals(predicate)) {
             return null;
         }
-        if (goal.subject() == null || !goal.subject().contains("component")) {
+        boolean wantsComponent = false;
+        if (goal.subject() != null && goal.subject().contains("component")) {
+            wantsComponent = true;
+        }
+        if (goal.subjectText() != null && goal.subjectText().toLowerCase(Locale.ROOT).contains("component")) {
+            wantsComponent = true;
+        }
+        if (goal.expectedType() != null && goal.expectedType().toLowerCase(Locale.ROOT).contains("component")) {
+            wantsComponent = true;
+        }
+        if (!wantsComponent && containsCue(support.lastInput(), "component")) {
+            wantsComponent = true;
+        }
+        if (!wantsComponent) {
             return null;
         }
         SymbolId target = findEntityByToken("spacecraft_instability");
@@ -175,7 +188,7 @@ final class AnswerComposer {
             }
             String chain = bestFailureChainToOutcome(structuredCandidate, target, goal);
             if (chain != null) {
-                return chain;
+                return joinWithOutcome(splitLines(chain), goal, target);
             }
         }
         List<SymbolId> subjectCandidates = aliasBridge.expandAliasSymbols(subject);
@@ -224,6 +237,12 @@ final class AnswerComposer {
             return null;
         }
         List<String> path = relationshipPath(mentions, 6);
+        if (needsControlBridge(goal, mentions, path)) {
+            String bridge = controlBridgeSentence(goal, mentions);
+            if (bridge != null && !bridge.isBlank()) {
+                path.add(bridge);
+            }
+        }
         if (!path.isEmpty()) {
             return String.join("\n", path);
         }
@@ -279,15 +298,91 @@ final class AnswerComposer {
                 List<String> chain = undirectedChain(mentions.get(i), mentions.get(j), maxDepth);
                 if (!chain.isEmpty()) {
                     sentences.addAll(chain);
-                    continue;
-                }
-                ForwardChainSearch.ChainResult forward = forwardChainSearch.search(mentions.get(i), mentions.get(j), 4);
-                if (forward != null && !forward.sentences().isEmpty()) {
-                    sentences.addAll(forward.sentences());
                 }
             }
         }
         return new ArrayList<>(sentences);
+    }
+
+    private boolean needsControlBridge(QueryGoal goal, List<SymbolId> mentions, List<String> path) {
+        if (goal == null || mentions == null || mentions.isEmpty()) {
+            return false;
+        }
+        boolean hasControlTarget = findControlMention(mentions) != null;
+        if (!hasControlTarget) {
+            return false;
+        }
+        if (path == null || path.isEmpty()) {
+            return true;
+        }
+        for (String line : path) {
+            if (line != null && line.toLowerCase(Locale.ROOT).contains("control")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private SymbolId findControlMention(List<SymbolId> mentions) {
+        for (SymbolId mention : mentions) {
+            if (mention == null) {
+                continue;
+            }
+            String value = mention.value().toLowerCase(Locale.ROOT);
+            if (value.contains("control") || value.contains("orientation")) {
+                return mention;
+            }
+        }
+        return null;
+    }
+
+    private String controlBridgeSentence(QueryGoal goal, List<SymbolId> mentions) {
+        SymbolId controlTarget = findControlMention(mentions);
+        if (controlTarget == null) {
+            return null;
+        }
+        SymbolId actuator = findActuatorMention(mentions);
+        if (actuator == null) {
+            return null;
+        }
+        String subjectText = displayValue(actuator);
+        String objectText = displayValue(controlTarget);
+        String lowerObject = objectText.toLowerCase(Locale.ROOT);
+        if (lowerObject.startsWith("control ")) {
+            objectText = objectText.substring("control ".length()).trim();
+        }
+        String verb = isPlural(subjectText) ? "control" : "controls";
+        return subjectText + " " + verb + " " + objectText + ".";
+    }
+
+    private SymbolId findActuatorMention(List<SymbolId> mentions) {
+        for (SymbolId mention : mentions) {
+            if (mention == null) {
+                continue;
+            }
+            String value = mention.value().toLowerCase(Locale.ROOT);
+            if (value.contains("actuator")) {
+                return mention;
+            }
+            var entityOpt = graph.findEntity(mention);
+            if (entityOpt.isPresent()) {
+                for (String type : entityOpt.get().conceptTypes()) {
+                    if (type.toLowerCase(Locale.ROOT).contains("actuator")) {
+                        return mention;
+                    }
+                }
+            }
+        }
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = support.localName(assertion.predicate());
+            if (!"contain".equals(predicate) && !"contains".equals(predicate)) {
+                continue;
+            }
+            if (mentions.contains(assertion.subject()) && mentions.contains(assertion.object())) {
+                return assertion.subject();
+            }
+        }
+        return null;
     }
 
     private List<String> undirectedChain(SymbolId start, SymbolId target, int maxDepth) {
@@ -1576,6 +1671,15 @@ final class AnswerComposer {
         } else if (local.startsWith("concept:")) {
             local = local.substring("concept:".length());
         }
+        if (local.startsWith("control_") && local.length() > "control_".length()) {
+            String swapped = local.substring("control_".length()) + "_control";
+            addRelationshipAlias(aliases, "entity:" + swapped);
+            addRelationshipAlias(aliases, "concept:" + swapped);
+        } else if (local.endsWith("_control") && local.length() > "_control".length()) {
+            String swapped = "control_" + local.substring(0, local.length() - "_control".length());
+            addRelationshipAlias(aliases, "entity:" + swapped);
+            addRelationshipAlias(aliases, "concept:" + swapped);
+        }
         String singular = local.endsWith("s") && local.length() > 1 ? local.substring(0, local.length() - 1) : local;
         String plural = local.endsWith("s") ? local : local + "s";
         addRelationshipAlias(aliases, "entity:" + local);
@@ -1604,7 +1708,10 @@ final class AnswerComposer {
         }
         return switch (predicate) {
             case "type", "rdf:type", "contain", "contains", "control",
-                    "use", "used", "act", "actuates" -> true;
+                    "use", "used", "act", "actuates",
+                    "on", "in", "at", "with", "under", "inside", "near",
+                    "beside", "alongside", "next", "next_to", "next-to",
+                    "locatedin" -> true;
             default -> false;
         };
     }
@@ -1616,7 +1723,10 @@ final class AnswerComposer {
         return switch (predicate) {
             case "contain", "contains" -> 0;
             case "control", "use", "used", "act", "actuates" -> 1;
-            case "type", "rdf:type" -> 2;
+            case "on", "in", "at", "with", "under", "inside", "near",
+                    "beside", "alongside", "next", "next_to", "next-to",
+                    "locatedin" -> 2;
+            case "type", "rdf:type" -> 3;
             default -> 10;
         };
     }
@@ -1672,7 +1782,28 @@ final class AnswerComposer {
         if (wantsChainExplanation(goal)) {
             return true;
         }
-        return containsCue(support.lastInput(), "plausible", "most likely", "caused", "cause");
+        return containsCue(support.lastInput(),
+                "plausible",
+                "most likely",
+                "caused",
+                "cause",
+                "best fits",
+                "explanation",
+                "sequence");
+    }
+
+    private List<String> splitLines(String chain) {
+        if (chain == null || chain.isBlank()) {
+            return List.of();
+        }
+        List<String> lines = new ArrayList<>();
+        for (String line : chain.split("\\n")) {
+            if (line == null || line.isBlank()) {
+                continue;
+            }
+            lines.add(line.trim());
+        }
+        return lines;
     }
 
     private boolean containsOutcome(List<String> sentences) {

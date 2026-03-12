@@ -42,8 +42,8 @@ final class AnswerRenderer {
         String consequentPredicate = formatter.localName(consequent.predicate());
         if ("backupfor".equals(consequentPredicate) || "backup_for".equals(consequentPredicate)) {
             String subject = displayValue(consequent.subject());
-            String object = displayValue(consequent.object());
-            String antecedentText = formatAssertionClause(antecedent);
+            String object = normalizeBackupTarget(displayValue(consequent.object()));
+            String antecedentText = normalizePluralAgreement(formatAssertionClause(antecedent));
             return subject + " can serve as a backup for " + object + " when " + antecedentText + ".";
         }
         return "If " + formatAssertionClause(antecedent) + ", then " + formatAssertionClause(consequent) + ".";
@@ -142,6 +142,34 @@ final class AnswerRenderer {
             return "were";
         }
         return base;
+    }
+
+    private String normalizeBackupTarget(String target) {
+        if (target == null || target.isBlank()) {
+            return target;
+        }
+        String normalized = target.toLowerCase(Locale.ROOT).trim();
+        if (normalized.startsWith("backup ")) {
+            return target.substring("backup ".length()).trim();
+        }
+        return target;
+    }
+
+    private String normalizePluralAgreement(String clause) {
+        if (clause == null) {
+            return null;
+        }
+        String trimmed = clause;
+        if (trimmed.endsWith(" fails..")) {
+            return trimmed.substring(0, trimmed.length() - " fails..".length()) + " fail..";
+        }
+        if (trimmed.endsWith(" fails.")) {
+            return trimmed.substring(0, trimmed.length() - " fails.".length()) + " fail.";
+        }
+        if (trimmed.endsWith(" fails")) {
+            return trimmed.substring(0, trimmed.length() - " fails".length()) + " fail";
+        }
+        return trimmed;
     }
 
     private String displayValue(SymbolId id) {

@@ -207,6 +207,21 @@ and avoid appending outcomes in ruled-out modes. Recovery and chain questions
 use expanded cue detection (chain/explain/why/most likely/plausible/best fits),
 so explanation projection stays robust even when modifiers vary.
 
+The statement parser includes lightweight phrase handling for
+“contain(s) a component called/named X” to canonicalize containment relations
+from common descriptive phrasing without requiring domain-specific rules.
+Relationship chain extraction now recognizes common spatial predicates
+(`on`, `in`, `with`, `under`, etc.) alongside containment/control predicates
+so relationship questions remain answerable even without forward-chain search.
+
+Temporal failure queries that ask for “component” now use multiple cues
+(goal fields plus surface input) to select a specific component failure,
+so planner subject drift does not suppress valid temporal answers.
+Cause-chain fallbacks now re-apply outcome appending when a best-effort
+failure-to-outcome chain is used, keeping explanation answers complete.
+Outcome appending now also triggers for “best fits/sequence/explanation”
+questions to avoid truncated telemetry-fit answers.
+
 # Recent Updates (2026-03-12)
 
 • Relationship-chain extraction now consults ontology labels when mapping question phrases to known entities, improving multi-entity relationship answers without hard-coded symbols.
