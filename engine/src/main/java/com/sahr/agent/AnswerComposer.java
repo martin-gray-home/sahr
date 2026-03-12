@@ -74,6 +74,10 @@ final class AnswerComposer {
         return relationship;
     }
 
+    boolean isRelationshipQuestion(QueryGoal goal) {
+        return wantsRelationshipChain(goal);
+    }
+
     String resolveTemporalComponentFailure(QueryGoal goal) {
         if (goal == null) {
             return null;
@@ -153,8 +157,15 @@ final class AnswerComposer {
         ExplanationCandidate structuredCandidate = explanationChains.buildExplanationCandidate(target, 4);
         if (structuredCandidate != null && (wantsChainExplanation(goal) || "cause".equals(predicate) || "causedby".equals(predicate))) {
             List<String> structured = buildStructuredChain(structuredCandidate, goal, target, predicate);
+            List<String> candidateSentences = structuredCandidate.sentences();
+            if (preferRicherChain(goal, structured, candidateSentences)) {
+                return String.join("\n", candidateSentences);
+            }
             if (!structured.isEmpty()) {
                 return String.join("\n", structured);
+            }
+            if (candidateSentences != null && !candidateSentences.isEmpty()) {
+                return String.join("\n", candidateSentences);
             }
             String chain = bestFailureChainToOutcome(structuredCandidate, target, goal);
             if (chain != null) {
@@ -257,16 +268,17 @@ final class AnswerComposer {
             return List.of();
         }
         LinkedHashSet<String> sentences = new LinkedHashSet<>();
-        SymbolId anchor = mentions.get(0);
-        for (int i = 1; i < mentions.size(); i++) {
-            List<String> chain = undirectedChain(anchor, mentions.get(i), maxDepth);
-            if (!chain.isEmpty()) {
-                sentences.addAll(chain);
-                continue;
-            }
-            ForwardChainSearch.ChainResult forward = forwardChainSearch.search(anchor, mentions.get(i), 4);
-            if (forward != null && !forward.sentences().isEmpty()) {
-                sentences.addAll(forward.sentences());
+        for (int i = 0; i < mentions.size(); i++) {
+            for (int j = i + 1; j < mentions.size(); j++) {
+                List<String> chain = undirectedChain(mentions.get(i), mentions.get(j), maxDepth);
+                if (!chain.isEmpty()) {
+                    sentences.addAll(chain);
+                    continue;
+                }
+                ForwardChainSearch.ChainResult forward = forwardChainSearch.search(mentions.get(i), mentions.get(j), 4);
+                if (forward != null && !forward.sentences().isEmpty()) {
+                    sentences.addAll(forward.sentences());
+                }
             }
         }
         return new ArrayList<>(sentences);
@@ -1586,6 +1598,22 @@ final class AnswerComposer {
             case "type", "rdf:type" -> 2;
             default -> 10;
         };
+    }
+
+    private boolean preferRicherChain(QueryGoal goal, List<String> structured, List<String> candidateSentences) {
+        if (candidateSentences == null || candidateSentences.isEmpty()) {
+            return false;
+        }
+        if (structured == null || structured.isEmpty()) {
+            return true;
+        }
+        if (!wantsChainExplanation(goal) && !wantsEvidenceAlignedChain(goal)) {
+            return false;
+        }
+        if (candidateSentences.size() <= structured.size()) {
+            return false;
+        }
+        return candidateSentences.size() >= 3;
     }
 
     private boolean connectsMentionPair(RelationAssertion assertion, List<Set<SymbolId>> mentionAliases) {

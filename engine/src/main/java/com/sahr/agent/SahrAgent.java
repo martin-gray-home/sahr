@@ -1171,6 +1171,9 @@ public final class SahrAgent {
         if (relationship != null && !relationship.isBlank()) {
             return relationship;
         }
+        if (answerComposer.isRelationshipQuestion(goal)) {
+            return "No candidates produced.";
+        }
         HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null);
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         List<ReasoningCandidate> answers = new java.util.ArrayList<>();

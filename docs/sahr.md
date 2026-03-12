@@ -206,6 +206,8 @@ re-running interpretation heads.
 • Answer composition logic has been centralized in `AnswerComposer`, reducing domain-specific routing inside `SahrAgent`.
 • `SahrAgent` now keeps only orchestration + parsing utilities; explanation/relationship helpers live in `AnswerComposer`.
 • Relationship answers now filter to assertions that connect mentioned entities (reducing unrelated recovery/energy facts), and backupFor questions use a dedicated fallback path to avoid regressions.
+• Relationship questions no longer fall back to single-entity relation matches when no chain is found; causal-chain questions now fall back to full candidate sentences when structured chains are empty.
+• Chain/explanation questions now prefer the richest available candidate chain (multi-step) over shorter structured fragments when appropriate.
 
 Statement Normalization
 -----------------------
