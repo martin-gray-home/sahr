@@ -209,4 +209,39 @@ class SahrAgentQueryTest {
             throw new AssertionError("Failed to invoke formatAssertionClause", e);
         }
     }
+
+    @Test
+    void buildsForwardExplanationChain() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        RuleAssertion motorToWheel = new RuleAssertion(
+                new RelationAssertion(new SymbolId("entity:wheel_motor"), "https://sahr.ai/ontology/relations#fail",
+                        new SymbolId("concept:true"), 0.9),
+                new RelationAssertion(new SymbolId("entity:reaction_wheel"), "https://sahr.ai/ontology/relations#fail",
+                        new SymbolId("concept:true"), 0.9),
+                0.9
+        );
+        RuleAssertion wheelToControl = new RuleAssertion(
+                new RelationAssertion(new SymbolId("entity:reaction_wheel"), "https://sahr.ai/ontology/relations#fail",
+                        new SymbolId("concept:true"), 0.9),
+                new RelationAssertion(new SymbolId("entity:spacecraft_orientation_control"), "https://sahr.ai/ontology/relations#fail",
+                        new SymbolId("concept:true"), 0.9),
+                0.9
+        );
+        graph.addRule(motorToWheel);
+        graph.addRule(wheelToControl);
+
+        try {
+            java.lang.reflect.Method method = SahrAgent.class.getDeclaredMethod("executeCauseChain", QueryGoal.class);
+            method.setAccessible(true);
+            QueryGoal goal = QueryGoal.relation("entity:wheel_motor", "cause", "entity:spacecraft_orientation_control", null);
+            String answer = (String) method.invoke(agent, goal);
+            assertTrue(answer.contains("wheel motor"));
+            assertTrue(answer.contains("reaction wheel"));
+            assertTrue(answer.contains("orientation control"));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed to invoke executeCauseChain", e);
+        }
+    }
 }

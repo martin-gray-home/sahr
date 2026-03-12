@@ -393,6 +393,9 @@ raw subject lists.
 Cause-chain execution now returns predicate-based explanations even when
 no subject/object is present, so condition queries can still yield
 poweredBy evidence without a target entity.
+Cause-chain execution can now build forward chains from a given subject
+to a target entity using rule consequents and assertions, enabling
+multi-hop “why” answers even when explicit causal facts are missing.
 
 Working Memory
 ---------------

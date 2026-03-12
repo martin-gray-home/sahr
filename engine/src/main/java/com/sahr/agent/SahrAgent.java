@@ -1144,12 +1144,19 @@ public final class SahrAgent {
                 return String.join("\n", predicateExplanation);
             }
         }
+        SymbolId subject = goal.subject() != null ? new SymbolId(goal.subject()) : null;
         SymbolId target = goal.object() != null ? new SymbolId(goal.object()) : null;
         if (target == null && goal.subject() != null) {
             target = new SymbolId(goal.subject());
         }
         if (target == null) {
             return "No candidates produced.";
+        }
+        if (subject != null && target != null && !subject.equals(target)) {
+            java.util.List<String> forward = buildForwardExplanationChain(subject, target, 4);
+            if (!forward.isEmpty()) {
+                return String.join("\n", forward);
+            }
         }
         java.util.List<String> explanation = buildExplanationChain(target, 4);
         if (!explanation.isEmpty()) {
@@ -1200,6 +1207,123 @@ public final class SahrAgent {
             return ruleChain;
         }
         return "No candidates produced.";
+    }
+
+    private java.util.List<String> buildForwardExplanationChain(SymbolId start,
+                                                                SymbolId target,
+                                                                int maxDepth) {
+        java.util.List<String> sentences = new java.util.ArrayList<>();
+        if (start == null || target == null) {
+            return sentences;
+        }
+        java.util.Set<SymbolId> visited = new java.util.HashSet<>();
+        java.util.ArrayDeque<ChainStep> queue = new java.util.ArrayDeque<>();
+        queue.add(new ChainStep(start, null));
+        visited.add(start);
+        while (!queue.isEmpty() && maxDepth > 0) {
+            ChainStep current = queue.removeFirst();
+            if (current.node.equals(target)) {
+                sentences.addAll(renderChainSteps(current));
+                break;
+            }
+            if (current.depth >= maxDepth) {
+                continue;
+            }
+            for (RelationAssertion assertion : graph.getAllAssertions()) {
+                java.util.List<SymbolId> nextNodes = nextNodesFromAssertion(current.node, assertion);
+                for (SymbolId next : nextNodes) {
+                    if (!visited.add(next)) {
+                        continue;
+                    }
+                    queue.addLast(new ChainStep(next, current, assertion, null));
+                }
+            }
+            for (RuleAssertion rule : graph.getAllRules()) {
+                java.util.List<SymbolId> nextNodes = nextNodesFromRule(current.node, rule);
+                for (SymbolId next : nextNodes) {
+                    if (!visited.add(next)) {
+                        continue;
+                    }
+                    queue.addLast(new ChainStep(next, current, null, rule));
+                }
+            }
+        }
+        return sentences;
+    }
+
+    private java.util.List<SymbolId> nextNodesFromAssertion(SymbolId node, RelationAssertion assertion) {
+        if (node == null || assertion == null) {
+            return java.util.List.of();
+        }
+        if (!assertion.subject().equals(node)) {
+            return java.util.List.of();
+        }
+        SymbolId object = assertion.object();
+        if (booleanConcept(object) != null) {
+            return java.util.List.of();
+        }
+        if (object == null || object.equals(node)) {
+            return java.util.List.of();
+        }
+        return java.util.List.of(object);
+    }
+
+    private java.util.List<SymbolId> nextNodesFromRule(SymbolId node, RuleAssertion rule) {
+        if (node == null || rule == null) {
+            return java.util.List.of();
+        }
+        RelationAssertion antecedent = rule.antecedent();
+        if (!antecedent.subject().equals(node) && !antecedent.object().equals(node)) {
+            return java.util.List.of();
+        }
+        java.util.List<SymbolId> nextNodes = new java.util.ArrayList<>();
+        addConsequentNode(rule.consequent().subject(), node, nextNodes);
+        addConsequentNode(rule.consequent().object(), node, nextNodes);
+        return nextNodes;
+    }
+
+    private void addConsequentNode(SymbolId candidate, SymbolId current, java.util.List<SymbolId> nextNodes) {
+        if (candidate == null || candidate.equals(current)) {
+            return;
+        }
+        if (booleanConcept(candidate) != null) {
+            return;
+        }
+        nextNodes.add(candidate);
+    }
+
+    private java.util.List<String> renderChainSteps(ChainStep end) {
+        java.util.ArrayDeque<String> stack = new java.util.ArrayDeque<>();
+        ChainStep current = end;
+        while (current != null && current.parent != null) {
+            if (current.assertion != null) {
+                stack.addFirst(formatAssertionSentence(current.assertion));
+            } else if (current.rule != null) {
+                stack.addFirst(formatRuleSentence(current.rule));
+            }
+            current = current.parent;
+        }
+        return new java.util.ArrayList<>(stack);
+    }
+
+    private static final class ChainStep {
+        private final SymbolId node;
+        private final ChainStep parent;
+        private final RelationAssertion assertion;
+        private final RuleAssertion rule;
+        private final int depth;
+
+        private ChainStep(SymbolId node, ChainStep parent) {
+            this(node, parent, null, null);
+        }
+
+        private ChainStep(SymbolId node, ChainStep parent, RelationAssertion assertion, RuleAssertion rule) {
+            this.node = node;
+            this.parent = parent;
+            this.assertion = assertion;
+            this.rule = rule;
+            this.depth = parent == null ? 0 : parent.depth + 1;
+        }
     }
 
     private java.util.List<String> buildPredicateExplanation(QueryGoal goal, String predicate, int limit) {
