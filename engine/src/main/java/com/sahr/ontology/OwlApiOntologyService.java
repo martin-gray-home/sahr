@@ -200,6 +200,42 @@ public final class OwlApiOntologyService implements OntologyService {
                 .findFirst();
     }
 
+    @Override
+    public Set<String> getEntitiesWithAnnotation(String annotationIri, String value) {
+        if (!isIri(annotationIri) || value == null) {
+            return Set.of();
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return Set.of();
+        }
+        IRI annotation = IRI.create(annotationIri);
+        OWLAnnotationProperty property = manager.getOWLDataFactory().getOWLAnnotationProperty(annotation);
+        Set<String> results = new HashSet<>();
+        ontology.getClassesInSignature().forEach(cls -> {
+            if (hasAnnotationValue(cls.getIRI(), property, normalized)) {
+                results.add(cls.getIRI().toString());
+            }
+        });
+        ontology.getIndividualsInSignature().forEach(individual -> {
+            if (hasAnnotationValue(individual.getIRI(), property, normalized)) {
+                results.add(individual.getIRI().toString());
+            }
+        });
+        return results;
+    }
+
+    private boolean hasAnnotationValue(IRI subject, OWLAnnotationProperty property, String normalized) {
+        return ontology.getAnnotationAssertionAxioms(subject).stream()
+                .filter(ax -> ax.getProperty().equals(property))
+                .map(OWLAnnotationAssertionAxiom::getValue)
+                .filter(value -> value.isLiteral())
+                .map(value -> value.asLiteral().orElse(null))
+                .filter(literal -> literal != null)
+                .map(literal -> literal.getLiteral())
+                .anyMatch(value -> value != null && value.trim().toLowerCase(Locale.ROOT).equals(normalized));
+    }
+
     private boolean isIri(String value) {
         return value != null && (value.startsWith("http://") || value.startsWith("https://"));
     }

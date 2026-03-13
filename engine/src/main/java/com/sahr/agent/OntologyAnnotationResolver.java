@@ -68,6 +68,10 @@ final class OntologyAnnotationResolver {
         return normalized;
     }
 
+    Set<String> entitiesWithAnnotation(String annotationIri, String value) {
+        return ontology.getEntitiesWithAnnotation(annotationIri, value);
+    }
+
     private boolean isIri(String value) {
         return value.startsWith("http://") || value.startsWith("https://");
     }

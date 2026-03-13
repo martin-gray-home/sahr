@@ -27,4 +27,6 @@ public interface OntologyService {
     Set<String> getLabels(String iri);
 
     Optional<String> getAnnotationValue(String iri, String annotationIri);
+
+    Set<String> getEntitiesWithAnnotation(String annotationIri, String value);
 }

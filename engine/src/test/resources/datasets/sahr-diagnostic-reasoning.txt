@@ -1,0 +1,296 @@
+# SAHR Diagnostic Reasoning Test Dataset
+
+This dataset is designed to stress-test a symbolic reasoning engine's ability to perform:
+
+- causal reasoning
+- multi-cause diagnosis
+- evidence-based filtering
+- recovery reasoning
+- hypothesis elimination
+
+The dataset contains statements (knowledge) followed by questions with expected answers and reasoning chains.
+
+# Statements (Knowledge Base)
+
+Reaction wheels control spacecraft orientation.
+
+A reaction wheel contains a wheel motor.
+
+If a wheel motor fails then the reaction wheel fails.
+
+If the reaction wheel fails then spacecraft orientation control is lost.
+
+If spacecraft orientation control is lost then the spacecraft becomes unstable.
+
+Thrusters can control spacecraft orientation using propellant.
+
+Temperature spikes in the wheel motor often occur before a motor failure.
+
+Loss of electrical power causes reaction wheels and magnetorquers to stop functioning.
+
+Thrusters do not require electrical power; they require propellant.
+
+Telemetry shows temperature spikes in the wheel motor before instability occurred.
+
+Telemetry shows that electrical bus voltage remained stable.
+
+Thrusters were not firing before the instability.
+
+If thrusters are available they can restore spacecraft orientation.
+
+Thrusters require propellant.
+
+During the anomaly the spacecraft still had propellant.
+
+# Questions, Expected Answers, and Expected Reasoning
+
+## Q1
+
+Question
+What component most likely failed before the spacecraft became unstable?
+
+Expected Answer
+wheel motor
+
+Expected Reasoning Chain
+wheel motor fails
+→ reaction wheel fails
+→ spacecraft orientation control lost
+→ spacecraft instability
+
+## Q2
+
+Question
+What chain of events most likely caused the spacecraft instability?
+
+Expected Answer
+wheel motor failure chain
+
+Expected Reasoning
+wheel motor fails
+→ reaction wheel fails
+→ spacecraft orientation control lost
+→ spacecraft instability
+
+## Q3
+
+Question
+Which earlier telemetry signal suggested that a failure was about to occur?
+
+Expected Answer
+temperature spikes
+
+Expected Reasoning
+temperature spikes occur before wheel motor failure
+→ signal suggests impending motor failure
+
+## Q4
+
+Question
+Which system failure most directly explains the loss of spacecraft orientation control?
+
+Expected Answer
+reaction wheel failure
+
+Expected Reasoning
+wheel motor fails
+→ reaction wheel fails
+→ spacecraft orientation control lost
+
+## Q5
+
+Question
+Why would a wheel motor failure prevent spacecraft orientation control?
+
+Expected Answer
+because the reaction wheel would fail
+
+Expected Reasoning
+wheel motor fails
+→ reaction wheel fails
+→ spacecraft orientation control lost
+
+## Q6
+
+Question
+If the electrical bus voltage drops significantly, which attitude control systems might stop functioning?
+
+Expected Answer
+reaction wheels
+magnetorquers
+
+Expected Reasoning
+electrical power lost
+→ reaction wheels stop functioning
+→ magnetorquers stop functioning
+
+## Q7
+
+Question
+Which attitude control actuator would still function if electrical power was lost but propellant systems remained operational?
+
+Expected Answer
+thrusters
+
+Expected Reasoning
+electrical power lost
+→ reaction wheels fail
+→ magnetorquers fail
+
+propellant available
+→ thrusters remain operational
+
+## Q8
+
+Question
+What are the most plausible causes of the spacecraft instability?
+
+Expected Answer
+wheel motor failure
+electrical power loss
+
+Expected Reasoning Chains
+
+Cause 1
+wheel motor fails
+→ reaction wheel fails
+→ spacecraft orientation control lost
+→ spacecraft instability
+
+Cause 2
+electrical power lost
+→ reaction wheels stop functioning
+→ spacecraft orientation control lost
+→ spacecraft instability
+
+## Q9
+
+Question
+Which possible causes can be ruled out based on the available information?
+
+Expected Answer
+electrical power failure
+
+Expected Reasoning
+telemetry shows electrical bus voltage stable
+→ electrical power loss did not occur
+→ eliminate electrical power failure
+
+## Q10
+
+Question
+Which explanation best fits the sequence of telemetry events?
+
+Expected Answer
+wheel motor failure
+
+Expected Reasoning
+temperature spikes observed
+→ spikes precede wheel motor failure
+→ most consistent explanation is motor failure
+
+## Q11
+
+Question
+Why did the spacecraft regain stable orientation even though the reaction wheel motor stopped responding?
+
+Expected Answer
+thrusters restored orientation
+
+Expected Reasoning
+reaction wheels failed
+→ spacecraft lost orientation control
+
+thrusters available
+→ thrusters can control spacecraft orientation
+→ stability restored
+
+## Q12
+
+Question
+Which system most likely restored spacecraft stability after the anomaly?
+
+Expected Answer
+thrusters
+
+Expected Reasoning
+reaction wheels failed
+→ backup control required
+→ thrusters available
+→ thrusters restored orientation
+
+## Q13
+
+Question
+What evidence indicates that the recovery mechanism did not depend on electrical actuators?
+
+Expected Answer
+electrical power remained stable
+thrusters used propellant instead
+
+Expected Reasoning
+thrusters operate using propellant
+→ not dependent on electrical power
+→ recovery likely used thrusters
+
+## Q14
+
+Question
+What is the relationship between reaction wheels, wheel motors, and spacecraft orientation control?
+
+Expected Answer
+reaction wheels contain wheel motors
+reaction wheels control spacecraft orientation
+
+Expected Reasoning
+wheel motor is component of reaction wheel
+reaction wheel provides spacecraft orientation control
+
+## Q15
+
+Question
+Why would thrusters be a viable backup system for attitude control?
+
+Expected Answer
+thrusters can control spacecraft orientation when reaction wheels fail
+
+Expected Reasoning
+reaction wheels fail
+→ orientation control lost
+
+thrusters can control orientation
+→ thrusters act as backup system
+
+## Q16
+
+Question
+Under what conditions would magnetorquers fail but thrusters still function?
+
+Expected Answer
+when electrical power is unavailable but propellant remains available
+
+Expected Reasoning
+magnetorquers require electrical power
+thrusters require propellant
+
+electrical power unavailable
+propellant available
+→ magnetorquers fail but thrusters operate
+
+## Q17
+
+Question
+Explain why the spacecraft became unstable and how stability was restored using the available evidence.
+
+Expected Answer
+wheel motor failure caused instability; thrusters restored control
+
+Expected Reasoning
+wheel motor fails
+→ reaction wheel fails
+→ spacecraft orientation control lost
+→ spacecraft instability
+
+thrusters available
+→ thrusters restored spacecraft orientation
+→ spacecraft stability regained

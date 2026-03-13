@@ -127,4 +127,19 @@ public final class InMemoryOntologyService implements OntologyService {
     public Optional<String> getAnnotationValue(String iri, String annotationIri) {
         return Optional.ofNullable(annotations.getOrDefault(iri, Collections.emptyMap()).get(annotationIri));
     }
+
+    @Override
+    public Set<String> getEntitiesWithAnnotation(String annotationIri, String value) {
+        Set<String> results = new HashSet<>();
+        if (annotationIri == null || value == null) {
+            return results;
+        }
+        for (Map.Entry<String, Map<String, String>> entry : annotations.entrySet()) {
+            String annotationValue = entry.getValue().get(annotationIri);
+            if (annotationValue != null && annotationValue.equals(value)) {
+                results.add(entry.getKey());
+            }
+        }
+        return results;
+    }
 }

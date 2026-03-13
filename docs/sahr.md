@@ -216,6 +216,9 @@ re-running interpretation heads.
 • Cause-chain assembly no longer truncates after short forward-chain expansion; capability and outcome lines now remain attached.
 • Resource availability now derives from ontology-defined state labels (available/unavailable) rather than raw lexical cues, enabling contrastive survivor selection without hard-coded phrasing.
 • Added `sahr-states.ttl` for ontology-defined resource state labels (available/unavailable variants).
+• Resource-state assignment now associates each state marker with the nearest resource mention, improving contrastive survivor selection without lexical heuristics.
+• Resource-state markers now come from ontology entities annotated with `ann:semanticRole` rather than requiring those entities to appear in the assertion graph.
+• Added a diagnostic reasoning dataset test suite (`SahrDiagnosticDatasetTest`) that loads `engine/src/test/resources/datasets/sahr-diagnostic-reasoning.txt` and runs loose keyword checks; strict assertions can be enabled via `-Dsahr.diagnostic.strict=true`.
 • Resource-availability and dependency-contrast questions now detect resource mentions from ontology labels in the raw input, improving conditional dependency answers without hard-coded domain strings.
 
 # Recent Updates (2026-03-12)

@@ -1247,23 +1247,16 @@ final class AnswerComposer {
             return 0;
         }
         String normalized = input.toLowerCase(Locale.ROOT);
-        List<Integer> resourcePositions = labelPositions(normalized, resourceLabels(resource));
-        if (resourcePositions.isEmpty()) {
-            return 0;
-        }
-        List<StateMarker> markers = stateMarkers(normalized);
+        Map<SymbolId, List<StateMarker>> assignments = assignStateMarkersToResources(normalized);
+        List<StateMarker> markers = assignments.get(resource);
         if (markers.isEmpty()) {
             return 0;
         }
-        int bestDistance = Integer.MAX_VALUE;
         int bestStatus = 0;
-        for (int resourcePos : resourcePositions) {
-            for (StateMarker marker : markers) {
-                int distance = Math.abs(resourcePos - marker.position());
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestStatus = marker.status();
-                }
+        for (StateMarker marker : markers) {
+            bestStatus = marker.status();
+            if (bestStatus != 0) {
+                break;
             }
         }
         return bestStatus;
@@ -1273,24 +1266,69 @@ final class AnswerComposer {
 
     private List<StateMarker> stateMarkers(String input) {
         List<StateMarker> markers = new ArrayList<>();
-        for (EntityNode entity : graph.getAllEntities()) {
-            SymbolId id = entity.id();
-            int status = 0;
-            if (hasSemanticRole(id, "resource_available")) {
-                status = 1;
-            } else if (hasSemanticRole(id, "resource_unavailable")) {
-                status = -1;
-            }
-            if (status == 0) {
-                continue;
-            }
-            for (String label : labelsForSymbol(id)) {
+        markers.addAll(stateMarkersForRole(input, "resource_available", 1));
+        markers.addAll(stateMarkersForRole(input, "resource_unavailable", -1));
+        return markers;
+    }
+
+    private List<StateMarker> stateMarkersForRole(String input, String role, int status) {
+        List<StateMarker> markers = new ArrayList<>();
+        Set<String> entities = annotationResolver.entitiesWithAnnotation(
+                com.sahr.ontology.SahrAnnotationVocabulary.SEMANTIC_ROLE,
+                role
+        );
+        for (String iri : entities) {
+            for (String label : annotationResolver.labelsForIri(iri)) {
                 for (int pos : labelPositions(input, label)) {
                     markers.add(new StateMarker(pos, status));
                 }
             }
         }
         return markers;
+    }
+
+    private Map<SymbolId, List<StateMarker>> assignStateMarkersToResources(String input) {
+        Map<SymbolId, List<StateMarker>> assignments = new HashMap<>();
+        if (input == null || input.isBlank()) {
+            return assignments;
+        }
+        Map<SymbolId, List<Integer>> resourcePositions = resourceLabelPositions(input);
+        List<StateMarker> markers = stateMarkers(input);
+        for (Map.Entry<SymbolId, List<Integer>> entry : resourcePositions.entrySet()) {
+            assignments.put(entry.getKey(), new ArrayList<>());
+        }
+        for (StateMarker marker : markers) {
+            SymbolId nearest = null;
+            int bestDistance = Integer.MAX_VALUE;
+            for (Map.Entry<SymbolId, List<Integer>> entry : resourcePositions.entrySet()) {
+                for (int pos : entry.getValue()) {
+                    int distance = Math.abs(pos - marker.position());
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        nearest = entry.getKey();
+                    }
+                }
+            }
+            if (nearest != null) {
+                assignments.computeIfAbsent(nearest, key -> new ArrayList<>()).add(marker);
+            }
+        }
+        return assignments;
+    }
+
+    private Map<SymbolId, List<Integer>> resourceLabelPositions(String input) {
+        Map<SymbolId, List<Integer>> positions = new HashMap<>();
+        for (EntityNode entity : graph.getAllEntities()) {
+            SymbolId id = entity.id();
+            if (!hasSemanticRole(id, "resource")) {
+                continue;
+            }
+            List<Integer> resourcePositions = labelPositions(input, resourceLabels(id));
+            if (!resourcePositions.isEmpty()) {
+                positions.put(id, resourcePositions);
+            }
+        }
+        return positions;
     }
 
     private List<String> resourceLabels(SymbolId resource) {

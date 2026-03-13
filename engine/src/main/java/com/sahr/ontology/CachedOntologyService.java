@@ -23,6 +23,7 @@ public final class CachedOntologyService implements OntologyService {
     private final ConcurrentMap<String, Set<String>> entityLabelCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<String>> labelsCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Optional<String>> annotationCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Set<String>> entityAnnotationCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ConcurrentMap<String, Boolean>> subclassCache = new ConcurrentHashMap<>();
 
     public CachedOntologyService(OntologyService delegate) {
@@ -91,5 +92,11 @@ public final class CachedOntologyService implements OntologyService {
     public Optional<String> getAnnotationValue(String iri, String annotationIri) {
         String key = iri + "|" + annotationIri;
         return annotationCache.computeIfAbsent(key, ignored -> delegate.getAnnotationValue(iri, annotationIri));
+    }
+
+    @Override
+    public Set<String> getEntitiesWithAnnotation(String annotationIri, String value) {
+        String key = annotationIri + "|" + value;
+        return entityAnnotationCache.computeIfAbsent(key, ignored -> delegate.getEntitiesWithAnnotation(annotationIri, value));
     }
 }

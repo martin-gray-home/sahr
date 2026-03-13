@@ -113,4 +113,13 @@ public final class CompositeOntologyService implements OntologyService {
         }
         return Optional.empty();
     }
+
+    @Override
+    public Set<String> getEntitiesWithAnnotation(String annotationIri, String value) {
+        Set<String> results = new LinkedHashSet<>();
+        for (OntologyService service : delegates) {
+            results.addAll(service.getEntitiesWithAnnotation(annotationIri, value));
+        }
+        return results;
+    }
 }
