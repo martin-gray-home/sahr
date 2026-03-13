@@ -213,9 +213,12 @@ from common descriptive phrasing without requiring domain-specific rules.
 Relationship chain extraction now recognizes common spatial predicates
 (`on`, `in`, `with`, `under`, etc.) alongside containment/control predicates
 so relationship questions remain answerable even without forward-chain search.
+The head ontology now defines a `Component` class with labels, allowing
+expected-type resolution to come from OWL rather than raw string cues.
 
-Temporal failure queries that ask for “component” now use multiple cues
-(goal fields plus surface input) to select a specific component failure,
+Temporal failure queries that ask for “component” now use ontology-backed
+expected types (via the “component” class label) and goal fields to select a
+specific component failure,
 so planner subject drift does not suppress valid temporal answers.
 Cause-chain fallbacks now re-apply outcome appending when a best-effort
 failure-to-outcome chain is used, keeping explanation answers complete.

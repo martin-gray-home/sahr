@@ -30,3 +30,7 @@ head:temporalRelation a owl:ObjectProperty ;
 
 head:causalRelation a owl:ObjectProperty ;
     rdfs:label "causal relation" .
+
+head:Component a owl:Class ;
+    rdfs:label "component" ;
+    rdfs:label "components" .

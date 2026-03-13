@@ -88,23 +88,13 @@ final class AnswerComposer {
         if (!"fail".equals(predicate)) {
             return null;
         }
-        boolean wantsComponent = false;
-        if (goal.subject() != null && goal.subject().contains("component")) {
-            wantsComponent = true;
-        }
-        if (goal.subjectText() != null && goal.subjectText().toLowerCase(Locale.ROOT).contains("component")) {
-            wantsComponent = true;
-        }
-        if (goal.expectedType() != null && goal.expectedType().toLowerCase(Locale.ROOT).contains("component")) {
-            wantsComponent = true;
-        }
-        if (!wantsComponent && containsCue(support.lastInput(), "component")) {
-            wantsComponent = true;
-        }
-        if (!wantsComponent) {
+        if (!expectsTypeLabel(goal, "component")) {
             return null;
         }
-        SymbolId target = findEntityByToken("spacecraft_instability");
+        SymbolId target = resolveTemporalFailureTarget(goal);
+        if (target == null) {
+            return null;
+        }
         ExplanationCandidate candidate = explanationChains.buildExplanationCandidate(target, 4);
         SymbolId failure = selectBestFailure(candidate, true);
         return failure == null ? null : failure.value();
@@ -548,6 +538,79 @@ final class AnswerComposer {
             }
             if (normalized.contains(cue)) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    private SymbolId resolveTemporalFailureTarget(QueryGoal goal) {
+        if (goal.object() != null && !goal.object().isBlank()) {
+            return new SymbolId(goal.object());
+        }
+        if (goal.subject() != null && !goal.subject().isBlank()) {
+            return new SymbolId(goal.subject());
+        }
+        for (String fragment : goalTextFragments(goal)) {
+            if (fragment == null || fragment.isBlank()) {
+                continue;
+            }
+            SymbolId matched = matchEntityByOntologyLabel(fragment);
+            if (matched != null) {
+                return matched;
+            }
+        }
+        return null;
+    }
+
+    private boolean expectsTypeLabel(QueryGoal goal, String labelToken) {
+        if (goal == null || labelToken == null || labelToken.isBlank()) {
+            return false;
+        }
+        String expected = normalizeExpectedType(goal.expectedType());
+        if (matchesOntologyLabel(expected, labelToken)) {
+            return true;
+        }
+        String entityType = normalizeExpectedType(goal.entityType());
+        return matchesOntologyLabel(entityType, labelToken);
+    }
+
+    private String normalizeExpectedType(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.startsWith("entity:")) {
+            trimmed = trimmed.substring("entity:".length());
+        } else if (trimmed.startsWith("concept:")) {
+            trimmed = trimmed.substring("concept:".length());
+        }
+        return annotationResolver.normalizeLabelToToken(trimmed);
+    }
+
+    private boolean matchesOntologyLabel(String normalizedValue, String labelToken) {
+        if (normalizedValue == null || normalizedValue.isBlank()) {
+            return false;
+        }
+        String normalizedLabel = annotationResolver.normalizeLabelToToken(labelToken);
+        if (normalizedValue.equals(normalizedLabel)) {
+            return true;
+        }
+        String iri = normalizedValue.startsWith("http://") || normalizedValue.startsWith("https://")
+                ? normalizedValue
+                : null;
+        if (iri != null) {
+            for (String label : annotationResolver.labelsForIri(iri)) {
+                if (annotationResolver.normalizeLabelToToken(label).equals(normalizedLabel)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        for (String iriCandidate : annotationResolver.entityIrisByLabel(normalizedValue)) {
+            for (String label : annotationResolver.labelsForIri(iriCandidate)) {
+                if (annotationResolver.normalizeLabelToToken(label).equals(normalizedLabel)) {
+                    return true;
+                }
             }
         }
         return false;
