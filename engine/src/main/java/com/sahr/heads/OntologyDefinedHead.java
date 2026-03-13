@@ -714,7 +714,6 @@ public final class OntologyDefinedHead extends BaseHead {
                         || "are".equals(normalizedPredicate)
                         || "was".equals(normalizedPredicate)
                         || "were".equals(normalizedPredicate)
-                        || "telemetry".equals(normalizedPredicate)
                         || "signal".equals(normalizedPredicate)
                         || "signals".equals(normalizedPredicate)
                         || "evidence".equals(normalizedPredicate)
@@ -788,27 +787,6 @@ public final class OntologyDefinedHead extends BaseHead {
                 String derivedObject = inferObjectForPredicate(tokens, predicate, subject, object, context.graph());
                 if (derivedObject != null && !derivedObject.isBlank()) {
                     object = derivedObject;
-                }
-                if ("cause".equals(normalizeToken(predicate))) {
-                    java.util.Map<String, String> entityMap = collectEntityNames(context.graph());
-                    java.util.List<String> normalized = new java.util.ArrayList<>();
-                    for (String token : tokens) {
-                        String value = normalizeToken(token);
-                        if (!value.isBlank()) {
-                            normalized.add(value);
-                        }
-                    }
-                    if ((normalized.contains("orientation") || normalized.contains("control"))
-                            && entityMap.containsKey("control_spacecraft_orientation")) {
-                        object = entityMap.get("control_spacecraft_orientation");
-                    } else if ((normalized.contains("orientation") || normalized.contains("control"))
-                            && entityMap.containsKey("spacecraft_orientation_control")) {
-                        object = entityMap.get("spacecraft_orientation_control");
-                    }
-                    if ((normalized.contains("telemetry") || normalized.contains("events") || normalized.contains("sequence"))
-                            && entityMap.containsKey("spacecraft_instability")) {
-                        object = entityMap.get("spacecraft_instability");
-                    }
                 }
                 ConditionBridge bridge = inferConditionBridge(tokens, context.graph());
                 if (bridge != null) {
@@ -937,7 +915,7 @@ public final class OntologyDefinedHead extends BaseHead {
                     || tokens.contains("signal") || tokens.contains("signals")
                     || tokens.contains("evidence");
             if (hasIndicate && predicates.contains("indicate")) {
-                return new PredicateSelection("indicate", "telemetry indicate", java.util.List.of());
+                return new PredicateSelection("indicate", "evidence indicate", java.util.List.of());
             }
             boolean hasStop = tokens.contains("stop") || tokens.contains("stops") || tokens.contains("stopped");
             boolean hasFunction = tokens.contains("function") || tokens.contains("functioning");
@@ -1000,52 +978,17 @@ public final class OntologyDefinedHead extends BaseHead {
                     }
                 }
             }
-            if ("restore".equals(normalizedPredicate)) {
-                boolean hasStability = tokens.contains("stability") || tokens.contains("stable");
-                boolean hasOrientation = tokens.contains("orientation");
-                if (hasStability && entityMap.containsKey("stable_orientation")) {
-                    return entityMap.get("stable_orientation");
-                }
-                if (hasOrientation && entityMap.containsKey("spacecraft_orientation")) {
-                    return entityMap.get("spacecraft_orientation");
-                }
-            }
-            if ("indicate".equals(normalizedPredicate)) {
-                if (tokens.contains("failure") && entityMap.containsKey("motor_failure")) {
-                    return entityMap.get("motor_failure");
-                }
-                if (tokens.contains("instability") && entityMap.containsKey("spacecraft_instability")) {
-                    return entityMap.get("spacecraft_instability");
-                }
-            }
-            if ("cause".equals(normalizedPredicate)) {
-                if (tokens.contains("loss")
-                        && (tokens.contains("orientation") || tokens.contains("control"))
-                        && entityMap.containsKey("control_spacecraft_orientation")) {
-                    return entityMap.get("control_spacecraft_orientation");
-                }
-                if (tokens.contains("loss")) {
+            if ("restore".equals(normalizedPredicate) || "indicate".equals(normalizedPredicate)
+                    || "cause".equals(normalizedPredicate)) {
+                if ("cause".equals(normalizedPredicate) && tokens.contains("loss")) {
                     String afterOf = inferEntityAfterToken(tokens, "of", entityMap);
                     if (afterOf != null) {
                         return afterOf;
                     }
-                    if (entityMap.containsKey("spacecraft_orientation_control")) {
-                        return entityMap.get("spacecraft_orientation_control");
-                    }
                 }
-                if (tokens.contains("control") && entityMap.containsKey("spacecraft_orientation_control")) {
-                    return entityMap.get("spacecraft_orientation_control");
-                }
-                if ((tokens.contains("orientation") || tokens.contains("control"))
-                        && entityMap.containsKey("spacecraft_orientation_control")) {
-                    return entityMap.get("spacecraft_orientation_control");
-                }
-                if (tokens.contains("instability") && entityMap.containsKey("spacecraft_instability")) {
-                    return entityMap.get("spacecraft_instability");
-                }
-                if (tokens.contains("telemetry") && tokens.contains("events")
-                        && entityMap.containsKey("spacecraft_instability")) {
-                    return entityMap.get("spacecraft_instability");
+                String inferred = inferEntity(tokens, graph);
+                if (inferred != null && !inferred.isBlank()) {
+                    return inferred;
                 }
             }
             return null;
@@ -1066,10 +1009,6 @@ public final class OntologyDefinedHead extends BaseHead {
             if (normalized.isEmpty()) {
                 return null;
             }
-            boolean powerUnavailable = containsAny(normalized, "power", "voltage", "electrical")
-                    && containsAny(normalized, "lost", "drop", "drops", "dropped", "down", "unavailable");
-            boolean propellantAvailable = normalized.contains("propellant")
-                    && containsAny(normalized, "available", "operational", "functional", "normal", "remained");
             boolean stopFunctioning = containsAny(normalized, "stop", "stops", "stopped")
                     && containsAny(normalized, "function", "functioning", "working");
             boolean stillFunctioning = normalized.contains("still")
@@ -1081,25 +1020,13 @@ public final class OntologyDefinedHead extends BaseHead {
             if (entityMap.isEmpty()) {
                 return null;
             }
-            if (stopFunctioning && powerUnavailable) {
-                String resource = firstAvailableResource(entityMap, "electrical_power",
-                        "electrical_bus_voltage", "electrical_bus", "power");
+            if (stopFunctioning || stillFunctioning) {
+                java.util.List<String> entities = inferEntities(normalized, entityMap);
+                String resource = entities.isEmpty() ? null : entities.get(0);
                 if (resource != null) {
                     return new ConditionBridge(
-                            java.util.List.of("power_unavailable"),
+                            java.util.List.of("resource_condition"),
                             java.util.List.of(),
-                            "poweredby",
-                            resource,
-                            true
-                    );
-                }
-            }
-            if (stillFunctioning && propellantAvailable) {
-                String resource = firstAvailableResource(entityMap, "propellant");
-                if (resource != null) {
-                    return new ConditionBridge(
-                            java.util.List.of(),
-                            java.util.List.of("propellant_available"),
                             "poweredby",
                             resource,
                             true
@@ -1125,16 +1052,6 @@ public final class OntologyDefinedHead extends BaseHead {
                 }
             }
             return false;
-        }
-
-        private String firstAvailableResource(java.util.Map<String, String> entityMap, String... keys) {
-            for (String key : keys) {
-                String match = entityMap.get(key);
-                if (match != null) {
-                    return match;
-                }
-            }
-            return null;
         }
 
         private String inferEntityAfterToken(java.util.List<String> tokens,
@@ -1179,18 +1096,10 @@ public final class OntologyDefinedHead extends BaseHead {
                     || normalized.contains("explanation");
             boolean hasLoss = normalized.contains("loss");
             if (hasExplain && predicates.contains("cause")) {
-                String object = null;
-                if ((hasLoss || normalized.contains("orientation") || normalized.contains("control"))
-                        && entityMap.containsKey("control_spacecraft_orientation")) {
-                    object = entityMap.get("control_spacecraft_orientation");
-                } else if (hasLoss && entityMap.containsKey("spacecraft_orientation_control")) {
-                    object = entityMap.get("spacecraft_orientation_control");
-                } else if (hasLoss) {
-                    object = inferEntityAfterToken(normalized, "of", entityMap);
-                }
-                if (object == null && (normalized.contains("unstable") || normalized.contains("instability"))
-                        && entityMap.containsKey("spacecraft_instability")) {
-                    object = entityMap.get("spacecraft_instability");
+                String object = hasLoss ? inferEntityAfterToken(normalized, "of", entityMap) : null;
+                if (object == null) {
+                    java.util.List<String> entities = inferEntities(normalized, entityMap);
+                    object = entities.isEmpty() ? null : entities.get(0);
                 }
                 return new PhraseOverride("cause", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
             }
@@ -1198,29 +1107,19 @@ public final class OntologyDefinedHead extends BaseHead {
                     || normalized.contains("regain") || normalized.contains("regained");
             boolean hasLikely = normalized.contains("likely") || normalized.contains("most");
             if (hasRestore && hasLikely && predicates.contains("restore")) {
-                String object = null;
-                if (normalized.contains("stability") && entityMap.containsKey("stable_orientation")) {
-                    object = entityMap.get("stable_orientation");
-                }
+                java.util.List<String> entities = inferEntities(normalized, entityMap);
+                String object = entities.isEmpty() ? null : entities.get(0);
                 return new PhraseOverride("restore", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, false);
             }
             boolean hasPrevent = normalized.contains("prevent") || normalized.contains("prevents")
                     || normalized.contains("prevented") || normalized.contains("preventing");
             if (hasPrevent && predicates.contains("cause")) {
-                String object = null;
-                if ((normalized.contains("orientation") || normalized.contains("control"))
-                        && entityMap.containsKey("control_spacecraft_orientation")) {
-                    object = entityMap.get("control_spacecraft_orientation");
-                } else if (normalized.contains("control") && entityMap.containsKey("spacecraft_orientation_control")) {
-                    object = entityMap.get("spacecraft_orientation_control");
-                } else {
-                    object = inferEntityAfterToken(normalized, "prevent", entityMap);
+                String object = inferEntityAfterToken(normalized, "prevent", entityMap);
+                if (object == null) {
+                    java.util.List<String> entities = inferEntities(normalized, entityMap);
+                    object = entities.isEmpty() ? null : entities.get(0);
                 }
-                String subject = null;
-                if (entityMap.containsKey("wheel_motor") && normalized.contains("wheel") && normalized.contains("motor")) {
-                    subject = entityMap.get("wheel_motor");
-                }
-                return new PhraseOverride("cause", object, subject, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
+                return new PhraseOverride("cause", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
             }
             boolean hasRelationship = normalized.contains("relationship") || normalized.contains("relationships");
             boolean hasBetween = normalized.contains("between");
@@ -1242,10 +1141,6 @@ public final class OntologyDefinedHead extends BaseHead {
                                 com.sahr.core.QueryPlan.Kind.RELATION_MATCH, true, true);
                     }
                 }
-                if (predicates.contains("control") && entityMap.containsKey("control_spacecraft_orientation")) {
-                    return new PhraseOverride("control", entityMap.get("control_spacecraft_orientation"), null,
-                            com.sahr.core.QueryPlan.Kind.RELATION_MATCH, true, true);
-                }
             }
             boolean hasConditions = normalized.contains("conditions") || normalized.contains("condition");
             boolean hasUnder = normalized.contains("under") || normalized.contains("what");
@@ -1256,15 +1151,16 @@ public final class OntologyDefinedHead extends BaseHead {
                     || normalized.contains("dependent");
             boolean hasNot = normalized.contains("not") || normalized.contains("without");
             if (hasDepend && hasNot && predicates.contains("poweredby")) {
-                String object = firstAvailableResource(entityMap, "electrical_power", "electrical_actuators",
-                        "electrically_powered_actuators");
+                java.util.List<String> entities = inferEntities(normalized, entityMap);
+                String object = entities.isEmpty() ? null : entities.get(0);
                 return new PhraseOverride("poweredby", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
             }
             boolean hasRuledOut = normalized.contains("ruled") || normalized.contains("rule")
                     || normalized.contains("ruledout") || normalized.contains("exclude");
-            if (hasRuledOut && predicates.contains("cause") && entityMap.containsKey("spacecraft_instability")) {
-                return new PhraseOverride("cause", entityMap.get("spacecraft_instability"), null,
-                        com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
+            if (hasRuledOut && predicates.contains("cause")) {
+                java.util.List<String> entities = inferEntities(normalized, entityMap);
+                String object = entities.isEmpty() ? null : entities.get(0);
+                return new PhraseOverride("cause", object, null, com.sahr.core.QueryPlan.Kind.CAUSE_CHAIN, true, true);
             }
             return null;
         }

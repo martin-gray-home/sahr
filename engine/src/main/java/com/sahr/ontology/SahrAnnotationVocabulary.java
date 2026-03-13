@@ -11,4 +11,5 @@ public final class SahrAnnotationVocabulary {
     public static final String DYNAMIC_WEIGHT = NAMESPACE + "dynamicWeight";
     public static final String TEMPORAL_WEIGHT = NAMESPACE + "temporalWeight";
     public static final String EVIDENCE_WEIGHT = NAMESPACE + "evidenceWeight";
+    public static final String SEMANTIC_ROLE = NAMESPACE + "semanticRole";
 }

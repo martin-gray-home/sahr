@@ -216,7 +216,7 @@ final class AnswerRanker {
             return false;
         }
         return switch (token) {
-            case "spacecraft", "system", "mechanism", "device", "entity",
+            case "system", "mechanism", "device", "entity",
                     "object", "thing", "relationship", "process", "event",
                     "information", "data", "component" -> true;
             default -> false;

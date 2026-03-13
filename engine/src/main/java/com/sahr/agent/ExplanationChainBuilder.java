@@ -197,8 +197,7 @@ final class ExplanationChainBuilder {
             if (!"during".equals(predicate) && !"after".equals(predicate)) {
                 continue;
             }
-            String objectValue = assertion.object().value().toLowerCase(java.util.Locale.ROOT);
-            if (!objectValue.contains("recovery")) {
+            if (!hasSemanticRole(assertion.object(), "recovery_phase")) {
                 continue;
             }
             sentences.add(formatter.formatAssertionSentence(assertion));
@@ -216,16 +215,14 @@ final class ExplanationChainBuilder {
             if (!"during".equals(predicate) && !"after".equals(predicate)) {
                 continue;
             }
-            String objectValue = assertion.object().value().toLowerCase(java.util.Locale.ROOT);
-            if (!objectValue.contains("recovery")) {
+            if (!hasSemanticRole(assertion.object(), "recovery_phase")) {
                 continue;
             }
             SymbolId subject = assertion.subject();
             if (subject == null || subject.value() == null) {
                 continue;
             }
-            String subjectToken = formatter.normalizeTypeToken(subject.value());
-            if (subjectToken.contains("telemetry") || subjectToken.contains("time")) {
+            if (hasSemanticRole(subject, "evidence_signal") || hasSemanticRole(subject, "temporal_marker")) {
                 continue;
             }
             agents.add(subject);
@@ -459,6 +456,52 @@ final class ExplanationChainBuilder {
             }
         }
         return score;
+    }
+
+    private boolean hasSemanticRole(SymbolId id, String role) {
+        if (annotationResolver == null || id == null || role == null || role.isBlank()) {
+            return false;
+        }
+        String iri = resolveEntityIri(id);
+        if (iri == null) {
+            return false;
+        }
+        return annotationResolver.annotationValue(iri, SahrAnnotationVocabulary.SEMANTIC_ROLE)
+                .map(value -> roleMatches(value, role))
+                .orElse(false);
+    }
+
+    private boolean roleMatches(String value, String role) {
+        if (value == null || role == null) {
+            return false;
+        }
+        String target = role.trim().toLowerCase(java.util.Locale.ROOT);
+        for (String part : value.split("[,;|]")) {
+            if (part.trim().toLowerCase(java.util.Locale.ROOT).equals(target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String resolveEntityIri(SymbolId id) {
+        if (id == null || id.value() == null) {
+            return null;
+        }
+        String raw = id.value();
+        if (raw.startsWith("entity:")) {
+            raw = raw.substring("entity:".length());
+        } else if (raw.startsWith("concept:")) {
+            raw = raw.substring("concept:".length());
+        }
+        String token = annotationResolver.normalizeLabelToToken(raw);
+        if (token.isBlank()) {
+            return null;
+        }
+        for (String iri : annotationResolver.entityIrisByLabel(token)) {
+            return iri;
+        }
+        return null;
     }
 
     private List<String> collectTemporalEvidence(SymbolId cause,

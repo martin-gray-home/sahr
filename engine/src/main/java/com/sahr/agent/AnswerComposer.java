@@ -320,8 +320,7 @@ final class AnswerComposer {
             if (mention == null) {
                 continue;
             }
-            String value = mention.value().toLowerCase(Locale.ROOT);
-            if (value.contains("control") || value.contains("orientation")) {
+            if (hasSemanticRole(mention, "control_target")) {
                 return mention;
             }
         }
@@ -881,7 +880,7 @@ final class AnswerComposer {
         String normalized = token.toLowerCase(Locale.ROOT).replace('_', ' ');
         return switch (normalized) {
             case "system", "systems", "component", "components", "actuator", "actuators",
-                    "control", "controls", "orientation", "spacecraft" -> true;
+                    "control", "controls" -> true;
             default -> false;
         };
     }
@@ -979,36 +978,39 @@ final class AnswerComposer {
     }
 
     private String dependencyContrastAnswer(QueryGoal goal) {
+        List<SymbolId> mentions = extractMentionedEntities(goal);
+        if (mentions.isEmpty()) {
+            return null;
+        }
         List<String> sentences = new ArrayList<>();
         List<String> recoveryEvidence = explanationChains.buildRecoveryEvidence(2);
         sentences.addAll(recoveryEvidence);
-        LinkedHashSet<String> electricalDependents = new LinkedHashSet<>();
-        LinkedHashSet<SymbolId> electricalSubjects = new LinkedHashSet<>();
+        LinkedHashSet<String> dependencySentences = new LinkedHashSet<>();
+        List<SymbolId> mentionAliases = new ArrayList<>();
+        for (SymbolId mention : mentions) {
+            mentionAliases.addAll(aliasBridge.expandAliasSymbols(mention));
+        }
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String predicate = support.localName(assertion.predicate());
             if (!"poweredby".equals(predicate) && !"require".equals(predicate) && !"requires".equals(predicate)) {
                 continue;
             }
-            if (!assertion.object().value().toLowerCase(Locale.ROOT).contains("electrical")) {
-                continue;
+            if (mentionAliases.contains(assertion.subject())) {
+                dependencySentences.add(answerRenderer.formatAssertionSentence(assertion));
             }
-            electricalSubjects.add(assertion.subject());
-            electricalDependents.add(answerRenderer.formatAssertionSentence(assertion));
         }
-        if (sentences.isEmpty() && electricalDependents.isEmpty()) {
+        if (sentences.isEmpty() && dependencySentences.isEmpty()) {
             return null;
         }
-        for (String entry : electricalDependents) {
+        for (String entry : dependencySentences) {
             sentences.add(entry);
             if (sentences.size() >= 4) {
                 break;
             }
         }
-        boolean shouldInfer = !recoveryEvidence.isEmpty()
-                && (!electricalSubjects.isEmpty()
-                || containsCue(support.lastInput(), "electrical actuator", "electrical actuators"));
-        if (shouldInfer) {
-            sentences.add("This suggests the recovery likely did not depend on electrical actuators.");
+        if (!recoveryEvidence.isEmpty() && !dependencySentences.isEmpty()) {
+            String mentionLabel = displayValue(mentions.get(0));
+            sentences.add("This suggests the recovery likely did not depend on " + mentionLabel + ".");
         }
         return String.join("\n", sentences);
     }
@@ -1016,27 +1018,14 @@ final class AnswerComposer {
     private String conditionContrastAnswer(QueryGoal goal) {
         List<SymbolId> mentions = extractMentionedEntities(goal);
         if (mentions.size() < 2) {
-            SymbolId first = findEntityByToken("magnetorquer");
-            SymbolId second = findEntityByToken("thruster");
-            if (first != null && second != null) {
-                mentions = List.of(first, second);
-            } else {
-                return null;
-            }
+            return null;
         }
         SymbolId failing = mentions.get(0);
         SymbolId surviving = mentions.get(1);
         SymbolId failResource = firstDependencyResource(failing);
         SymbolId surviveResource = firstDependencyResource(surviving);
         if (failResource == null || surviveResource == null) {
-            SymbolId electrical = findEntityByToken("electrical_power");
-            SymbolId propellant = findEntityByToken("propellant");
-            if (electrical != null && propellant != null) {
-                failResource = electrical;
-                surviveResource = propellant;
-            } else {
-                return null;
-            }
+            return null;
         }
         return "If " + displayValue(failResource) + " is unavailable but "
                 + displayValue(surviveResource) + " remains available, then "
@@ -1178,6 +1167,10 @@ final class AnswerComposer {
         if (candidate == null) {
             return sentences;
         }
+        List<SymbolId> subsystemFailures = new ArrayList<>(candidate.subsystemFailures());
+        if (target != null) {
+            subsystemFailures.removeIf(target::equals);
+        }
         SymbolId precursor = selectBestSpecific(candidate.precursorSignals(), true);
         if (precursor != null) {
             sentences.add(roleSentence("Precursor signal", precursor));
@@ -1200,7 +1193,7 @@ final class AnswerComposer {
             componentFailure = selectBestSpecific(candidate.componentFailures(), true);
         }
         if (candidate.componentFailures().isEmpty()) {
-            List<SymbolId> subsystemTop = selectTopSpecific(candidate.subsystemFailures(), 2, true, null);
+            List<SymbolId> subsystemTop = selectTopSpecific(subsystemFailures, 2, true, null);
             for (SymbolId failure : subsystemTop) {
                 sentences.add(formatFailureSentence(failure));
             }
@@ -1209,7 +1202,7 @@ final class AnswerComposer {
                 sentences.add(formatFailureSentence(componentFailure));
             }
             if (subsystemFailure == null) {
-                subsystemFailure = selectBestSpecificExcluding(candidate.subsystemFailures(), componentFailure, true);
+                subsystemFailure = selectBestSpecificExcluding(subsystemFailures, componentFailure, true);
             }
             if (subsystemFailure != null && !subsystemFailure.equals(componentFailure)) {
                 sentences.add(formatFailureSentence(subsystemFailure));
@@ -1477,7 +1470,7 @@ final class AnswerComposer {
                 continue;
             }
             String normalized = fragment.toLowerCase(Locale.ROOT);
-            if (normalized.contains("telemetry") || normalized.contains("sequence") || normalized.contains("evidence")) {
+            if (normalized.contains("sequence") || normalized.contains("evidence")) {
                 return true;
             }
         }
@@ -1870,13 +1863,7 @@ final class AnswerComposer {
     }
 
     private boolean wantsControlLoss(QueryGoal goal, SymbolId target) {
-        if (target != null) {
-            String value = target.value().toLowerCase(Locale.ROOT);
-            if (value.contains("control") || value.contains("orientation")) {
-                return true;
-            }
-        }
-        return containsCue(support.lastInput(), "control", "prevent", "orientation control");
+        return target != null && hasSemanticRole(target, "control_target");
     }
 
     private String joinWithOutcome(List<String> sentences, QueryGoal goal, SymbolId target) {
@@ -1946,9 +1933,8 @@ final class AnswerComposer {
         }
         String value = target.value();
         String display = displayValue(value);
-        String lowered = display.toLowerCase(Locale.ROOT);
-        if (lowered.contains("control") && lowered.contains("orientation")) {
-            return "Outcome: loss of spacecraft orientation control.";
+        if (hasSemanticRole(target, "control_target")) {
+            return "Outcome: loss of " + display + ".";
         }
         return "Outcome: " + display + ".";
     }
@@ -1958,14 +1944,47 @@ final class AnswerComposer {
             return "Capability loss: unknown.";
         }
         String display = displayValue(subject);
-        String lowered = display.toLowerCase(Locale.ROOT);
-        if (lowered.contains("control") && lowered.contains("orientation")) {
-            return "Capability loss: spacecraft orientation control.";
-        }
-        if (lowered.contains("orientation") && !lowered.contains("control")) {
-            return "Capability loss: spacecraft orientation control.";
-        }
         return "Capability loss: " + display + ".";
+    }
+
+    private boolean hasSemanticRole(SymbolId id, String role) {
+        if (id == null || role == null || role.isBlank()) {
+            return false;
+        }
+        String iri = resolveEntityIri(id);
+        if (iri == null) {
+            return false;
+        }
+        return annotationResolver.annotationValue(iri, com.sahr.ontology.SahrAnnotationVocabulary.SEMANTIC_ROLE)
+                .map(value -> roleMatches(value, role))
+                .orElse(false);
+    }
+
+    private boolean roleMatches(String value, String role) {
+        if (value == null || role == null) {
+            return false;
+        }
+        String target = role.trim().toLowerCase(Locale.ROOT);
+        for (String part : value.split("[,;|]")) {
+            if (part.trim().toLowerCase(Locale.ROOT).equals(target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String resolveEntityIri(SymbolId id) {
+        if (id == null || id.value() == null) {
+            return null;
+        }
+        String token = annotationResolver.normalizeLabelToToken(displayValue(id));
+        if (token.isBlank()) {
+            return null;
+        }
+        for (String iri : annotationResolver.entityIrisByLabel(token)) {
+            return iri;
+        }
+        return null;
     }
 
     private boolean connectsMentionPair(RelationAssertion assertion, List<Set<SymbolId>> mentionAliases) {

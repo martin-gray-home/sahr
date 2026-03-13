@@ -29,6 +29,7 @@ OWL provides:
 • constraints  
 • logical relationships  
 • external knowledge modules  
+• behavioral annotations (e.g., `ann:semanticRole`) used by the engine to select roles like control targets, recovery phases, and evidence signals without hard-coded domain logic
 
 SAHR queries the ontology dynamically during reasoning.
 

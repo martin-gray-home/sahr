@@ -96,10 +96,6 @@ final class AnswerRenderer {
                 return renderClause(subjectText, null, new TemplateSpec("operate"), booleanValue);
             }
             if ("control".equals(predicate) && !booleanValue) {
-                String normalizedTarget = normalizeControlTarget(assertion.object());
-                if (normalizedTarget != null) {
-                    return "Loss of " + normalizedTarget;
-                }
                 return "Loss of " + subjectText;
             }
             if ("become_unstable".equals(predicate) || "unstable".equals(predicate)) {
@@ -175,22 +171,6 @@ final class AnswerRenderer {
             return "contains";
         }
         return local.replace('_', ' ');
-    }
-
-    private String normalizeControlTarget(SymbolId object) {
-        if (object == null || object.value() == null) {
-            return null;
-        }
-        String value = object.value();
-        if (value.startsWith("concept:")) {
-            value = value.substring("concept:".length());
-        } else if (value.startsWith("entity:")) {
-            value = value.substring("entity:".length());
-        }
-        if (value.contains("control_spacecraft_orientation") || value.contains("spacecraft_orientation_control")) {
-            return "spacecraft orientation control";
-        }
-        return value.replace('_', ' ') + " control";
     }
 
     private String formatAssertionSentence(RelationAssertion assertion, SymbolId subject, SymbolId object, TemplateSpec template) {

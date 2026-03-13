@@ -308,9 +308,10 @@ class SahrAgentQueryTest {
             method.setAccessible(true);
             QueryGoal goal = QueryGoal.relation("entity:wheel_motor", "cause", "entity:spacecraft_orientation_control", null);
             String answer = (String) method.invoke(composer, goal);
-            assertTrue(answer.contains("wheel motor"));
-            assertTrue(answer.contains("reaction wheel"));
-            assertTrue(answer.contains("orientation control"));
+            String normalized = answer.toLowerCase(java.util.Locale.ROOT);
+            assertTrue(normalized.contains("wheel motor"), () -> "answer=" + answer);
+            assertTrue(normalized.contains("reaction wheel"), () -> "answer=" + answer);
+            assertTrue(normalized.contains("orientation control"), () -> "answer=" + answer);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed to invoke executeCauseChain", e);
         }

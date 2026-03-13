@@ -16,11 +16,31 @@ ann:answerTemplateFalse a owl:AnnotationProperty .
 ann:dynamicWeight a owl:AnnotationProperty .
 ann:temporalWeight a owl:AnnotationProperty .
 ann:evidenceWeight a owl:AnnotationProperty .
+ann:semanticRole a owl:AnnotationProperty .
 
 sc:ControlSpacecraftOrientation a owl:Class ;
     rdfs:label "spacecraft orientation control" ;
     skos:altLabel "control spacecraft orientation" ;
-    skos:altLabel "spacecraft orientation" .
+    skos:altLabel "spacecraft orientation" ;
+    ann:semanticRole "control_target" .
+
+sc:RecoveryPeriod a owl:NamedIndividual ;
+    rdfs:label "recovery period" ;
+    skos:altLabel "recovery" ;
+    ann:semanticRole "recovery_phase" .
+
+sc:Telemetry a owl:NamedIndividual ;
+    rdfs:label "telemetry" ;
+    ann:semanticRole "evidence_signal" .
+
+sc:TemperatureSpikes a owl:NamedIndividual ;
+    rdfs:label "temperature spikes" ;
+    skos:altLabel "temperature spike" ;
+    ann:semanticRole "evidence_signal" .
+
+sc:ElectricallyPoweredActuators a owl:NamedIndividual ;
+    rdfs:label "electrically powered actuators" ;
+    skos:altLabel "electrical actuators" .
 
 sahr:fail ann:dynamicWeight "0.55"^^xsd:decimal ;
     ann:answerTemplateTrue "verb:fail" ;
