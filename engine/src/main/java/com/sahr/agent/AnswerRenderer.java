@@ -7,6 +7,14 @@ import com.sahr.ontology.SahrAnnotationVocabulary;
 
 import java.util.Locale;
 
+import simplenlg.features.Feature;
+import simplenlg.framework.NLGFactory;
+import simplenlg.lexicon.Lexicon;
+import simplenlg.phrasespec.NPPhraseSpec;
+import simplenlg.phrasespec.PPPhraseSpec;
+import simplenlg.phrasespec.SPhraseSpec;
+import simplenlg.realiser.english.Realiser;
+
 final class AnswerRenderer {
     interface DisplayFormatter {
         String localName(String predicate);
@@ -18,22 +26,24 @@ final class AnswerRenderer {
 
     private final DisplayFormatter formatter;
     private final OntologyAnnotationResolver resolver;
+    private final NLGFactory nlgFactory;
+    private final Realiser realiser;
 
     AnswerRenderer(DisplayFormatter formatter, OntologyAnnotationResolver resolver) {
         this.formatter = formatter;
         this.resolver = resolver;
+        Lexicon lexicon = Lexicon.getDefaultLexicon();
+        this.nlgFactory = new NLGFactory(lexicon);
+        this.realiser = new Realiser(lexicon);
     }
 
     String formatCausalSentence(RelationAssertion assertion, SymbolId cause, SymbolId effect) {
         String predicate = formatter.localName(assertion.predicate());
-        String template = resolveTemplate(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE);
-        if (template != null) {
-            return applyTemplate(template, null, null, assertion.predicate(), cause, effect);
-        }
+        TemplateSpec template = resolveTemplateSpec(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE);
         if ("causedby".equals(predicate)) {
-            return displayValue(effect) + " is caused by " + displayValue(cause) + ".";
+            return formatAssertionSentence(assertion, effect, cause, template);
         }
-        return displayValue(cause) + " causes " + displayValue(effect) + ".";
+        return formatAssertionSentence(assertion, cause, effect, template);
     }
 
     String formatRuleSentence(RuleAssertion rule) {
@@ -50,7 +60,7 @@ final class AnswerRenderer {
     }
 
     String formatAssertionSentence(RelationAssertion assertion) {
-        return formatAssertionClause(assertion) + ".";
+        return ensureSentenceTerminal(formatAssertionClause(assertion));
     }
 
     private String formatAssertionClause(RelationAssertion assertion) {
@@ -63,26 +73,26 @@ final class AnswerRenderer {
         Boolean booleanValue = formatter.booleanConcept(object);
         String subjectText = displayValue(subject);
         if (booleanValue != null) {
-            String template = booleanValue
-                    ? resolveTemplate(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE_TRUE)
-                    : resolveTemplate(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE_FALSE);
+            TemplateSpec template = booleanValue
+                    ? resolveTemplateSpec(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE_TRUE)
+                    : resolveTemplateSpec(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE_FALSE);
             if (template != null) {
-                return applyTemplate(template, subject, object, assertion.predicate(), null, null);
+                return formatAssertionClause(assertion, subject, object, booleanValue, template);
             }
         } else {
-            String template = resolveTemplate(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE);
+            TemplateSpec template = resolveTemplateSpec(assertion.predicate(), SahrAnnotationVocabulary.ANSWER_TEMPLATE);
             if (template != null) {
-                return applyTemplate(template, subject, object, assertion.predicate(), null, null);
+                return formatAssertionClause(assertion, subject, object, null, template);
             }
         }
         if (booleanValue != null) {
             if ("fail".equals(predicate)) {
-                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "fail" : "does not fail");
+                return renderClause(subjectText, null, new TemplateSpec("fail"), booleanValue);
             }
             if ("operate".equals(predicate) || "function".equals(predicate)
                     || "work".equals(predicate) || "respond".equals(predicate)
                     || "stop_responding".equals(predicate) || "stop".equals(predicate)) {
-                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "operate" : "does not operate");
+                return renderClause(subjectText, null, new TemplateSpec("operate"), booleanValue);
             }
             if ("control".equals(predicate) && !booleanValue) {
                 String normalizedTarget = normalizeControlTarget(assertion.object());
@@ -92,56 +102,27 @@ final class AnswerRenderer {
                 return "Loss of " + subjectText;
             }
             if ("become_unstable".equals(predicate) || "unstable".equals(predicate)) {
-                return subjectText + " " + selectVerbForm(subjectText, booleanValue ? "becomes unstable" : "remains stable");
+                return renderClause(subjectText, booleanValue ? "unstable" : "stable", new TemplateSpec("become"), booleanValue);
             }
-            return subjectText + (booleanValue ? " " + displayPredicate(assertion.predicate())
-                    : " does not " + displayPredicate(assertion.predicate()));
+            TemplateSpec fallback = new TemplateSpec(displayPredicate(assertion.predicate()));
+            return renderClause(subjectText, displayValue(object), fallback, booleanValue);
         }
         if ("backupfor".equals(predicate) || "backup_for".equals(predicate)) {
-            return subjectText + " is a backup for " + displayValue(object);
+            TemplateSpec template = new TemplateSpec("be")
+                    .withObject("backup")
+                    .withPreposition("for");
+            return renderClause(subjectText, displayValue(object), template, null);
         }
         if ("poweredby".equals(predicate) || "powered_by".equals(predicate)) {
-            return subjectText + " is powered by " + displayValue(object);
+            TemplateSpec template = new TemplateSpec("power")
+                    .withVoice(Voice.PASSIVE)
+                    .withPreposition("by");
+            return renderClause(subjectText, displayValue(object), template, null);
         }
         if ("restore".equals(predicate)) {
-            return subjectText + " restores " + displayValue(object);
+            return renderClause(subjectText, displayValue(object), new TemplateSpec("restore"), null);
         }
-        return subjectText + " " + displayPredicate(assertion.predicate()) + " " + displayValue(object);
-    }
-
-    private String selectVerbForm(String subjectText, String base) {
-        if (subjectText == null || subjectText.isBlank()) {
-            return base;
-        }
-        String normalized = subjectText.trim().toLowerCase(Locale.ROOT);
-        String[] tokens = normalized.split("\\s+");
-        String last = tokens[tokens.length - 1];
-        boolean plural = last.endsWith("s") && !last.endsWith("ss");
-        if (!plural) {
-            if (base.startsWith("does not ")) {
-                return base;
-            }
-            if (base.startsWith("do not ")) {
-                return base.replaceFirst("do not ", "does not ");
-            }
-            if (!base.contains(" ") && !base.endsWith("s")) {
-                return base + "s";
-            }
-            return base;
-        }
-        if (base.startsWith("does not ")) {
-            return base.replaceFirst("does not ", "do not ");
-        }
-        if (base.endsWith("s") && base.split("\\s+").length == 1) {
-            return base.substring(0, base.length() - 1);
-        }
-        if ("is".equals(base)) {
-            return "are";
-        }
-        if ("was".equals(base)) {
-            return "were";
-        }
-        return base;
+        return renderClause(subjectText, displayValue(object), new TemplateSpec(displayPredicate(assertion.predicate())), null);
     }
 
     private String normalizeBackupTarget(String target) {
@@ -211,6 +192,81 @@ final class AnswerRenderer {
         return value.replace('_', ' ') + " control";
     }
 
+    private String formatAssertionSentence(RelationAssertion assertion, SymbolId subject, SymbolId object, TemplateSpec template) {
+        return ensureSentenceTerminal(formatAssertionClause(assertion, subject, object, null, template));
+    }
+
+    private String formatAssertionClause(RelationAssertion assertion,
+                                         SymbolId subject,
+                                         SymbolId object,
+                                         Boolean booleanValue,
+                                         TemplateSpec template) {
+        if (assertion == null || subject == null) {
+            return "unknown";
+        }
+        String subjectText = displayValue(subject);
+        String objectText = object == null ? null : displayValue(object);
+        TemplateSpec spec = template == null ? new TemplateSpec(displayPredicate(assertion.predicate())) : template;
+        return renderClause(subjectText, objectText, spec, booleanValue);
+    }
+
+    private String renderClause(String subjectText, String objectText, TemplateSpec spec, Boolean booleanValue) {
+        if (subjectText == null || subjectText.isBlank()) {
+            return "unknown";
+        }
+        String verb = spec.verb;
+        if (verb == null || verb.isBlank()) {
+            return subjectText;
+        }
+        SPhraseSpec clause = nlgFactory.createClause();
+        clause.setSubject(nounPhrase(subjectText));
+        clause.setVerb(verb);
+        if (spec.voice == Voice.PASSIVE) {
+            clause.setFeature(Feature.PASSIVE, true);
+        }
+        boolean negated = spec.negated || (booleanValue != null && !booleanValue);
+        if (negated) {
+            clause.setFeature(Feature.NEGATED, true);
+        }
+
+        String fixedObject = spec.object;
+        String mainObject = fixedObject != null ? fixedObject : objectText;
+        if (mainObject != null && !mainObject.isBlank() && (spec.preposition == null || fixedObject != null)) {
+            clause.setObject(nounPhrase(mainObject));
+        }
+        if (spec.preposition != null && objectText != null && !objectText.isBlank()) {
+            PPPhraseSpec pp = nlgFactory.createPrepositionPhrase();
+            pp.setPreposition(spec.preposition);
+            pp.addComplement(nounPhrase(objectText));
+            clause.addComplement(pp);
+        }
+        String realised = realiser.realise(clause).getRealisation();
+        if (realised == null || realised.isBlank()) {
+            return subjectText;
+        }
+        return realised.trim();
+    }
+
+    private NPPhraseSpec nounPhrase(String text) {
+        String normalized = text == null ? "" : text.trim();
+        if (normalized.isBlank()) {
+            return nlgFactory.createNounPhrase("unknown");
+        }
+        NPPhraseSpec phrase = nlgFactory.createNounPhrase(normalized);
+        if ("backup".equalsIgnoreCase(normalized)) {
+            phrase.setDeterminer("a");
+        }
+        return phrase;
+    }
+
+    private TemplateSpec resolveTemplateSpec(String predicate, String annotationIri) {
+        String template = resolveTemplate(predicate, annotationIri);
+        if (template == null || template.isBlank()) {
+            return null;
+        }
+        return TemplateSpec.parse(template);
+    }
+
     private String resolveTemplate(String predicate, String annotationIri) {
         if (resolver == null) {
             return null;
@@ -220,28 +276,89 @@ final class AnswerRenderer {
                 .orElse(null);
     }
 
-    private String applyTemplate(String template,
-                                 SymbolId subject,
-                                 SymbolId object,
-                                 String predicate,
-                                 SymbolId cause,
-                                 SymbolId effect) {
-        String rendered = template;
-        if (subject != null) {
-            rendered = rendered.replace("{subject}", displayValue(subject));
+    private String ensureSentenceTerminal(String text) {
+        if (text == null || text.isBlank()) {
+            return "unknown.";
         }
-        if (object != null) {
-            rendered = rendered.replace("{object}", displayValue(object));
+        String trimmed = text.trim();
+        if (trimmed.endsWith(".") || trimmed.endsWith("!") || trimmed.endsWith("?")) {
+            return trimmed;
         }
-        if (predicate != null) {
-            rendered = rendered.replace("{predicate}", displayPredicate(predicate));
+        return trimmed + ".";
+    }
+
+    private enum Voice {
+        ACTIVE,
+        PASSIVE
+    }
+
+    private static final class TemplateSpec {
+        private final String verb;
+        private String object;
+        private String preposition;
+        private Voice voice = Voice.ACTIVE;
+        private boolean negated;
+
+        private TemplateSpec(String verb) {
+            this.verb = verb;
         }
-        if (cause != null) {
-            rendered = rendered.replace("{cause}", displayValue(cause));
+
+        private TemplateSpec withObject(String object) {
+            this.object = object;
+            return this;
         }
-        if (effect != null) {
-            rendered = rendered.replace("{effect}", displayValue(effect));
+
+        private TemplateSpec withPreposition(String preposition) {
+            this.preposition = preposition;
+            return this;
         }
-        return rendered;
+
+        private TemplateSpec withVoice(Voice voice) {
+            if (voice != null) {
+                this.voice = voice;
+            }
+            return this;
+        }
+
+        private static TemplateSpec parse(String template) {
+            String trimmed = template == null ? "" : template.trim();
+            if (trimmed.isBlank()) {
+                return null;
+            }
+            String[] tokens = trimmed.split(";");
+            TemplateSpec spec = null;
+            for (String token : tokens) {
+                String part = token.trim();
+                if (part.isBlank()) {
+                    continue;
+                }
+                String[] kv = part.split(":", 2);
+                if (kv.length == 1) {
+                    if (spec == null) {
+                        spec = new TemplateSpec(part);
+                    }
+                    continue;
+                }
+                String key = kv[0].trim().toLowerCase(Locale.ROOT);
+                String value = kv[1].trim();
+                if (spec == null && "verb".equals(key)) {
+                    spec = new TemplateSpec(value);
+                    continue;
+                }
+                if (spec == null) {
+                    continue;
+                }
+                switch (key) {
+                    case "verb" -> spec = new TemplateSpec(value);
+                    case "object" -> spec.object = value;
+                    case "prep", "preposition" -> spec.preposition = value;
+                    case "voice" -> spec.voice = "passive".equalsIgnoreCase(value) ? Voice.PASSIVE : Voice.ACTIVE;
+                    case "negated" -> spec.negated = Boolean.parseBoolean(value);
+                    default -> {
+                    }
+                }
+            }
+            return spec;
+        }
     }
 }

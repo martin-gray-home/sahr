@@ -23,23 +23,23 @@ sc:ControlSpacecraftOrientation a owl:Class ;
     skos:altLabel "spacecraft orientation" .
 
 sahr:fail ann:dynamicWeight "0.55"^^xsd:decimal ;
-    ann:answerTemplateTrue "{subject} fails." ;
-    ann:answerTemplateFalse "{subject} does not fail." .
+    ann:answerTemplateTrue "verb:fail" ;
+    ann:answerTemplateFalse "verb:fail;negated:true" .
 
 sahr:restore ann:dynamicWeight "0.55"^^xsd:decimal ;
-    ann:answerTemplate "{subject} restores {object}." .
+    ann:answerTemplate "verb:restore" .
 
 sahr:backupFor ann:dynamicWeight "0.55"^^xsd:decimal ;
-    ann:answerTemplate "{subject} is a backup for {object}." .
+    ann:answerTemplate "verb:be;object:backup;prep:for" .
 
 sahr:poweredBy ann:dynamicWeight "-0.25"^^xsd:decimal ;
-    ann:answerTemplate "{subject} is powered by {object}." .
+    ann:answerTemplate "verb:power;voice:passive;prep:by" .
 
 sahr:cause ann:dynamicWeight "0.55"^^xsd:decimal ;
-    ann:answerTemplate "{cause} causes {effect}." .
+    ann:answerTemplate "verb:cause" .
 
 sahr:causedBy ann:dynamicWeight "0.55"^^xsd:decimal ;
-    ann:answerTemplate "{effect} is caused by {cause}." .
+    ann:answerTemplate "verb:cause;voice:passive;prep:by" .
 
 sahr:before ann:temporalWeight "0.20"^^xsd:decimal .
 sahr:after ann:temporalWeight "0.40"^^xsd:decimal .

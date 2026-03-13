@@ -512,7 +512,8 @@ bridging to `AliasBridge`, forward explanation search to
 Answer scoring and rendering now consult ontology annotations (e.g.,
 `ann:dynamicWeight`, `ann:temporalWeight`, `ann:evidenceWeight`,
 `ann:answerTemplate`) so domain packs can control ranking and output
-without hard-coded engine rules.
+without hard-coded engine rules. Surface realization is handled by
+SimpleNLG using semantic templates, keeping English phrasing out of OWL.
 Explanation candidates now include recovery agents and evidence nodes so
 “which system restored …” queries can return the most specific agent
 instead of the generic subject.
@@ -532,13 +533,13 @@ engine and domain packs.
 Supported annotations:
 
 - `ann:answerTemplate` (object properties)
-  - Purpose: phrase relation assertions.
-  - Value: string template containing `{subject}` and `{object}` (optional `{predicate}`).
-  - Fallback: generic "{subject} {predicate} {object}" rendering.
+  - Purpose: provide a semantic realisation template for SimpleNLG.
+  - Value: `key:value` pairs (e.g., `verb:power;voice:passive;prep:by`).
+  - Fallback: predicate-driven SimpleNLG clause rendering.
 - `ann:answerTemplateTrue` / `ann:answerTemplateFalse` (object properties)
-  - Purpose: phrase boolean predicate assertions.
-  - Value: string template containing `{subject}`.
-  - Fallback: generic boolean rendering ("fails"/"does not fail").
+  - Purpose: boolean semantic templates for SimpleNLG.
+  - Value: `key:value` pairs (e.g., `verb:fail;negated:true`).
+  - Fallback: predicate-driven SimpleNLG boolean rendering.
 - `ann:dynamicWeight` (object properties)
   - Purpose: rank predicates during explanation selection.
   - Value: numeric weight; higher favors dynamic predicates.
@@ -555,7 +556,8 @@ Supported annotations:
 Validation rules:
 
 - Non-numeric weights are warned at startup.
-- Templates missing required placeholders are warned at startup.
+- Templates with unknown keys are ignored; malformed templates fall back to
+  predicate-driven SimpleNLG rendering.
 - Conflicting annotation values for the same predicate are warned at startup.
 - Alias collisions are warned for SAHR namespace labels when multiple IRIs
   normalize to the same token.

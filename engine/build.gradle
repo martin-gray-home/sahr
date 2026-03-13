@@ -4,6 +4,7 @@ dependencies {
     implementation 'edu.stanford.nlp:stanford-corenlp:4.5.5'
     implementation 'edu.stanford.nlp:stanford-corenlp:4.5.5:models'
     implementation 'com.microsoft.onnxruntime:onnxruntime:1.18.0'
+    implementation 'uk.ac.abdn:SimpleNLG:4.4.8'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
 }
