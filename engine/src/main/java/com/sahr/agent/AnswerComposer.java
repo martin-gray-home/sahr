@@ -1304,6 +1304,9 @@ final class AnswerComposer {
         if (signal == null) {
             signal = selectEvidenceSignalFromGraph();
         }
+        if (signal == null) {
+            signal = selectEvidenceSignalFromInput();
+        }
         return signal == null ? null : renderEntityAnswer(signal.value(), goal);
     }
 
@@ -1345,6 +1348,31 @@ final class AnswerComposer {
             double score = answerRanker.specificityScore(signal.value());
             if (best == null || score > bestScore) {
                 best = signal;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private SymbolId selectEvidenceSignalFromInput() {
+        String input = support.lastInput();
+        if (input == null || input.isBlank()) {
+            return null;
+        }
+        String normalizedInput = input.toLowerCase(Locale.ROOT);
+        SymbolId best = null;
+        double bestScore = -1.0;
+        for (EntityNode entity : graph.getAllEntities()) {
+            SymbolId id = entity.id();
+            if (!hasSemanticRole(id, "evidence_signal")) {
+                continue;
+            }
+            if (!inputMentionsSymbol(normalizedInput, id)) {
+                continue;
+            }
+            double score = answerRanker.specificityScore(id.value());
+            if (best == null || score > bestScore) {
+                best = id;
                 bestScore = score;
             }
         }

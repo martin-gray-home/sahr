@@ -202,6 +202,7 @@ re-running interpretation heads.
 # Recent Updates (2026-03-13)
 
 • Evidence-signal answers now treat “telemetry” as a valid cue alongside “signal,” so telemetry prompt variants map to evidence-signal selection.
+• Evidence-signal answers now fall back to ontology label matches in the input, allowing signal selection even when the chain lacks explicit precursor evidence.
 • Resource-availability and dependency-contrast questions now detect resource mentions from ontology labels in the raw input, improving conditional dependency answers without hard-coded domain strings.
 
 # Recent Updates (2026-03-12)
