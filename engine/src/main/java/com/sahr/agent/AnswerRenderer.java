@@ -8,6 +8,7 @@ import com.sahr.ontology.SahrAnnotationVocabulary;
 import java.util.Locale;
 
 import simplenlg.features.Feature;
+import simplenlg.features.NumberAgreement;
 import simplenlg.framework.NLGFactory;
 import simplenlg.lexicon.Lexicon;
 import simplenlg.phrasespec.NPPhraseSpec;
@@ -104,8 +105,8 @@ final class AnswerRenderer {
             if ("become_unstable".equals(predicate) || "unstable".equals(predicate)) {
                 return renderClause(subjectText, booleanValue ? "unstable" : "stable", new TemplateSpec("become"), booleanValue);
             }
-            TemplateSpec fallback = new TemplateSpec(displayPredicate(assertion.predicate()));
-            return renderClause(subjectText, displayValue(object), fallback, booleanValue);
+            TemplateSpec fallback = templateForPredicate(displayPredicate(assertion.predicate()));
+            return renderClause(subjectText, null, fallback, booleanValue);
         }
         if ("backupfor".equals(predicate) || "backup_for".equals(predicate)) {
             TemplateSpec template = new TemplateSpec("be")
@@ -122,7 +123,7 @@ final class AnswerRenderer {
         if ("restore".equals(predicate)) {
             return renderClause(subjectText, displayValue(object), new TemplateSpec("restore"), null);
         }
-        return renderClause(subjectText, displayValue(object), new TemplateSpec(displayPredicate(assertion.predicate())), null);
+        return renderClause(subjectText, displayValue(object), templateForPredicate(displayPredicate(assertion.predicate())), null);
     }
 
     private String normalizeBackupTarget(String target) {
@@ -206,8 +207,9 @@ final class AnswerRenderer {
         }
         String subjectText = displayValue(subject);
         String objectText = object == null ? null : displayValue(object);
-        TemplateSpec spec = template == null ? new TemplateSpec(displayPredicate(assertion.predicate())) : template;
-        return renderClause(subjectText, objectText, spec, booleanValue);
+        TemplateSpec spec = template == null ? templateForPredicate(displayPredicate(assertion.predicate())) : template;
+        String normalizedObject = booleanValue != null ? null : objectText;
+        return renderClause(subjectText, normalizedObject, spec, booleanValue);
     }
 
     private String renderClause(String subjectText, String objectText, TemplateSpec spec, Boolean booleanValue) {
@@ -218,8 +220,15 @@ final class AnswerRenderer {
         if (verb == null || verb.isBlank()) {
             return subjectText;
         }
+        String cleanedSubject = subjectText;
+        if (cleanedSubject != null && cleanedSubject.toLowerCase(Locale.ROOT).startsWith("by ")) {
+            cleanedSubject = cleanedSubject.substring(3).trim();
+        }
         SPhraseSpec clause = nlgFactory.createClause();
-        clause.setSubject(nounPhrase(subjectText));
+        if (isPluralToken(cleanedSubject)) {
+            clause.setFeature(Feature.NUMBER, NumberAgreement.PLURAL);
+        }
+        clause.setSubject(nounPhrase(cleanedSubject));
         clause.setVerb(verb);
         if (spec.voice == Voice.PASSIVE) {
             clause.setFeature(Feature.PASSIVE, true);
@@ -258,6 +267,47 @@ final class AnswerRenderer {
         }
         return phrase;
     }
+
+    private TemplateSpec templateForPredicate(String predicateText) {
+        if (predicateText == null || predicateText.isBlank()) {
+            return new TemplateSpec("be");
+        }
+        String normalized = predicateText.trim().toLowerCase(Locale.ROOT);
+        if (normalized.contains("powered by")) {
+            return new TemplateSpec("power")
+                    .withVoice(Voice.PASSIVE)
+                    .withPreposition("by");
+        }
+        return new TemplateSpec(baseVerb(predicateText));
+    }
+
+    private String baseVerb(String verb) {
+        if (verb == null || verb.isBlank()) {
+            return verb;
+        }
+        String trimmed = verb.trim();
+        if (trimmed.contains(" ")) {
+            return trimmed;
+        }
+        if (trimmed.endsWith("s") && trimmed.length() > 1 && !trimmed.endsWith("ss")) {
+            return trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed;
+    }
+
+    private boolean isPluralToken(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String normalized = text.toLowerCase(Locale.ROOT).trim();
+        if (normalized.contains(" and ")) {
+            return true;
+        }
+        String[] tokens = normalized.split("\\s+");
+        String last = tokens[tokens.length - 1];
+        return last.endsWith("s") && !last.endsWith("ss");
+    }
+
 
     private TemplateSpec resolveTemplateSpec(String predicate, String annotationIri) {
         String template = resolveTemplate(predicate, annotationIri);

@@ -146,7 +146,7 @@ final class AnswerComposer {
                 if (wantsRecoveryAgent(goal, predicate)) {
                     SymbolId agent = selectBestRecoveryAgent(candidate, target);
                     if (agent != null) {
-                        return agent.value();
+                        return renderEntityAnswer(agent.value(), goal);
                     }
                 }
                 String explanation = summarizeRecoveryExplanation(goal, predicate, candidate, predicateExplanation);
@@ -1646,6 +1646,44 @@ final class AnswerComposer {
         return displayValue(id.value());
     }
 
+    String renderEntityAnswer(String value, QueryGoal goal) {
+        if (value == null || value.isBlank()) {
+            return "No candidates produced.";
+        }
+        String display = displayValue(value);
+        String label = answerLabel(goal);
+        if (label != null) {
+            String verb = isPlural(label) ? "were" : "was";
+            return "The " + label + " " + verb + " " + display + ".";
+        }
+        return "The answer was " + display + ".";
+    }
+
+    String renderEntityList(java.util.List<String> values, QueryGoal goal) {
+        if (values == null || values.isEmpty()) {
+            return "No candidates produced.";
+        }
+        java.util.List<String> rendered = new java.util.ArrayList<>();
+        for (String value : values) {
+            rendered.add(displayValue(value));
+        }
+        String list = String.join(", ", rendered);
+        boolean pluralList = rendered.size() > 1;
+        String label = answerLabel(goal);
+        if (label != null) {
+            String noun = label;
+            if (pluralList && !isPlural(noun)) {
+                noun = noun + "s";
+            }
+            String verb = pluralList ? "were" : "was";
+            return "The " + noun + " " + verb + " " + list + ".";
+        }
+        if (pluralList) {
+            return "The answers were " + list + ".";
+        }
+        return "The answer was " + list + ".";
+    }
+
     private boolean isPlural(String text) {
         if (text == null || text.isBlank()) {
             return false;
@@ -1654,6 +1692,28 @@ final class AnswerComposer {
         String[] tokens = normalized.split("\\s+");
         String last = tokens[tokens.length - 1];
         return last.endsWith("s") && !last.endsWith("ss");
+    }
+
+    private String answerLabel(QueryGoal goal) {
+        if (goal == null) {
+            return null;
+        }
+        String candidate = goal.expectedType();
+        if (candidate == null || candidate.isBlank()) {
+            candidate = goal.entityType();
+        }
+        if (candidate == null || candidate.isBlank()) {
+            return null;
+        }
+        String label = displayValue(candidate);
+        if (label.isBlank()) {
+            return null;
+        }
+        String normalized = label.toLowerCase(Locale.ROOT).trim();
+        if ("entity".equals(normalized) || "concept".equals(normalized)) {
+            return null;
+        }
+        return label;
     }
 
     private SymbolId selectBestRecoveryAgent(ExplanationCandidate candidate, SymbolId target) {

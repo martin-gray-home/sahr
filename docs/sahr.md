@@ -215,6 +215,17 @@ Relationship chain extraction now recognizes common spatial predicates
 so relationship questions remain answerable even without forward-chain search.
 The head ontology now defines a `Component` class with labels, allowing
 expected-type resolution to come from OWL rather than raw string cues.
+Temporal predicates in `sahr-relations.ttl` now include semantic
+templates (e.g., `verb:occur;prep:during`) so SimpleNLG renders
+time relations without awkward verb inflection.
+SimpleNLG subject agreement now sets clause-level plural features for
+common cases (e.g., “reaction wheels contain …”), and fallback predicate text
+like “powered by” is normalized into semantic templates to avoid awkward
+surface forms.
+Entity-only answers now render as short sentences using the goal’s expected
+type when available, avoiding raw `entity:` identifiers in user-visible output.
+Generic labels like “entity” and “concept” are treated as unknown and fall
+back to a neutral “The answer was …” phrasing.
 
 Temporal failure queries that ask for “component” now use ontology-backed
 expected types (via the “component” class label) and goal fields to select a

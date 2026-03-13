@@ -1192,12 +1192,22 @@ public final class SahrAgent {
                 directMatches = answerRanker.filterEchoValues(directMatches, goal);
                 directMatches = answerRanker.rankAnswerValues(directMatches);
                 if (directMatches.size() == 1) {
-                    return directMatches.get(0);
+                    String value = directMatches.get(0);
+                    if (isEntityValue(value)) {
+                        return answerComposer.renderEntityAnswer(value, goal);
+                    }
+                    return value;
+                }
+                if (directMatches.stream().allMatch(this::isEntityValue)) {
+                    return answerComposer.renderEntityList(directMatches, goal);
                 }
                 return String.join(", ", directMatches);
             }
             String ruleMatch = directRuleMatch(goal);
             if (ruleMatch != null) {
+                if (isEntityValue(ruleMatch)) {
+                    return answerComposer.renderEntityAnswer(ruleMatch, goal);
+                }
                 return ruleMatch;
             }
             String whereFallback = directWhereMatch(goal);
@@ -1208,7 +1218,14 @@ public final class SahrAgent {
         }
         ReasoningCandidate winner = answerRanker.selectBestAnswerCandidate(answers);
         recordAnswerIfPossible(goal, winner.payload());
-        return winner.payload() == null ? "No payload." : winner.payload().toString();
+        if (winner.payload() == null) {
+            return "No payload.";
+        }
+        String payload = winner.payload().toString();
+        if (isEntityValue(payload)) {
+            return answerComposer.renderEntityAnswer(payload, goal);
+        }
+        return payload;
     }
 
     private java.util.List<String> directRelationMatches(QueryGoal goal) {
@@ -1378,7 +1395,7 @@ public final class SahrAgent {
         }
         String temporalFailure = answerComposer.resolveTemporalComponentFailure(goal);
         if (temporalFailure != null) {
-            return temporalFailure;
+            return answerComposer.renderEntityAnswer(temporalFailure, goal);
         }
         if ("before".equals(predicate) || "after".equals(predicate) || "during".equals(predicate)) {
             return directTemporalMatch(predicate, goal);
@@ -1388,7 +1405,14 @@ public final class SahrAgent {
             baseMatches = answerRanker.filterEchoValues(baseMatches, goal);
             baseMatches = answerRanker.rankAnswerValues(baseMatches);
             if (baseMatches.size() == 1) {
-                return baseMatches.get(0);
+                String value = baseMatches.get(0);
+                if (isEntityValue(value)) {
+                    return answerComposer.renderEntityAnswer(value, goal);
+                }
+                return value;
+            }
+            if (baseMatches.stream().allMatch(this::isEntityValue)) {
+                return answerComposer.renderEntityList(baseMatches, goal);
             }
             return String.join(", ", baseMatches);
         }
@@ -1420,7 +1444,24 @@ public final class SahrAgent {
         if (matches.isEmpty()) {
             return "No candidates produced.";
         }
-        return answerRanker.rankAnswerValues(matches).get(0);
+        java.util.List<String> ranked = answerRanker.rankAnswerValues(matches);
+        if (ranked.isEmpty()) {
+            return "No candidates produced.";
+        }
+        if (ranked.size() == 1 && isEntityValue(ranked.get(0))) {
+            return answerComposer.renderEntityAnswer(ranked.get(0), goal);
+        }
+        if (ranked.stream().allMatch(this::isEntityValue)) {
+            return answerComposer.renderEntityList(ranked, goal);
+        }
+        return ranked.get(0);
+    }
+
+    private boolean isEntityValue(String value) {
+        if (value == null) {
+            return false;
+        }
+        return value.startsWith("entity:") || value.startsWith("concept:");
     }
 
     private SymbolId selectCauseNode(RelationAssertion antecedent) {

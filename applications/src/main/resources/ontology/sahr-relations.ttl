@@ -1,6 +1,7 @@
 @prefix sahr: <https://sahr.ai/ontology/relations#> .
 @prefix head: <https://sahr.ai/ontology/head#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ann: <https://sahr.ai/ontology/annotations#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
 <https://sahr.ai/ontology/relations>
@@ -222,16 +223,19 @@ sahr:before a owl:ObjectProperty ;
     rdfs:label "earlier than" ;
     a owl:TransitiveProperty ;
     owl:inverseOf sahr:after ;
-    rdfs:subPropertyOf sahr:temporalRelation .
+    rdfs:subPropertyOf sahr:temporalRelation ;
+    ann:answerTemplate "verb:occur;prep:before" .
 
 sahr:after a owl:ObjectProperty ;
     rdfs:label "after" ;
     rdfs:label "following" ;
     a owl:TransitiveProperty ;
-    rdfs:subPropertyOf sahr:temporalRelation .
+    rdfs:subPropertyOf sahr:temporalRelation ;
+    ann:answerTemplate "verb:occur;prep:after" .
 
 sahr:during a owl:ObjectProperty ;
     rdfs:label "during" ;
     rdfs:label "while" ;
     rdfs:label "within" ;
-    rdfs:subPropertyOf sahr:temporalRelation .
+    rdfs:subPropertyOf sahr:temporalRelation ;
+    ann:answerTemplate "verb:occur;prep:during" .
