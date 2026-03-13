@@ -1005,6 +1005,11 @@ final class AnswerComposer {
             mentionAliases.addAll(aliasBridge.expandAliasSymbols(mention));
         }
         LinkedHashSet<SymbolId> typedSubjects = new LinkedHashSet<>();
+        for (EntityNode entity : graph.getAllEntities()) {
+            if (entityMatchesMentionType(entity, mentionAliases)) {
+                typedSubjects.add(entity.id());
+            }
+        }
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             if (!PREDICATE_TYPE.equals(assertion.predicate())) {
                 continue;
@@ -1054,6 +1059,26 @@ final class AnswerComposer {
                 + displayValue(surviveResource) + " remains available, then "
                 + displayValue(failing) + " may fail while "
                 + displayValue(surviving) + " can operate.";
+    }
+
+    String relationMatchFallbackAnswer(QueryGoal goal) {
+        if (wantsDependencyContrast(goal)) {
+            String contrast = dependencyContrastAnswer(goal);
+            if (contrast != null) {
+                return contrast;
+            }
+        }
+        if (wantsConditionContrast(goal)) {
+            String contrast = conditionContrastAnswer(goal);
+            if (contrast != null) {
+                return contrast;
+            }
+        }
+        String dependencyList = dependencyFailureListAnswer(goal);
+        if (dependencyList != null) {
+            return dependencyList;
+        }
+        return null;
     }
 
     private String conditionContrastByResources(QueryGoal goal) {
@@ -1302,6 +1327,9 @@ final class AnswerComposer {
 
     private String evidenceSignalAnswer(QueryGoal goal) {
         if (!wantsEvidenceSignal(goal)) {
+            return null;
+        }
+        if (wantsChainExplanation(goal) || wantsEvidenceAlignedChain(goal)) {
             return null;
         }
         SymbolId outcome = selectPrimaryOutcomeCandidate();
@@ -1557,22 +1585,21 @@ final class AnswerComposer {
         if (componentFailure == null) {
             componentFailure = selectBestSpecific(candidate.componentFailures(), true);
         }
+        List<SymbolId> failureChain = new ArrayList<>();
         if (candidate.componentFailures().isEmpty()) {
             List<SymbolId> subsystemTop = selectTopSpecific(subsystemFailures, 2, true, null);
-            for (SymbolId failure : subsystemTop) {
-                sentences.add(formatFailureSentence(failure));
-            }
+            failureChain.addAll(subsystemTop);
         } else {
-            if (componentFailure != null) {
-                sentences.add(formatFailureSentence(componentFailure));
-            }
+            List<SymbolId> componentTop = selectTopSpecific(candidate.componentFailures(), 2, true, null);
+            failureChain.addAll(componentTop);
             if (subsystemFailure == null) {
                 subsystemFailure = selectBestSpecificExcluding(subsystemFailures, componentFailure, true);
             }
-            if (subsystemFailure != null && !subsystemFailure.equals(componentFailure)) {
-                sentences.add(formatFailureSentence(subsystemFailure));
+            if (subsystemFailure != null && !failureChain.contains(subsystemFailure)) {
+                failureChain.add(subsystemFailure);
             }
         }
+        appendFailureChain(sentences, failureChain);
         SymbolId capabilityLoss = selectBestSpecific(candidate.capabilityLosses(), false);
         if (capabilityLoss != null) {
             sentences.add(formatCapabilityLossSentence(capabilityLoss));
@@ -1856,6 +1883,50 @@ final class AnswerComposer {
             return answerRenderer.formatAssertionSentence(assertion);
         }
         return "Failure: " + displayValue(subject) + ".";
+    }
+
+    private void appendFailureChain(List<String> sentences, List<SymbolId> failures) {
+        if (failures == null || failures.isEmpty()) {
+            return;
+        }
+        SymbolId first = failures.get(0);
+        if (first != null) {
+            sentences.add("The " + displayValue(first) + " failed.");
+        }
+        for (int i = 1; i < failures.size(); i++) {
+            SymbolId failure = failures.get(i);
+            if (failure == null) {
+                continue;
+            }
+            sentences.add("This caused the " + displayValue(failure) + " to fail.");
+        }
+    }
+
+    private boolean entityMatchesMentionType(EntityNode entity, List<SymbolId> mentionAliases) {
+        if (entity == null || mentionAliases == null || mentionAliases.isEmpty()) {
+            return false;
+        }
+        Set<String> types = entity.conceptTypes();
+        if (types == null || types.isEmpty()) {
+            return false;
+        }
+        for (SymbolId mention : mentionAliases) {
+            String mentionValue = mention.value();
+            for (String type : types) {
+                if (type.equals(mentionValue)) {
+                    return true;
+                }
+                String normalizedType = support.normalizeTypeToken(type);
+                String normalizedMention = support.normalizeTypeToken(mentionValue);
+                if (normalizedType.equals(normalizedMention)) {
+                    return true;
+                }
+                if (ontology.isSubclassOf(type, mentionValue)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private String formatCapabilityLossSentence(SymbolId subject) {

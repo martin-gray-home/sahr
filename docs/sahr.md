@@ -205,6 +205,10 @@ re-running interpretation heads.
 • Evidence-signal answers now fall back to ontology label matches in the input, allowing signal selection even when the chain lacks explicit precursor evidence.
 • Evidence-signal questions now route through evidence-signal selection even when they arrive as relation-match plans, keeping telemetry prompts from devolving to empty relation matches.
 • Root-cause component answers use an explicit answer role for clearer phrasing (e.g., “The most likely failed component was …”).
+• Structured cause chains now render failure steps with simple causal connectors (“This caused … to fail”), improving generic explanation readability.
+• Evidence-signal routing now avoids overriding chain/explanation questions, keeping “best explanation” prompts on the causal-chain path.
+• Relation-match execution now consults condition/dependency contrast fallbacks before returning empty matches, improving conditional dependency answers.
+• Dependency-contrast matching now treats ontology subclass/type membership as evidence for group membership when collecting dependency facts.
 • Resource-availability and dependency-contrast questions now detect resource mentions from ontology labels in the raw input, improving conditional dependency answers without hard-coded domain strings.
 
 # Recent Updates (2026-03-12)

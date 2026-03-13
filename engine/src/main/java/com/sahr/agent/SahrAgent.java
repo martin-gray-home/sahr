@@ -1171,6 +1171,10 @@ public final class SahrAgent {
         if (evidenceSignal != null) {
             return evidenceSignal;
         }
+        String contrast = answerComposer.relationMatchFallbackAnswer(goal);
+        if (contrast != null) {
+            return contrast;
+        }
         String relationship = answerComposer.relationshipAnswer(goal);
         if (relationship != null && !relationship.isBlank()) {
             return relationship;
