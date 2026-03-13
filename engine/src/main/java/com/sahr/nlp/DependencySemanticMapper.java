@@ -48,6 +48,7 @@ public final class DependencySemanticMapper {
         addTemporalCandidates(graph, helpers, candidates);
         addPossessiveCandidates(graph, helpers, candidates);
         addAdjectiveCandidates(graph, helpers, candidates);
+        addAdjectiveComplementCandidates(graph, helpers, candidates);
         addAdverbCandidates(graph, helpers, candidates);
         return dedupe(candidates);
     }
@@ -146,6 +147,29 @@ public final class DependencySemanticMapper {
             CoreLabel noun = edge.getGovernor().backingLabel();
             CoreLabel adjective = edge.getDependent().backingLabel();
             String subjectToken = helpers.normalizeCompoundToken(graph, noun);
+            String objectToken = helpers.normalizeToken(adjective.word());
+            if (subjectToken.isEmpty() || objectToken.isEmpty()) {
+                continue;
+            }
+            out.add(helpers.buildStatement(subjectToken, objectToken, "hasAttribute", false));
+        }
+    }
+
+    private void addAdjectiveComplementCandidates(SemanticGraph graph, StatementParserHelpers helpers, List<Statement> out) {
+        for (SemanticGraphEdge edge : graph.edgeIterable()) {
+            String relation = edge.getRelation().getShortName();
+            if (!"acomp".equals(relation) && !"xcomp".equals(relation)) {
+                continue;
+            }
+            CoreLabel adjective = edge.getDependent().backingLabel();
+            CoreLabel subject = helpers.findDependent(graph, edge.getGovernor(), "nsubj");
+            if (subject == null) {
+                subject = helpers.findDependent(graph, edge.getGovernor(), "nsubjpass");
+            }
+            if (subject == null) {
+                continue;
+            }
+            String subjectToken = helpers.normalizeCompoundToken(graph, subject);
             String objectToken = helpers.normalizeToken(adjective.word());
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;

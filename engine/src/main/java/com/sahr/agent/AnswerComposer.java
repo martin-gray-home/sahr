@@ -1069,6 +1069,10 @@ final class AnswerComposer {
             }
         }
         if (wantsConditionContrast(goal)) {
+            String survivors = contrastiveSurvivorAnswer(goal);
+            if (survivors != null) {
+                return survivors;
+            }
             String contrast = conditionContrastAnswer(goal);
             if (contrast != null) {
                 return contrast;
@@ -1079,6 +1083,86 @@ final class AnswerComposer {
             return dependencyList;
         }
         return null;
+    }
+
+    private String contrastiveSurvivorAnswer(QueryGoal goal) {
+        List<SymbolId> resources = resourceMentions(goal);
+        if (resources.size() < 2) {
+            return null;
+        }
+        SymbolId failResource = null;
+        SymbolId surviveResource = null;
+        for (SymbolId resource : resources) {
+            int status = resourceAvailability(resource);
+            if (status < 0 && failResource == null) {
+                failResource = resource;
+            } else if (status > 0 && surviveResource == null) {
+                surviveResource = resource;
+            }
+        }
+        if (failResource == null || surviveResource == null) {
+            return null;
+        }
+        List<SymbolId> failDependents = entitiesDependingOn(failResource);
+        List<SymbolId> surviveDependents = entitiesDependingOn(surviveResource);
+        if (surviveDependents.isEmpty()) {
+            return null;
+        }
+        LinkedHashSet<SymbolId> survivors = new LinkedHashSet<>();
+        for (SymbolId candidate : surviveDependents) {
+            if (candidate == null) {
+                continue;
+            }
+            if (failDependents.contains(candidate)) {
+                continue;
+            }
+            if (!matchesExpectedType(candidate, goal)) {
+                continue;
+            }
+            survivors.add(candidate);
+        }
+        if (survivors.isEmpty()) {
+            return null;
+        }
+        List<String> values = new ArrayList<>();
+        for (SymbolId survivor : survivors) {
+            values.add(survivor.value());
+        }
+        return renderEntityList(values, goal);
+    }
+
+    private boolean matchesExpectedType(SymbolId candidate, QueryGoal goal) {
+        if (candidate == null || goal == null) {
+            return true;
+        }
+        String expected = goal.expectedType();
+        if (expected == null || expected.isBlank()) {
+            expected = goal.entityType();
+        }
+        if (expected == null || expected.isBlank()) {
+            return true;
+        }
+        EntityNode entity = graph.findEntity(candidate).orElse(null);
+        if (entity == null) {
+            return true;
+        }
+        Set<String> types = entity.conceptTypes();
+        if (types == null || types.isEmpty()) {
+            return true;
+        }
+        String normalizedExpected = support.normalizeTypeToken(expected);
+        for (String type : types) {
+            if (type.equals(expected)) {
+                return true;
+            }
+            if (support.normalizeTypeToken(type).equals(normalizedExpected)) {
+                return true;
+            }
+            if (ontology.isSubclassOf(type, expected)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String conditionContrastByResources(QueryGoal goal) {
@@ -1126,22 +1210,146 @@ final class AnswerComposer {
         if (resource == null) {
             return 0;
         }
+        int status = resourceAvailabilityFromAssertions(resource);
+        if (status != 0) {
+            return status;
+        }
+        return resourceAvailabilityFromInput(resource);
+    }
+
+    private int resourceAvailabilityFromAssertions(SymbolId resource) {
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (!resource.equals(assertion.subject())) {
+                continue;
+            }
+            String predicate = support.localName(assertion.predicate());
+            if ("available".equals(predicate)) {
+                return 1;
+            }
+            if ("unavailable".equals(predicate)) {
+                return -1;
+            }
+            if ("hasattribute".equals(predicate) || "hasAttribute".equals(predicate)) {
+                if (hasSemanticRole(assertion.object(), "resource_available")) {
+                    return 1;
+                }
+                if (hasSemanticRole(assertion.object(), "resource_unavailable")) {
+                    return -1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    private int resourceAvailabilityFromInput(SymbolId resource) {
         String input = support.lastInput();
         if (input == null || input.isBlank()) {
             return 0;
         }
         String normalized = input.toLowerCase(Locale.ROOT);
-        String label = displayValue(resource).toLowerCase(Locale.ROOT);
-        if (!normalized.contains(label)) {
+        List<Integer> resourcePositions = labelPositions(normalized, resourceLabels(resource));
+        if (resourcePositions.isEmpty()) {
             return 0;
         }
-        if (containsCue(normalized, "lost", "drop", "drops", "dropped", "down", "unavailable")) {
-            return -1;
+        List<StateMarker> markers = stateMarkers(normalized);
+        if (markers.isEmpty()) {
+            return 0;
         }
-        if (containsCue(normalized, "available", "operational", "functional", "normal", "remained")) {
-            return 1;
+        int bestDistance = Integer.MAX_VALUE;
+        int bestStatus = 0;
+        for (int resourcePos : resourcePositions) {
+            for (StateMarker marker : markers) {
+                int distance = Math.abs(resourcePos - marker.position());
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestStatus = marker.status();
+                }
+            }
         }
-        return 0;
+        return bestStatus;
+    }
+
+    private record StateMarker(int position, int status) {}
+
+    private List<StateMarker> stateMarkers(String input) {
+        List<StateMarker> markers = new ArrayList<>();
+        for (EntityNode entity : graph.getAllEntities()) {
+            SymbolId id = entity.id();
+            int status = 0;
+            if (hasSemanticRole(id, "resource_available")) {
+                status = 1;
+            } else if (hasSemanticRole(id, "resource_unavailable")) {
+                status = -1;
+            }
+            if (status == 0) {
+                continue;
+            }
+            for (String label : labelsForSymbol(id)) {
+                for (int pos : labelPositions(input, label)) {
+                    markers.add(new StateMarker(pos, status));
+                }
+            }
+        }
+        return markers;
+    }
+
+    private List<String> resourceLabels(SymbolId resource) {
+        List<String> labels = new ArrayList<>();
+        labels.add(displayValue(resource));
+        String iri = resolveEntityIri(resource);
+        if (iri != null) {
+            labels.addAll(annotationResolver.labelsForIri(iri));
+        }
+        return labels;
+    }
+
+    private List<String> labelsForSymbol(SymbolId id) {
+        List<String> labels = new ArrayList<>();
+        labels.add(displayValue(id));
+        String iri = resolveEntityIri(id);
+        if (iri != null) {
+            labels.addAll(annotationResolver.labelsForIri(iri));
+        }
+        return labels;
+    }
+
+    private List<Integer> labelPositions(String input, List<String> labels) {
+        List<Integer> positions = new ArrayList<>();
+        if (labels == null) {
+            return positions;
+        }
+        for (String label : labels) {
+            if (label == null || label.isBlank()) {
+                continue;
+            }
+            positions.addAll(labelPositions(input, label));
+        }
+        return positions;
+    }
+
+    private List<Integer> labelPositions(String input, String label) {
+        List<Integer> positions = new ArrayList<>();
+        if (input == null || input.isBlank() || label == null || label.isBlank()) {
+            return positions;
+        }
+        String normalized = label.toLowerCase(Locale.ROOT).trim();
+        if (normalized.isBlank()) {
+            return positions;
+        }
+        int index = input.indexOf(normalized);
+        while (index >= 0) {
+            positions.add(index);
+            index = input.indexOf(normalized, index + normalized.length());
+        }
+        String token = annotationResolver.normalizeLabelToToken(normalized).replace('_', ' ');
+        if (!token.isBlank() && !token.equals(normalized)) {
+            index = input.indexOf(token);
+            while (index >= 0) {
+                positions.add(index);
+                index = input.indexOf(token, index + token.length());
+            }
+        }
+        return positions;
     }
 
     private SymbolId firstDependencyResource(SymbolId entity) {
@@ -1162,9 +1370,6 @@ final class AnswerComposer {
 
     private String dependencyFailureListAnswer(QueryGoal goal) {
         if (goal == null) {
-            return null;
-        }
-        if (!expectsTypeLabel(goal, "system") && !expectsTypeLabel(goal, "actuator")) {
             return null;
         }
         List<SymbolId> resources = resourceMentions(goal);
@@ -1258,13 +1463,20 @@ final class AnswerComposer {
         if (resource == null) {
             return dependents;
         }
+        String resourceIri = resolveEntityIri(resource);
         for (RelationAssertion assertion : graph.getAllAssertions()) {
-            if (!resource.equals(assertion.object())) {
-                continue;
-            }
             String predicate = support.localName(assertion.predicate());
             if ("poweredby".equals(predicate) || "require".equals(predicate) || "requires".equals(predicate)) {
-                dependents.add(assertion.subject());
+                if (resource.equals(assertion.object())) {
+                    dependents.add(assertion.subject());
+                    continue;
+                }
+                if (resourceIri != null) {
+                    String objectIri = resolveEntityIri(assertion.object());
+                    if (resourceIri.equals(objectIri)) {
+                        dependents.add(assertion.subject());
+                    }
+                }
             }
         }
         return dependents;
@@ -1600,6 +1812,11 @@ final class AnswerComposer {
             }
         }
         appendFailureChain(sentences, failureChain);
+        List<String> expandedChain = expandFailureChainIfShort(sentences, precursor, failureChain, outcomeTarget);
+        if (expandedChain != null) {
+            sentences.clear();
+            sentences.addAll(expandedChain);
+        }
         SymbolId capabilityLoss = selectBestSpecific(candidate.capabilityLosses(), false);
         if (capabilityLoss != null) {
             sentences.add(formatCapabilityLossSentence(capabilityLoss));
@@ -1900,6 +2117,32 @@ final class AnswerComposer {
             }
             sentences.add("This caused the " + displayValue(failure) + " to fail.");
         }
+    }
+
+    private List<String> expandFailureChainIfShort(List<String> sentences,
+                                                   SymbolId precursor,
+                                                   List<SymbolId> failures,
+                                                   SymbolId outcomeTarget) {
+        if (failures == null || failures.isEmpty()) {
+            return null;
+        }
+        if (sentences.size() > 2) {
+            return null;
+        }
+        SymbolId firstFailure = failures.get(0);
+        if (firstFailure == null || outcomeTarget == null) {
+            return null;
+        }
+        ForwardChainSearch.ChainResult result = forwardChainSearch.search(firstFailure, outcomeTarget, 3);
+        if (result == null || result.sentences() == null || result.sentences().size() <= sentences.size()) {
+            return null;
+        }
+        List<String> expanded = new ArrayList<>();
+        if (precursor != null) {
+            expanded.add(roleSentence("Precursor signal", precursor));
+        }
+        expanded.addAll(result.sentences());
+        return expanded;
     }
 
     private boolean entityMatchesMentionType(EntityNode entity, List<SymbolId> mentionAliases) {

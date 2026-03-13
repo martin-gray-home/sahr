@@ -1,0 +1,25 @@
+@prefix sahr: <https://sahr.ai/ontology/states#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ann: <https://sahr.ai/ontology/annotations#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+<https://sahr.ai/ontology/states>
+    a owl:Ontology ;
+    rdfs:label "SAHR States" .
+
+sahr:Available a owl:NamedIndividual ;
+    rdfs:label "available" ;
+    skos:altLabel "operational" ;
+    skos:altLabel "functional" ;
+    skos:altLabel "still operational" ;
+    skos:altLabel "remains operational" ;
+    skos:altLabel "remained operational" ;
+    ann:semanticRole "resource_available" .
+
+sahr:Unavailable a owl:NamedIndividual ;
+    rdfs:label "unavailable" ;
+    skos:altLabel "lost" ;
+    skos:altLabel "down" ;
+    skos:altLabel "offline" ;
+    ann:semanticRole "resource_unavailable" .

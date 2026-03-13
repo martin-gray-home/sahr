@@ -209,6 +209,13 @@ re-running interpretation heads.
 • Evidence-signal routing now avoids overriding chain/explanation questions, keeping “best explanation” prompts on the causal-chain path.
 • Relation-match execution now consults condition/dependency contrast fallbacks before returning empty matches, improving conditional dependency answers.
 • Dependency-contrast matching now treats ontology subclass/type membership as evidence for group membership when collecting dependency facts.
+• Cause-chain assembly now expands very short chains via forward-chaining when a more complete failure-to-outcome path exists.
+• Dependency list answers now return whenever resource mentions are present, even if the expected type is missing, to better handle conditional dependency questions.
+• Dependency matching now treats resource labels as equivalent when their ontology IRI matches, allowing “electrical bus” and “electrical power” to resolve to the same dependency target.
+• Condition-contrast questions now prefer a survivor-selection answer when both failing and surviving resources are mentioned.
+• Cause-chain assembly no longer truncates after short forward-chain expansion; capability and outcome lines now remain attached.
+• Resource availability now derives from ontology-defined state labels (available/unavailable) rather than raw lexical cues, enabling contrastive survivor selection without hard-coded phrasing.
+• Added `sahr-states.ttl` for ontology-defined resource state labels (available/unavailable variants).
 • Resource-availability and dependency-contrast questions now detect resource mentions from ontology labels in the raw input, improving conditional dependency answers without hard-coded domain strings.
 
 # Recent Updates (2026-03-12)
