@@ -199,6 +199,11 @@ re-running interpretation heads.
 
 ---
 
+# Recent Updates (2026-03-13)
+
+• Evidence-signal answers now treat “telemetry” as a valid cue alongside “signal,” so telemetry prompt variants map to evidence-signal selection.
+• Resource-availability and dependency-contrast questions now detect resource mentions from ontology labels in the raw input, improving conditional dependency answers without hard-coded domain strings.
+
 # Recent Updates (2026-03-12)
 
 Answer composition moved further out of `SahrAgent` and into `AnswerComposer`,

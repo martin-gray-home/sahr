@@ -117,6 +117,14 @@ final class AnswerComposer {
                 return backupExplanation;
             }
         }
+        String evidenceSignal = evidenceSignalAnswer(goal);
+        if (evidenceSignal != null) {
+            return evidenceSignal;
+        }
+        String dependencyList = dependencyFailureListAnswer(goal);
+        if (dependencyList != null) {
+            return dependencyList;
+        }
         String relationship = relationshipAnswer(goal);
         if (relationship != null && !relationship.isBlank()) {
             return relationship;
@@ -990,12 +998,21 @@ final class AnswerComposer {
         for (SymbolId mention : mentions) {
             mentionAliases.addAll(aliasBridge.expandAliasSymbols(mention));
         }
+        LinkedHashSet<SymbolId> typedSubjects = new LinkedHashSet<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (!PREDICATE_TYPE.equals(assertion.predicate())) {
+                continue;
+            }
+            if (mentionAliases.contains(assertion.object())) {
+                typedSubjects.add(assertion.subject());
+            }
+        }
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String predicate = support.localName(assertion.predicate());
             if (!"poweredby".equals(predicate) && !"require".equals(predicate) && !"requires".equals(predicate)) {
                 continue;
             }
-            if (mentionAliases.contains(assertion.subject())) {
+            if (mentionAliases.contains(assertion.subject()) || typedSubjects.contains(assertion.subject())) {
                 dependencySentences.add(answerRenderer.formatAssertionSentence(assertion));
             }
         }
@@ -1018,7 +1035,7 @@ final class AnswerComposer {
     private String conditionContrastAnswer(QueryGoal goal) {
         List<SymbolId> mentions = extractMentionedEntities(goal);
         if (mentions.size() < 2) {
-            return null;
+            return conditionContrastByResources(goal);
         }
         SymbolId failing = mentions.get(0);
         SymbolId surviving = mentions.get(1);
@@ -1031,6 +1048,69 @@ final class AnswerComposer {
                 + displayValue(surviveResource) + " remains available, then "
                 + displayValue(failing) + " may fail while "
                 + displayValue(surviving) + " can operate.";
+    }
+
+    private String conditionContrastByResources(QueryGoal goal) {
+        List<SymbolId> resources = resourceMentions(goal);
+        if (resources.size() < 2) {
+            return null;
+        }
+        SymbolId failResource = null;
+        SymbolId surviveResource = null;
+        for (SymbolId resource : resources) {
+            int status = resourceAvailability(resource);
+            if (status < 0 && failResource == null) {
+                failResource = resource;
+            } else if (status > 0 && surviveResource == null) {
+                surviveResource = resource;
+            }
+        }
+        if (failResource == null || surviveResource == null) {
+            failResource = resources.get(0);
+            surviveResource = resources.get(1);
+        }
+        List<SymbolId> failDependents = entitiesDependingOn(failResource);
+        List<SymbolId> surviveDependents = entitiesDependingOn(surviveResource);
+        SymbolId surviving = selectBestSpecific(surviveDependents, true);
+        if (surviving == null) {
+            return null;
+        }
+        SymbolId failing = null;
+        for (SymbolId candidate : failDependents) {
+            if (candidate != null && !candidate.equals(surviving)) {
+                failing = candidate;
+                break;
+            }
+        }
+        if (failing == null) {
+            return null;
+        }
+        return "If " + displayValue(failResource) + " is unavailable but "
+                + displayValue(surviveResource) + " remains available, then "
+                + displayValue(failing) + " may fail while "
+                + displayValue(surviving) + " can operate.";
+    }
+
+    private int resourceAvailability(SymbolId resource) {
+        if (resource == null) {
+            return 0;
+        }
+        String input = support.lastInput();
+        if (input == null || input.isBlank()) {
+            return 0;
+        }
+        String normalized = input.toLowerCase(Locale.ROOT);
+        String label = displayValue(resource).toLowerCase(Locale.ROOT);
+        if (!normalized.contains(label)) {
+            return 0;
+        }
+        if (containsCue(normalized, "lost", "drop", "drops", "dropped", "down", "unavailable")) {
+            return -1;
+        }
+        if (containsCue(normalized, "available", "operational", "functional", "normal", "remained")) {
+            return 1;
+        }
+        return 0;
     }
 
     private SymbolId firstDependencyResource(SymbolId entity) {
@@ -1047,6 +1127,116 @@ final class AnswerComposer {
             }
         }
         return null;
+    }
+
+    private String dependencyFailureListAnswer(QueryGoal goal) {
+        if (goal == null) {
+            return null;
+        }
+        if (!expectsTypeLabel(goal, "system") && !expectsTypeLabel(goal, "actuator")) {
+            return null;
+        }
+        List<SymbolId> resources = resourceMentions(goal);
+        if (resources.isEmpty()) {
+            return null;
+        }
+        LinkedHashSet<SymbolId> dependents = new LinkedHashSet<>();
+        for (SymbolId resource : resources) {
+            dependents.addAll(entitiesDependingOn(resource));
+        }
+        if (dependents.isEmpty()) {
+            return null;
+        }
+        List<String> values = new ArrayList<>();
+        for (SymbolId dependent : dependents) {
+            values.add(dependent.value());
+        }
+        return renderEntityList(values, goal);
+    }
+
+    private List<SymbolId> resourceMentions(QueryGoal goal) {
+        List<SymbolId> mentions = extractMentionedEntities(goal);
+        List<SymbolId> resources = new ArrayList<>();
+        for (SymbolId mention : mentions) {
+            if (hasSemanticRole(mention, "resource")) {
+                resources.add(mention);
+            }
+        }
+        if (!resources.isEmpty()) {
+            return resources;
+        }
+        String input = support.lastInput();
+        if (input == null || input.isBlank()) {
+            return resources;
+        }
+        String normalizedInput = input.toLowerCase(Locale.ROOT);
+        for (EntityNode entity : graph.getAllEntities()) {
+            SymbolId id = entity.id();
+            if (!hasSemanticRole(id, "resource")) {
+                continue;
+            }
+            if (inputMentionsSymbol(normalizedInput, id)) {
+                resources.add(id);
+            }
+        }
+        return resources;
+    }
+
+    private boolean inputMentionsSymbol(String normalizedInput, SymbolId id) {
+        if (normalizedInput == null || normalizedInput.isBlank() || id == null) {
+            return false;
+        }
+        String display = displayValue(id);
+        if (display != null && !display.isBlank()) {
+            String displayLower = display.toLowerCase(Locale.ROOT);
+            if (normalizedInput.contains(displayLower)) {
+                return true;
+            }
+            String displayToken = annotationResolver.normalizeLabelToToken(display);
+            if (!displayToken.isBlank() && normalizedInput.contains(displayToken.replace('_', ' '))) {
+                return true;
+            }
+        }
+        String value = id.value();
+        List<String> iris = new ArrayList<>();
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            iris.add(value);
+        } else {
+            iris.addAll(annotationResolver.entityIrisByLabel(annotationResolver.normalizeLabelToToken(value)));
+        }
+        for (String iri : iris) {
+            for (String label : annotationResolver.labelsForIri(iri)) {
+                if (label == null || label.isBlank()) {
+                    continue;
+                }
+                String labelLower = label.toLowerCase(Locale.ROOT);
+                if (normalizedInput.contains(labelLower)) {
+                    return true;
+                }
+                String token = annotationResolver.normalizeLabelToToken(label);
+                if (!token.isBlank() && normalizedInput.contains(token.replace('_', ' '))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private List<SymbolId> entitiesDependingOn(SymbolId resource) {
+        List<SymbolId> dependents = new ArrayList<>();
+        if (resource == null) {
+            return dependents;
+        }
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            if (!resource.equals(assertion.object())) {
+                continue;
+            }
+            String predicate = support.localName(assertion.predicate());
+            if ("poweredby".equals(predicate) || "require".equals(predicate) || "requires".equals(predicate)) {
+                dependents.add(assertion.subject());
+            }
+        }
+        return dependents;
     }
 
     private boolean wantsRecoveryAgent(QueryGoal goal, String predicate) {
@@ -1102,6 +1292,142 @@ final class AnswerComposer {
             }
         }
         return best == null ? null : String.join("\n", best.sentences());
+    }
+
+    private String evidenceSignalAnswer(QueryGoal goal) {
+        if (!wantsEvidenceSignal(goal)) {
+            return null;
+        }
+        SymbolId outcome = selectPrimaryOutcomeCandidate();
+        ExplanationCandidate candidate = outcome == null ? null : explanationChains.buildExplanationCandidate(outcome, 4);
+        SymbolId signal = selectBestEvidenceSignal(candidate);
+        if (signal == null) {
+            signal = selectEvidenceSignalFromGraph();
+        }
+        return signal == null ? null : renderEntityAnswer(signal.value(), goal);
+    }
+
+    private boolean wantsEvidenceSignal(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        if (expectsTypeLabel(goal, "signal") || expectsTypeLabel(goal, "telemetry")) {
+            return true;
+        }
+        for (String fragment : goalTextFragments(goal)) {
+            if (fragment == null) {
+                continue;
+            }
+            String normalized = fragment.toLowerCase(Locale.ROOT);
+            if (normalized.contains("signal") || normalized.contains("telemetry")) {
+                return true;
+            }
+        }
+        return containsCue(support.lastInput(), "signal", "telemetry");
+    }
+
+    private SymbolId selectBestEvidenceSignal(ExplanationCandidate candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        List<SymbolId> candidates = new ArrayList<>();
+        candidates.addAll(candidate.precursorSignals());
+        candidates.addAll(candidate.evidenceNodes());
+        SymbolId best = null;
+        double bestScore = -1.0;
+        for (SymbolId signal : candidates) {
+            if (signal == null) {
+                continue;
+            }
+            if (!hasSemanticRole(signal, "evidence_signal")) {
+                continue;
+            }
+            double score = answerRanker.specificityScore(signal.value());
+            if (best == null || score > bestScore) {
+                best = signal;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private SymbolId selectEvidenceSignalFromGraph() {
+        SymbolId best = null;
+        double bestScore = -1.0;
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            double weight = predicateEvidenceWeight(assertion.predicate());
+            if (weight <= 0.0) {
+                continue;
+            }
+            SymbolId subject = assertion.subject();
+            if (!hasSemanticRole(subject, "evidence_signal")) {
+                continue;
+            }
+            double score = weight + answerRanker.specificityScore(subject.value());
+            if (best == null || score > bestScore) {
+                best = subject;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private double predicateEvidenceWeight(String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return 0.0;
+        }
+        return annotationResolver.resolveObjectPropertyIri(predicate)
+                .flatMap(iri -> annotationResolver.annotationDouble(iri, com.sahr.ontology.SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
+                .orElse(0.0);
+    }
+
+    private SymbolId selectPrimaryOutcomeCandidate() {
+        List<SymbolId> outcomes = collectOutcomeCandidates();
+        if (outcomes.isEmpty()) {
+            return null;
+        }
+        return selectBestSpecific(outcomes, false);
+    }
+
+    private List<SymbolId> collectOutcomeCandidates() {
+        LinkedHashSet<SymbolId> outcomes = new LinkedHashSet<>();
+        for (RelationAssertion assertion : graph.getAllAssertions()) {
+            String predicate = support.localName(assertion.predicate());
+            if ("cause".equals(predicate)) {
+                if (hasSemanticRole(assertion.object(), "outcome")) {
+                    outcomes.add(assertion.object());
+                }
+            } else if ("causedby".equals(predicate)) {
+                if (hasSemanticRole(assertion.subject(), "outcome")) {
+                    outcomes.add(assertion.subject());
+                }
+            }
+        }
+        return new ArrayList<>(outcomes);
+    }
+
+    private SymbolId resolveOutcomeTarget(ExplanationCandidate candidate, SymbolId target, QueryGoal goal) {
+        if (target == null) {
+            return null;
+        }
+        if (hasSemanticRole(target, "control_target") || hasSemanticRole(target, "outcome")) {
+            return target;
+        }
+        if (hasSemanticRole(target, "evidence_signal") || hasSemanticRole(target, "temporal_marker")) {
+            SymbolId outcome = selectPrimaryOutcomeCandidate();
+            return outcome == null ? target : outcome;
+        }
+        if (answerRanker.isGenericLossValue(target.value())) {
+            SymbolId outcome = selectPrimaryOutcomeCandidate();
+            return outcome == null ? target : outcome;
+        }
+        if (wantsChainExplanation(goal) || wantsEvidenceAlignedChain(goal)) {
+            SymbolId outcome = selectPrimaryOutcomeCandidate();
+            if (outcome != null) {
+                return outcome;
+            }
+        }
+        return target;
     }
 
     private double evidenceAlignmentScore(ExplanationCandidate candidate,
@@ -1171,6 +1497,7 @@ final class AnswerComposer {
         if (target != null) {
             subsystemFailures.removeIf(target::equals);
         }
+        SymbolId outcomeTarget = resolveOutcomeTarget(candidate, target, goal);
         SymbolId precursor = selectBestSpecific(candidate.precursorSignals(), true);
         if (precursor != null) {
             sentences.add(roleSentence("Precursor signal", precursor));
@@ -1212,22 +1539,22 @@ final class AnswerComposer {
         if (capabilityLoss != null) {
             sentences.add(formatCapabilityLossSentence(capabilityLoss));
         }
-        if (capabilityLoss == null && wantsControlLoss(goal, target)) {
-            SymbolId fallbackLoss = target;
+        if (capabilityLoss == null && wantsControlLoss(goal, outcomeTarget)) {
+            SymbolId fallbackLoss = outcomeTarget;
             if (fallbackLoss != null) {
                 sentences.add(formatCapabilityLossSentence(fallbackLoss));
             }
         }
-        if (target != null) {
-            sentences.add(normalizeOutcomeLine(target));
+        if (outcomeTarget != null) {
+            sentences.add(normalizeOutcomeLine(outcomeTarget));
         }
-        if (shouldIncludeRecovery(goal, predicate, target) || wantsRecoveryClause(goal)) {
-            SymbolId agent = selectBestRecoveryAgent(candidate, target);
+        if (shouldIncludeRecovery(goal, predicate, outcomeTarget) || wantsRecoveryClause(goal)) {
+            SymbolId agent = selectBestRecoveryAgent(candidate, outcomeTarget);
             if (agent != null) {
-                sentences.add(formatRecoverySentence(agent, target));
+                sentences.add(formatRecoverySentence(agent, outcomeTarget));
             }
         }
-        appendEvidenceLines(candidate, componentFailure, subsystemFailure, target, evidenceAligned, sentences);
+        appendEvidenceLines(candidate, componentFailure, subsystemFailure, outcomeTarget, evidenceAligned, sentences);
         return sentences;
     }
 

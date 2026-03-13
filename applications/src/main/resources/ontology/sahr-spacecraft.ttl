@@ -42,6 +42,22 @@ sc:ElectricallyPoweredActuators a owl:NamedIndividual ;
     rdfs:label "electrically powered actuators" ;
     skos:altLabel "electrical actuators" .
 
+sc:ElectricalPower a owl:NamedIndividual ;
+    rdfs:label "electrical power" ;
+    skos:altLabel "electrical bus voltage" ;
+    skos:altLabel "electrical bus" ;
+    ann:semanticRole "resource" .
+
+sc:Propellant a owl:NamedIndividual ;
+    rdfs:label "propellant" ;
+    skos:altLabel "propellant systems" ;
+    ann:semanticRole "resource" .
+
+sc:SpacecraftInstability a owl:NamedIndividual ;
+    rdfs:label "spacecraft instability" ;
+    skos:altLabel "unstable" ;
+    ann:semanticRole "outcome" .
+
 sahr:fail ann:dynamicWeight "0.55"^^xsd:decimal ;
     ann:answerTemplateTrue "verb:fail" ;
     ann:answerTemplateFalse "verb:fail;negated:true" .
