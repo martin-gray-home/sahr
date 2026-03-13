@@ -203,6 +203,8 @@ re-running interpretation heads.
 
 • Evidence-signal answers now treat “telemetry” as a valid cue alongside “signal,” so telemetry prompt variants map to evidence-signal selection.
 • Evidence-signal answers now fall back to ontology label matches in the input, allowing signal selection even when the chain lacks explicit precursor evidence.
+• Evidence-signal questions now route through evidence-signal selection even when they arrive as relation-match plans, keeping telemetry prompts from devolving to empty relation matches.
+• Root-cause component answers use an explicit answer role for clearer phrasing (e.g., “The most likely failed component was …”).
 • Resource-availability and dependency-contrast questions now detect resource mentions from ontology labels in the raw input, improving conditional dependency answers without hard-coded domain strings.
 
 # Recent Updates (2026-03-12)

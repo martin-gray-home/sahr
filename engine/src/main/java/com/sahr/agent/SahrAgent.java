@@ -1167,6 +1167,10 @@ public final class SahrAgent {
     }
 
     private String executeRelationMatch(QueryGoal goal) {
+        String evidenceSignal = answerComposer.evidenceSignalAnswerIfApplicable(goal);
+        if (evidenceSignal != null) {
+            return evidenceSignal;
+        }
         String relationship = answerComposer.relationshipAnswer(goal);
         if (relationship != null && !relationship.isBlank()) {
             return relationship;
@@ -1395,7 +1399,7 @@ public final class SahrAgent {
         }
         String temporalFailure = answerComposer.resolveTemporalComponentFailure(goal);
         if (temporalFailure != null) {
-            return answerComposer.renderEntityAnswer(temporalFailure, goal);
+            return answerComposer.renderRootFailureComponent(temporalFailure, goal);
         }
         if ("before".equals(predicate) || "after".equals(predicate) || "during".equals(predicate)) {
             return directTemporalMatch(predicate, goal);

@@ -20,6 +20,12 @@ import java.util.Map;
 import java.util.Set;
 
 final class AnswerComposer {
+    private enum AnswerRole {
+        ROOT_FAILURE_COMPONENT,
+        EVIDENCE_SIGNAL,
+        RECOVERY_AGENT
+    }
+
     interface Support {
         String localName(String predicate);
         Boolean booleanConcept(SymbolId id);
@@ -154,7 +160,7 @@ final class AnswerComposer {
                 if (wantsRecoveryAgent(goal, predicate)) {
                     SymbolId agent = selectBestRecoveryAgent(candidate, target);
                     if (agent != null) {
-                        return renderEntityAnswer(agent.value(), goal);
+                        return renderEntityAnswer(agent.value(), goal, AnswerRole.RECOVERY_AGENT);
                     }
                 }
                 String explanation = summarizeRecoveryExplanation(goal, predicate, candidate, predicateExplanation);
@@ -1307,7 +1313,11 @@ final class AnswerComposer {
         if (signal == null) {
             signal = selectEvidenceSignalFromInput();
         }
-        return signal == null ? null : renderEntityAnswer(signal.value(), goal);
+        return signal == null ? null : renderEntityAnswer(signal.value(), goal, AnswerRole.EVIDENCE_SIGNAL);
+    }
+
+    String evidenceSignalAnswerIfApplicable(QueryGoal goal) {
+        return evidenceSignalAnswer(goal);
     }
 
     private boolean wantsEvidenceSignal(QueryGoal goal) {
@@ -1995,16 +2005,37 @@ final class AnswerComposer {
     }
 
     String renderEntityAnswer(String value, QueryGoal goal) {
+        return renderEntityAnswer(value, goal, null);
+    }
+
+    String renderEntityAnswer(String value, QueryGoal goal, AnswerRole role) {
         if (value == null || value.isBlank()) {
             return "No candidates produced.";
         }
         String display = displayValue(value);
+        if (role != null) {
+            switch (role) {
+                case ROOT_FAILURE_COMPONENT -> {
+                    return "The most likely failed component was " + display + ".";
+                }
+                case EVIDENCE_SIGNAL -> {
+                    return "The earlier signal was " + display + ".";
+                }
+                case RECOVERY_AGENT -> {
+                    return "The restoring system was " + display + ".";
+                }
+            }
+        }
         String label = answerLabel(goal);
         if (label != null) {
             String verb = isPlural(label) ? "were" : "was";
             return "The " + label + " " + verb + " " + display + ".";
         }
         return "The answer was " + display + ".";
+    }
+
+    String renderRootFailureComponent(String value, QueryGoal goal) {
+        return renderEntityAnswer(value, goal, AnswerRole.ROOT_FAILURE_COMPONENT);
     }
 
     String renderEntityList(java.util.List<String> values, QueryGoal goal) {
