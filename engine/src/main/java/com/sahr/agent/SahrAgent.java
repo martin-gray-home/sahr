@@ -364,9 +364,38 @@ public final class SahrAgent {
                     best = candidate;
                 }
             }
-            return mapQuery(best.queryGoal());
+            QueryGoal mapped = mapQuery(best.queryGoal());
+            logCandidateDecision("language", best.producedBy(), best.score(), mapped);
+            return mapped;
         }
-        return mapQuery(parser.parse(normalizedInput));
+        QueryGoal parsed = mapQuery(parser.parse(normalizedInput));
+        logCandidateDecision("parser", "simple-query-parser", null, parsed);
+        return parsed;
+    }
+
+    private void logCandidateDecision(String source, String producedBy, Double score, QueryGoal goal) {
+        if (!diagnosticsEnabled()) {
+            return;
+        }
+        String scoreText = score == null ? "n/a" : String.format(java.util.Locale.ROOT, "%.3f", score);
+        String predicate = goal == null ? null : goal.predicate();
+        String subject = goal == null ? null : goal.subject();
+        String object = goal == null ? null : goal.object();
+        String type = goal == null ? null : goal.type().name();
+        logger.info(() -> "query_candidate source=" + source
+                + " producedBy=" + producedBy
+                + " score=" + scoreText
+                + " type=" + type
+                + " predicate=" + predicate
+                + " subject=" + subject
+                + " object=" + object);
+    }
+
+    private boolean diagnosticsEnabled() {
+        return Boolean.getBoolean("sahr.diagnostic.full")
+                || Boolean.getBoolean("sahr.diagnostic.repl")
+                || Boolean.parseBoolean(System.getenv().getOrDefault("SAHR_DIAGNOSTIC_FULL", "false"))
+                || Boolean.parseBoolean(System.getenv().getOrDefault("SAHR_DIAGNOSTIC_REPL", "false"));
     }
 
     private void logHandleTiming(String kind,
