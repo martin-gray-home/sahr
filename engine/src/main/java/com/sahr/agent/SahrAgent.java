@@ -355,22 +355,80 @@ public final class SahrAgent {
     }
 
     private QueryGoal selectQueryCandidate(String normalizedInput) {
-        List<LanguageQueryCandidate> languageCandidates = languageCandidateProducer.produce(normalizedInput);
-        if (!languageCandidates.isEmpty()) {
-            LanguageQueryCandidate best = languageCandidates.get(0);
-            for (int i = 1; i < languageCandidates.size(); i++) {
-                LanguageQueryCandidate candidate = languageCandidates.get(i);
-                if (candidate.score() > best.score()) {
+        List<QueryCandidate> candidates = new ArrayList<>();
+        for (LanguageQueryCandidate languageCandidate : languageCandidateProducer.produce(normalizedInput)) {
+            QueryGoal mapped = mapQuery(languageCandidate.queryGoal());
+            candidates.add(new QueryCandidate(
+                    "language",
+                    languageCandidate.producedBy(),
+                    languageCandidate.score(),
+                    mapped
+            ));
+        }
+        QueryGoal parsed = mapQuery(parser.parse(normalizedInput));
+        candidates.add(new QueryCandidate("parser", "simple-query-parser", 0.25, parsed));
+
+        QueryCandidate winner = selectBestCandidate(candidates);
+        logCandidateCompetition(candidates, winner);
+        return winner.goal();
+    }
+
+    private QueryCandidate selectBestCandidate(List<QueryCandidate> candidates) {
+        QueryCandidate best = null;
+        for (QueryCandidate candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            QueryGoal goal = candidate.goal();
+            if (goal == null || goal.type() == QueryGoal.Type.UNKNOWN) {
+                continue;
+            }
+            if (best == null) {
+                best = candidate;
+                continue;
+            }
+            if (candidate.score() > best.score()) {
+                best = candidate;
+                continue;
+            }
+            if (Double.compare(candidate.score(), best.score()) == 0) {
+                if (sourcePriority(candidate.source()) < sourcePriority(best.source())) {
                     best = candidate;
                 }
             }
-            QueryGoal mapped = mapQuery(best.queryGoal());
-            logCandidateDecision("language", best.producedBy(), best.score(), mapped);
-            return mapped;
         }
-        QueryGoal parsed = mapQuery(parser.parse(normalizedInput));
-        logCandidateDecision("parser", "simple-query-parser", null, parsed);
-        return parsed;
+        if (best == null) {
+            return new QueryCandidate("parser", "simple-query-parser", 0.0, QueryGoal.unknown());
+        }
+        return best;
+    }
+
+    private int sourcePriority(String source) {
+        if ("language".equals(source)) {
+            return 0;
+        }
+        return 1;
+    }
+
+    private void logCandidateCompetition(List<QueryCandidate> candidates, QueryCandidate winner) {
+        if (!diagnosticsEnabled()) {
+            return;
+        }
+        long languageCount = candidates.stream().filter(candidate -> "language".equals(candidate.source())).count();
+        long parserCount = candidates.stream().filter(candidate -> "parser".equals(candidate.source())).count();
+        logger.info(() -> "query_candidate_pool language=" + languageCount
+                + " parser=" + parserCount
+                + " total=" + candidates.size());
+        candidates.stream()
+                .sorted((left, right) -> Double.compare(right.score(), left.score()))
+                .limit(3)
+                .forEach(candidate -> logCandidateDecision(
+                        candidate.source(),
+                        candidate.producedBy(),
+                        candidate.score(),
+                        candidate.goal()
+                ));
+        logCandidateDecision(winner.source(), winner.producedBy(), winner.score(), winner.goal());
     }
 
     private void logCandidateDecision(String source, String producedBy, Double score, QueryGoal goal) {
@@ -396,6 +454,9 @@ public final class SahrAgent {
                 || Boolean.getBoolean("sahr.diagnostic.repl")
                 || Boolean.parseBoolean(System.getenv().getOrDefault("SAHR_DIAGNOSTIC_FULL", "false"))
                 || Boolean.parseBoolean(System.getenv().getOrDefault("SAHR_DIAGNOSTIC_REPL", "false"));
+    }
+
+    private record QueryCandidate(String source, String producedBy, double score, QueryGoal goal) {
     }
 
     private void logHandleTiming(String kind,
