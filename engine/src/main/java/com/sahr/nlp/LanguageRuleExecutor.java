@@ -33,7 +33,10 @@ public final class LanguageRuleExecutor {
         String wh = graph.whToken();
         String relation = graph.relationToken();
         String anchor = graph.anchorToken();
-        if (wh == null || relation == null || anchor == null || anchor.isBlank()) {
+        if (!isSupportedWh(wh)) {
+            return Optional.empty();
+        }
+        if (relation == null || anchor == null || anchor.isBlank()) {
             return Optional.empty();
         }
 
@@ -81,6 +84,10 @@ public final class LanguageRuleExecutor {
             return "concept:location";
         }
         return "entity";
+    }
+
+    private boolean isSupportedWh(String wh) {
+        return "who".equals(wh) || "what".equals(wh);
     }
 
     private String mapPrepositionPredicate(String prep) {

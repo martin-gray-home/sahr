@@ -23,6 +23,9 @@ import com.sahr.core.ReasoningPhaseCoordinator;
 import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.InputFeatureExtractor;
 import com.sahr.nlp.InputFeatures;
+import com.sahr.nlp.LanguageCandidateProducer;
+import com.sahr.nlp.LanguageQueryCandidate;
+import com.sahr.nlp.LanguageRuleCandidateProducer;
 import com.sahr.nlp.RuleParser;
 import com.sahr.nlp.RuleStatement;
 import com.sahr.nlp.SimpleQueryParser;
@@ -70,6 +73,7 @@ public final class SahrAgent {
     private final AnswerRanker answerRanker;
     private final OntologyAnnotationResolver annotationResolver;
     private final AnswerComposer answerComposer;
+    private final LanguageCandidateProducer languageCandidateProducer;
     private String lastInput;
 
     public SahrAgent(
@@ -109,6 +113,7 @@ public final class SahrAgent {
         this.termMapper = termMapper;
         this.trace = new ReasoningTrace();
         this.workingMemory = new WorkingMemory(phases);
+        this.languageCandidateProducer = new LanguageRuleCandidateProducer(parser.isOntologyDriven());
         this.annotationResolver = new OntologyAnnotationResolver(this.ontology);
         this.answerRenderer = new AnswerRenderer(
                 new AnswerRenderer.DisplayFormatter() {
@@ -286,7 +291,7 @@ public final class SahrAgent {
                 && !features.has("has_question_mark")
                 && !features.has("has_wh");
         long parseStart = timing ? System.nanoTime() : 0L;
-        QueryGoal query = mapQuery(parser.parse(normalizedInput));
+        QueryGoal query = selectQueryCandidate(normalizedInput);
         long parseEnd = timing ? System.nanoTime() : 0L;
         long ruleStart = timing ? System.nanoTime() : 0L;
         Optional<RuleStatement> ruleStatement = (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
@@ -347,6 +352,21 @@ public final class SahrAgent {
         } finally {
             phases.restore(previousPhase);
         }
+    }
+
+    private QueryGoal selectQueryCandidate(String normalizedInput) {
+        List<LanguageQueryCandidate> languageCandidates = languageCandidateProducer.produce(normalizedInput);
+        if (!languageCandidates.isEmpty()) {
+            LanguageQueryCandidate best = languageCandidates.get(0);
+            for (int i = 1; i < languageCandidates.size(); i++) {
+                LanguageQueryCandidate candidate = languageCandidates.get(i);
+                if (candidate.score() > best.score()) {
+                    best = candidate;
+                }
+            }
+            return mapQuery(best.queryGoal());
+        }
+        return mapQuery(parser.parse(normalizedInput));
     }
 
     private void logHandleTiming(String kind,

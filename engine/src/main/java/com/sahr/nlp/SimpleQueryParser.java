@@ -24,8 +24,6 @@ public final class SimpleQueryParser {
     private static final Morphology MORPHOLOGY = new Morphology();
 
     private final boolean ontologyDriven;
-    private final LanguageGraphBuilder languageGraphBuilder;
-    private final LanguageRuleExecutor languageRuleExecutor;
 
     public SimpleQueryParser() {
         this(true);
@@ -33,8 +31,10 @@ public final class SimpleQueryParser {
 
     public SimpleQueryParser(boolean ontologyDriven) {
         this.ontologyDriven = ontologyDriven;
-        this.languageGraphBuilder = new LanguageGraphBuilder(ontologyDriven);
-        this.languageRuleExecutor = new LanguageRuleExecutor(ontologyDriven);
+    }
+
+    public boolean isOntologyDriven() {
+        return ontologyDriven;
     }
 
     public QueryGoal parse(String input) {
@@ -67,12 +67,6 @@ public final class SimpleQueryParser {
                 return QueryGoal.unknown();
             }
             return applyDiscourseModifier(QueryGoal.where(type, "concept:location"), discourse);
-        }
-
-        Optional<QueryGoal> languageGraphQuery = languageRuleExecutor.interpret(languageGraphBuilder.build(normalized))
-                .map(LanguageQueryCandidate::queryGoal);
-        if (languageGraphQuery.isPresent()) {
-            return applyDiscourseModifier(languageGraphQuery.get(), discourse);
         }
 
         Optional<QueryGoal> prepositionWhSimple = parseWhPrepositionSimple(normalized);
@@ -447,7 +441,7 @@ public final class SimpleQueryParser {
                 continue;
             }
             String modifier = findAdjectiveModifier(graph, target);
-            return Optional.of(QueryGoal.relationWithModifier(subjectToken, "with", null, expectedTypeForWh(wh), modifier));
+            return Optional.of(QueryGoal.relationWithModifier(null, "with", subjectToken, expectedTypeForWh(wh), modifier));
         }
         return Optional.empty();
     }
@@ -575,7 +569,10 @@ public final class SimpleQueryParser {
             return Optional.empty();
         }
         String modifier = subjectModifier.modifier != null ? subjectModifier.modifier : modifierBefore(tokens, subjectToken);
-        return Optional.of(QueryGoal.relationWithModifier(subjectToken, "with", null, expectedTypeForWh(wh), modifier));
+        boolean trailing = withIndex == tokens.size() - 1;
+        String subject = trailing ? subjectToken : null;
+        String object = trailing ? null : subjectToken;
+        return Optional.of(QueryGoal.relationWithModifier(subject, "with", object, expectedTypeForWh(wh), modifier));
     }
 
     private Optional<QueryGoal> parsePrepositionFallback(String input) {
