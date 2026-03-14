@@ -366,7 +366,8 @@ public final class SahrAgent {
             ));
         }
         QueryGoal parsed = mapQuery(parser.parse(normalizedInput));
-        candidates.add(new QueryCandidate("parser", "simple-query-parser", 0.25, parsed));
+        double parserScore = scoreParserCandidate(normalizedInput, parsed);
+        candidates.add(new QueryCandidate("parser", "simple-query-parser", parserScore, parsed));
 
         QueryCandidate winner = selectBestCandidate(candidates);
         logCandidateCompetition(candidates, winner);
@@ -408,6 +409,66 @@ public final class SahrAgent {
             return 0;
         }
         return 1;
+    }
+
+    private double scoreParserCandidate(String normalizedInput, QueryGoal goal) {
+        if (goal == null || goal.type() == QueryGoal.Type.UNKNOWN) {
+            return 0.0;
+        }
+        double score = 0.2;
+        switch (goal.type()) {
+            case RELATION -> score += 0.15;
+            case WHERE -> score += 0.1;
+            case COUNT -> score += 0.1;
+            case YESNO -> score += 0.15;
+            case ATTRIBUTE -> score += 0.1;
+            default -> {
+            }
+        }
+        if (!isBlank(goal.predicate())) {
+            score += 0.15;
+        }
+        if (!isBlank(goal.subject()) || !isBlank(goal.object())) {
+            score += 0.1;
+        }
+        if (!isBlank(goal.subject()) && !isBlank(goal.object())) {
+            score += 0.05;
+        }
+        if (!isBlank(goal.expectedType())) {
+            score += 0.05;
+        }
+        if (!isBlank(goal.entityType())) {
+            score += 0.1;
+        }
+        if (!isBlank(goal.expectedRange())) {
+            score += 0.05;
+        }
+        if (predicateAppearsInInput(normalizedInput, goal.predicate())) {
+            score += 0.1;
+        } else if (!isBlank(goal.predicate())) {
+            score -= 0.05;
+        }
+        return Math.max(0.0, Math.min(0.9, score));
+    }
+
+    private boolean predicateAppearsInInput(String normalizedInput, String predicate) {
+        if (isBlank(normalizedInput) || isBlank(predicate)) {
+            return false;
+        }
+        String normalizedPredicate = predicate.toLowerCase(java.util.Locale.ROOT);
+        if (normalizedInput.contains(normalizedPredicate)) {
+            return true;
+        }
+        String tokenizedInput = normalizedInput.replaceAll("[^a-z0-9\\s]", " ").trim();
+        if (tokenizedInput.isEmpty()) {
+            return false;
+        }
+        for (String token : tokenizedInput.split("\\s+")) {
+            if (token.equals(normalizedPredicate)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void logCandidateCompetition(List<QueryCandidate> candidates, QueryCandidate winner) {
