@@ -4,6 +4,7 @@ import com.sahr.core.QueryGoal;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LanguageRuleExecutorTest {
     private final LanguageGraphBuilder builder = new LanguageGraphBuilder(true);
@@ -13,7 +14,7 @@ class LanguageRuleExecutorTest {
     void interpretsWhPrepositionAsRelationQuery() {
         LanguageGraph graph = builder.build("Who is in the house");
 
-        LanguageQueryCandidate candidate = executor.interpret(graph).orElseThrow();
+        LanguageQueryCandidate candidate = executor.interpret(graph).stream().findFirst().orElseThrow();
         QueryGoal goal = candidate.queryGoal();
 
         assertEquals(QueryGoal.Type.RELATION, goal.type());
@@ -26,7 +27,9 @@ class LanguageRuleExecutorTest {
     void interpretsWhWithAsRelationQuery() {
         LanguageGraph graph = builder.build("Who is with the man");
 
-        LanguageQueryCandidate candidate = executor.interpret(graph).orElseThrow();
+        java.util.List<LanguageQueryCandidate> candidates = executor.interpret(graph);
+        assertTrue(candidates.size() >= 2);
+        LanguageQueryCandidate candidate = candidates.stream().findFirst().orElseThrow();
         QueryGoal goal = candidate.queryGoal();
 
         assertEquals(QueryGoal.Type.RELATION, goal.type());
@@ -39,7 +42,7 @@ class LanguageRuleExecutorTest {
     void interpretsTrailingPrepositionPattern() {
         LanguageGraph graph = builder.build("Who is the man with");
 
-        LanguageQueryCandidate candidate = executor.interpret(graph).orElseThrow();
+        LanguageQueryCandidate candidate = executor.interpret(graph).stream().findFirst().orElseThrow();
         QueryGoal goal = candidate.queryGoal();
 
         assertEquals(QueryGoal.Type.RELATION, goal.type());
@@ -52,7 +55,7 @@ class LanguageRuleExecutorTest {
     void interpretsVerbObjectPattern() {
         LanguageGraph graph = builder.build("Who is wearing a hat");
 
-        LanguageQueryCandidate candidate = executor.interpret(graph).orElseThrow();
+        LanguageQueryCandidate candidate = executor.interpret(graph).stream().findFirst().orElseThrow();
         QueryGoal goal = candidate.queryGoal();
 
         assertEquals(QueryGoal.Type.RELATION, goal.type());
@@ -65,7 +68,7 @@ class LanguageRuleExecutorTest {
     void interpretsObjectVerbPattern() {
         LanguageGraph graph = builder.build("What is the man wearing");
 
-        LanguageQueryCandidate candidate = executor.interpret(graph).orElseThrow();
+        LanguageQueryCandidate candidate = executor.interpret(graph).stream().findFirst().orElseThrow();
         QueryGoal goal = candidate.queryGoal();
 
         assertEquals(QueryGoal.Type.RELATION, goal.type());

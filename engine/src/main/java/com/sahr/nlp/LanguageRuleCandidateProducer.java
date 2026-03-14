@@ -1,7 +1,6 @@
 package com.sahr.nlp;
 
 import java.util.List;
-import java.util.Optional;
 
 public final class LanguageRuleCandidateProducer implements LanguageCandidateProducer {
     private final LanguageGraphBuilder graphBuilder;
@@ -17,7 +16,6 @@ public final class LanguageRuleCandidateProducer implements LanguageCandidatePro
         if (input == null || input.isBlank()) {
             return List.of();
         }
-        Optional<LanguageQueryCandidate> candidate = ruleExecutor.interpret(graphBuilder.build(input));
-        return candidate.map(List::of).orElse(List.of());
+        return ruleExecutor.interpret(graphBuilder.build(input));
     }
 }
