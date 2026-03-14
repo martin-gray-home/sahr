@@ -2826,6 +2826,9 @@ final class AnswerComposer {
     }
 
     private SymbolId selectBestRecoveryAgent(ExplanationCandidate candidate, SymbolId target) {
+        if (candidate == null) {
+            return null;
+        }
         List<SymbolId> agents = new ArrayList<>(candidate.recoveryAgents());
         if (agents.isEmpty() && target != null) {
             agents.addAll(findRestoreSubjects(target));
