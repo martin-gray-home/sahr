@@ -65,6 +65,11 @@ public final class SimpleQueryParser {
             return applyDiscourseModifier(QueryGoal.where(type, "concept:location"), discourse);
         }
 
+        Optional<QueryGoal> prepositionWhSimple = parseWhPrepositionSimple(normalized);
+        if (prepositionWhSimple.isPresent()) {
+            return applyDiscourseModifier(prepositionWhSimple.get(), discourse);
+        }
+
         Optional<QueryGoal> yesNo = parseYesNoQuery(input);
         if (yesNo.isPresent()) {
             return applyDiscourseModifier(yesNo.get(), discourse);
@@ -583,6 +588,51 @@ public final class SimpleQueryParser {
         String predicate = onIndex >= 0 ? "on" : "under";
         String modifier = modifierBefore(tokens, subjectToken);
         return Optional.of(QueryGoal.relationWithModifier(subjectToken, predicate, null, expectedTypeForWh(wh), modifier));
+    }
+
+    private Optional<QueryGoal> parseWhPrepositionSimple(String normalized) {
+        List<String> tokens = tokenize(normalized);
+        if (tokens.isEmpty()) {
+            return Optional.empty();
+        }
+        String wh = tokens.get(0);
+        if (!WH_TOKENS.contains(wh) || "where".equals(wh)) {
+            return Optional.empty();
+        }
+        int prepIndex = -1;
+        String prep = null;
+        for (int i = 0; i < tokens.size(); i++) {
+            String token = tokens.get(i);
+            if (PREPOSITION_RELATIONS.contains(token)) {
+                prepIndex = i;
+                prep = token;
+                break;
+            }
+            if (COLOCATION_SYNONYMS.contains(token)) {
+                prepIndex = i;
+                prep = token;
+                break;
+            }
+        }
+        if (prepIndex < 0 || prep == null) {
+            return Optional.empty();
+        }
+        if ("with".equals(prep)) {
+            return Optional.empty();
+        }
+        String objectToken = nounPhraseFrom(tokens, prepIndex + 1, tokens.size());
+        if (objectToken == null || objectToken.isBlank()) {
+            return Optional.empty();
+        }
+        String predicate = mapPrepositionPredicate(prep);
+        String modifier = null;
+        if (objectToken.contains("_")) {
+            String[] parts = objectToken.split("_", 2);
+            if (parts.length == 2 && COLOR_MODIFIERS.contains(parts[0])) {
+                modifier = parts[0];
+            }
+        }
+        return Optional.of(QueryGoal.relationWithModifier(null, predicate, objectToken, expectedTypeForWh(wh), modifier));
     }
 
     private Optional<QueryGoal> parseWhPrepositionSubjectQuery(SemanticGraph graph) {
