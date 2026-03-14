@@ -61,6 +61,30 @@ public final class LanguageGraphBuilder {
             }
         }
 
+        if (shape == LanguageGraph.QuestionShape.UNKNOWN && whToken != null && copulaIndex >= 0) {
+            int verbIndex = findGerundIndex(tokens, copulaIndex + 1);
+            if (verbIndex >= 0 && verbIndex + 1 < tokens.size() && !PREPOSITION_RELATIONS.contains(tokens.get(verbIndex + 1))) {
+                relationToken = tokens.get(verbIndex);
+                anchorTokens = extractAnchorTokens(tokens, verbIndex + 1, tokens.size());
+                String anchorToken = anchorTokens.isEmpty() ? null : String.join("_", anchorTokens);
+                if (anchorToken != null && !anchorToken.isBlank()) {
+                    shape = LanguageGraph.QuestionShape.WH_VERB_OBJECT;
+                }
+            }
+        }
+
+        if (shape == LanguageGraph.QuestionShape.UNKNOWN && whToken != null && copulaIndex >= 0) {
+            int verbIndex = findTrailingGerundIndex(tokens);
+            if (verbIndex > copulaIndex) {
+                relationToken = tokens.get(verbIndex);
+                anchorTokens = extractAnchorTokens(tokens, copulaIndex + 1, verbIndex);
+                String anchorToken = anchorTokens.isEmpty() ? null : String.join("_", anchorTokens);
+                if (anchorToken != null && !anchorToken.isBlank() && !containsGerund(anchorTokens)) {
+                    shape = LanguageGraph.QuestionShape.WH_OBJECT_VERB;
+                }
+            }
+        }
+
         String anchorToken = anchorTokens.isEmpty() ? null : String.join("_", anchorTokens);
         String anchorModifier = anchorTokens.size() > 1 && COLOR_MODIFIERS.contains(anchorTokens.get(0))
                 ? anchorTokens.get(0)
@@ -115,6 +139,29 @@ public final class LanguageGraphBuilder {
         }
         String trimmed = token.trim().toLowerCase(Locale.ROOT);
         return trimmed.length() > 4 && trimmed.endsWith("ing");
+    }
+
+    private int findGerundIndex(List<String> tokens, int start) {
+        for (int i = Math.max(0, start); i < tokens.size(); i++) {
+            if (isGerund(tokens.get(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int findTrailingGerundIndex(List<String> tokens) {
+        if (tokens.isEmpty()) {
+            return -1;
+        }
+        int lastIndex = tokens.size() - 1;
+        if (PREPOSITION_RELATIONS.contains(tokens.get(lastIndex))) {
+            return -1;
+        }
+        if (isGerund(tokens.get(lastIndex))) {
+            return lastIndex;
+        }
+        return -1;
     }
 
     private List<String> tokenize(String normalized) {

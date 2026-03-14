@@ -7,6 +7,8 @@ public final class LanguageGraph {
     public enum QuestionShape {
         WH_PREPOSITION_LEADING,
         WH_PREPOSITION_TRAILING,
+        WH_VERB_OBJECT,
+        WH_OBJECT_VERB,
         UNKNOWN
     }
 

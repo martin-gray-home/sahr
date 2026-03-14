@@ -47,4 +47,30 @@ class LanguageRuleExecutorTest {
         assertEquals("man", goal.subject());
         assertEquals("person", goal.expectedType());
     }
+
+    @Test
+    void interpretsVerbObjectPattern() {
+        LanguageGraph graph = builder.build("Who is wearing a hat");
+
+        LanguageQueryCandidate candidate = executor.interpret(graph).orElseThrow();
+        QueryGoal goal = candidate.queryGoal();
+
+        assertEquals(QueryGoal.Type.RELATION, goal.type());
+        assertEquals("wear", goal.predicate());
+        assertEquals("hat", goal.object());
+        assertEquals("person", goal.expectedType());
+    }
+
+    @Test
+    void interpretsObjectVerbPattern() {
+        LanguageGraph graph = builder.build("What is the man wearing");
+
+        LanguageQueryCandidate candidate = executor.interpret(graph).orElseThrow();
+        QueryGoal goal = candidate.queryGoal();
+
+        assertEquals(QueryGoal.Type.RELATION, goal.type());
+        assertEquals("wear", goal.predicate());
+        assertEquals("man", goal.subject());
+        assertEquals("entity", goal.expectedType());
+    }
 }
