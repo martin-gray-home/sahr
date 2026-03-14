@@ -28,6 +28,7 @@ headr:baseWeight a owl:DatatypeProperty .
 headr:executorType a owl:DatatypeProperty .
 headr:paramKey a owl:DatatypeProperty .
 headr:paramValue a owl:DatatypeProperty .
+headr:enabled a owl:DatatypeProperty .
 
 headr:varA a headr:Variable ;
     headr:varName "a" .
@@ -640,6 +641,7 @@ headr:actionOnLocationTransfer a headr:AddAssertion ;
 
 headr:OnLocationTransferHead a headr:ReasoningHead ;
     headr:name "on-location-transfer" ;
+    headr:enabled false ;
     headr:hasPattern headr:patternOnLocationTransfer ;
     headr:hasAction headr:actionOnLocationTransfer ;
     headr:hasScorePolicy headr:scoreSurface .
@@ -659,6 +661,7 @@ headr:actionUnderLocationTransfer a headr:AddAssertion ;
 
 headr:UnderLocationTransferHead a headr:ReasoningHead ;
     headr:name "under-location-transfer" ;
+    headr:enabled false ;
     headr:hasPattern headr:patternUnderLocationTransfer ;
     headr:hasAction headr:actionUnderLocationTransfer ;
     headr:hasScorePolicy headr:scoreSurface .

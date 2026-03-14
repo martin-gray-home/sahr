@@ -769,6 +769,153 @@ public final class SahrAgent {
         return value.startsWith("http://") || value.startsWith("https://");
     }
 
+    private java.util.List<ReasoningCandidate> preferPersonLikeAnswers(java.util.List<ReasoningCandidate> answers,
+                                                                       QueryGoal goal) {
+        if (answers == null || answers.isEmpty() || goal == null) {
+            return java.util.List.of();
+        }
+        if (!prefersPersonLike(goal.expectedType())) {
+            return java.util.List.of();
+        }
+        java.util.Set<String> expectedIris = resolveExpectedTypeIris(goal.expectedType());
+        java.util.List<ReasoningCandidate> ontologyMatches = new java.util.ArrayList<>();
+        java.util.List<ReasoningCandidate> fallbackMatches = new java.util.ArrayList<>();
+        for (ReasoningCandidate candidate : answers) {
+            if (!(candidate.payload() instanceof SymbolId)) {
+                continue;
+            }
+            SymbolId symbol = (SymbolId) candidate.payload();
+            EntityNode entity = graph.findEntity(symbol).orElse(null);
+            if (entity == null) {
+                continue;
+            }
+            java.util.Set<String> types = entity.conceptTypes();
+            if (matchesExpectedIris(types, expectedIris)) {
+                ontologyMatches.add(candidate);
+                continue;
+            }
+            if (types != null && !types.isEmpty() && !containsIri(types) && matchesFallbackPersonType(types)) {
+                fallbackMatches.add(candidate);
+            }
+        }
+        if (!ontologyMatches.isEmpty()) {
+            return ontologyMatches;
+        }
+        return fallbackMatches;
+    }
+
+    private java.util.List<String> preferPersonLikeValues(java.util.List<String> values, QueryGoal goal) {
+        if (values == null || values.isEmpty() || goal == null) {
+            return java.util.List.of();
+        }
+        if (!prefersPersonLike(goal.expectedType())) {
+            return java.util.List.of();
+        }
+        java.util.Set<String> expectedIris = resolveExpectedTypeIris(goal.expectedType());
+        java.util.List<String> ontologyMatches = new java.util.ArrayList<>();
+        java.util.List<String> fallbackMatches = new java.util.ArrayList<>();
+        for (String value : values) {
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            SymbolId symbol = new SymbolId(value);
+            EntityNode entity = graph.findEntity(symbol).orElse(null);
+            if (entity == null) {
+                continue;
+            }
+            java.util.Set<String> types = entity.conceptTypes();
+            if (matchesExpectedIris(types, expectedIris)) {
+                ontologyMatches.add(value);
+                continue;
+            }
+            if (types != null && !types.isEmpty() && !containsIri(types) && matchesFallbackPersonType(types)) {
+                fallbackMatches.add(value);
+            }
+        }
+        if (!ontologyMatches.isEmpty()) {
+            return ontologyMatches;
+        }
+        return fallbackMatches;
+    }
+
+    private boolean prefersPersonLike(String expectedType) {
+        if (expectedType == null || expectedType.isBlank()) {
+            return false;
+        }
+        String normalized = annotationResolver.normalizeLabelToToken(stripPrefix(expectedType));
+        return PERSON_LIKE_TOKENS.contains(normalized);
+    }
+
+    private java.util.Set<String> resolveExpectedTypeIris(String expectedType) {
+        if (expectedType == null || expectedType.isBlank()) {
+            return java.util.Set.of();
+        }
+        if (isIri(expectedType)) {
+            return java.util.Set.of(expectedType);
+        }
+        String normalized = annotationResolver.normalizeLabelToToken(stripPrefix(expectedType));
+        if (normalized.isBlank()) {
+            return java.util.Set.of();
+        }
+        return annotationResolver.entityIrisByLabel(normalized);
+    }
+
+    private boolean matchesExpectedIris(java.util.Set<String> types, java.util.Set<String> expectedIris) {
+        if (types == null || types.isEmpty() || expectedIris == null || expectedIris.isEmpty()) {
+            return false;
+        }
+        for (String type : types) {
+            if (!isIri(type)) {
+                continue;
+            }
+            if (expectedIris.contains(type)) {
+                return true;
+            }
+            for (String expected : expectedIris) {
+                if (ontology.isSubclassOf(type, expected)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean containsIri(java.util.Set<String> types) {
+        if (types == null) {
+            return false;
+        }
+        for (String type : types) {
+            if (isIri(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesFallbackPersonType(java.util.Set<String> types) {
+        if (types == null || types.isEmpty()) {
+            return false;
+        }
+        for (String type : types) {
+            String normalized = annotationResolver.normalizeLabelToToken(stripPrefix(type));
+            if (PERSON_LIKE_TOKENS.contains(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final java.util.Set<String> PERSON_LIKE_TOKENS = java.util.Set.of(
+            "person",
+            "people",
+            "human",
+            "agent",
+            "man",
+            "woman",
+            "boy",
+            "girl"
+    );
+
     private String mapEntityType(String requestedType) {
         if (requestedType == null || requestedType.isBlank()) {
             return requestedType;
@@ -1805,6 +1952,10 @@ public final class SahrAgent {
         if (!filteredAnswers.isEmpty()) {
             answers = filteredAnswers;
         }
+        List<ReasoningCandidate> preferredAnswers = preferPersonLikeAnswers(answers, goal);
+        if (!preferredAnswers.isEmpty() && preferredAnswers.size() < answers.size()) {
+            answers = preferredAnswers;
+        }
         if (answers.isEmpty()) {
             long directStart = planTiming ? System.nanoTime() : 0L;
             java.util.List<String> directMatches = directRelationMatches(goal);
@@ -1815,6 +1966,12 @@ public final class SahrAgent {
             if (!directMatches.isEmpty()) {
                 long rankStart = planTiming ? System.nanoTime() : 0L;
                 directMatches = answerRanker.filterEchoValues(directMatches, goal);
+                if (directMatches.stream().allMatch(this::isEntityValue)) {
+                    java.util.List<String> preferredValues = preferPersonLikeValues(directMatches, goal);
+                    if (!preferredValues.isEmpty() && preferredValues.size() < directMatches.size()) {
+                        directMatches = preferredValues;
+                    }
+                }
                 directMatches = answerRanker.rankAnswerValues(directMatches);
                 if (planTiming) {
                     logPlanTiming("rank_direct", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,

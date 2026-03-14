@@ -92,11 +92,10 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        for (String predicateKey : expandPredicates(predicate, ontology)) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicateKey)) {
-                boolean forward = subject != null && assertion.subject().equals(subject);
-                boolean inverse = subject != null && assertion.object().equals(subject);
-                boolean objectMatch = object != null && assertion.object().equals(object);
+        for (PredicateMatch predicateMatch : expandPredicateMatches(predicate, ontology)) {
+            for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
+                boolean subjectMatch = subject == null || predicateMatch.matchesSubject(assertion, subject);
+                boolean objectMatch = object == null || predicateMatch.matchesObject(assertion, object);
                 SymbolId answer = null;
 
                 if (predicateOnly) {
@@ -105,13 +104,13 @@ public final class RelationQueryHead extends BaseHead {
                         continue;
                     }
                 } else {
-                    if (!forward && !inverse && !objectMatch) {
+                    if (!subjectMatch || !objectMatch) {
                         continue;
                     }
-                    if (forward) {
-                        answer = assertion.object();
-                    } else if (inverse || objectMatch) {
-                        answer = assertion.subject();
+                    if (subject != null) {
+                        answer = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
+                    } else if (object != null) {
+                        answer = predicateMatch.isSwapped() ? assertion.object() : assertion.subject();
                     }
                 }
                 if (answer == null) {
@@ -121,7 +120,7 @@ public final class RelationQueryHead extends BaseHead {
                     continue;
                 }
 
-                double queryMatch = forward ? 1.0 : 0.9;
+                double queryMatch = predicateMatch.queryMatchScore();
                 double typeMatch = expectedType == null ? 0.5 : 1.0;
                 double graphConfidence = assertion.confidence();
                 double memoryFocus = memoryFocus(memory, subject, object, answer);
@@ -190,19 +189,18 @@ public final class RelationQueryHead extends BaseHead {
             }
         }
         List<SymbolId> matches = new ArrayList<>();
-        for (String predicateKey : expandPredicates(predicate, ontology)) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicateKey)) {
-                if (object != null && !assertion.object().equals(object)) {
-                    continue;
-                }
-                if (subject != null && !assertion.subject().equals(subject)) {
+        for (PredicateMatch predicateMatch : expandPredicateMatches(predicate, ontology)) {
+            for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
+                boolean subjectMatch = subject == null || predicateMatch.matchesSubject(assertion, subject);
+                boolean objectMatch = object == null || predicateMatch.matchesObject(assertion, object);
+                if (!subjectMatch || !objectMatch) {
                     continue;
                 }
                 SymbolId candidate = assertion.subject();
                 if (object != null) {
-                    candidate = assertion.subject();
+                    candidate = predicateMatch.isSwapped() ? assertion.object() : assertion.subject();
                 } else if (subject != null) {
-                    candidate = assertion.object();
+                    candidate = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
                 }
                 if (!matchesExpectedTypeForCount(graph, ontology, candidate, expectedType)) {
                     continue;
@@ -221,12 +219,15 @@ public final class RelationQueryHead extends BaseHead {
                                                                String predicate,
                                                                String expectedType) {
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        for (String predicateKey : expandPredicates(predicate, ontology)) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicateKey)) {
-                if (!assertion.subject().equals(anchor)) {
+        for (PredicateMatch predicateMatch : expandPredicateMatches(predicate, ontology)) {
+            for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
+                boolean anchorMatch = predicateMatch.isSwapped()
+                        ? assertion.object().equals(anchor)
+                        : assertion.subject().equals(anchor);
+                if (!anchorMatch) {
                     continue;
                 }
-                SymbolId answer = assertion.object();
+                SymbolId answer = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
                 if (!matchesExpectedType(graph, ontology, answer, expectedType)) {
                     continue;
                 }
@@ -399,22 +400,33 @@ public final class RelationQueryHead extends BaseHead {
         return !hasIriType;
     }
 
-    private List<String> expandPredicates(String predicate, OntologyService ontology) {
-        List<String> expanded = new ArrayList<>();
-        expanded.add(predicate);
+    private List<PredicateMatch> expandPredicateMatches(String predicate, OntologyService ontology) {
+        List<PredicateMatch> expanded = new ArrayList<>();
+        expanded.add(new PredicateMatch(predicate, MatchType.DIRECT));
+        if (ontology.isSymmetricProperty(predicate)) {
+            expanded.add(new PredicateMatch(predicate, MatchType.SYMMETRIC));
+        }
         List<String> aliases = predicateAliases.getOrDefault(predicate, List.of());
-        expanded.addAll(aliases);
+        for (String alias : aliases) {
+            expanded.add(new PredicateMatch(alias, MatchType.DIRECT));
+        }
         if (isIri(predicate)) {
-            expanded.addAll(ontology.getSubproperties(predicate));
+            for (String subproperty : ontology.getSubproperties(predicate)) {
+                expanded.add(new PredicateMatch(subproperty, MatchType.DIRECT));
+            }
             ontology.getInverseProperty(predicate).ifPresent(inv -> {
-                expanded.add(inv);
-                expanded.addAll(ontology.getSubproperties(inv));
+                expanded.add(new PredicateMatch(inv, MatchType.INVERSE));
+                for (String subproperty : ontology.getSubproperties(inv)) {
+                    expanded.add(new PredicateMatch(subproperty, MatchType.INVERSE));
+                }
             });
             return expanded;
         }
         java.util.Set<String> locationFamily = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
         if (locationFamily.contains(predicate)) {
-            expanded.addAll(locationFamily);
+            for (String relation : locationFamily) {
+                expanded.add(new PredicateMatch(relation, MatchType.DIRECT));
+            }
         }
         return expanded;
     }
@@ -429,20 +441,33 @@ public final class RelationQueryHead extends BaseHead {
         if (subject == null || object == null) {
             return List.of();
         }
-        for (String predicateKey : expandPredicates(predicate, ontology)) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicateKey)) {
-                if (assertion.subject().equals(subject) && assertion.object().equals(object)) {
-                    return List.of(buildYesAnswer(query, assertion));
+        for (PredicateMatch predicateMatch : expandPredicateMatches(predicate, ontology)) {
+            for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
+                boolean subjectMatch = predicateMatch.matchesSubject(assertion, subject);
+                boolean objectMatch = predicateMatch.matchesObject(assertion, object);
+                if (subjectMatch && objectMatch) {
+                    return List.of(buildYesAnswer(query, assertion, predicateMatch.isInverse(), subject, object));
                 }
             }
         }
         return List.of();
     }
 
-    private ReasoningCandidate buildYesAnswer(QueryGoal query, RelationAssertion assertion) {
+    private ReasoningCandidate buildYesAnswer(QueryGoal query,
+                                              RelationAssertion assertion,
+                                              boolean inverseMatch,
+                                              SymbolId subject,
+                                              SymbolId object) {
         String subjectText = query.subjectText() != null ? query.subjectText() : subjectFromAssertion(assertion);
         String objectText = query.objectText() != null ? query.objectText() : objectFromAssertion(assertion);
         String predicateText = query.predicateText() != null ? query.predicateText() : predicateFromAssertion(assertion);
+        if (inverseMatch) {
+            subjectText = query.subjectText() != null ? query.subjectText()
+                    : subject == null ? subjectText : subject.value();
+            objectText = query.objectText() != null ? query.objectText()
+                    : object == null ? objectText : object.value();
+            predicateText = query.predicateText() != null ? query.predicateText() : query.predicate();
+        }
         predicateText = normalizePredicateText(predicateText);
 
         String answer = "Yes, " + subjectText + " " + predicateText + " " + objectText;
@@ -491,6 +516,34 @@ public final class RelationQueryHead extends BaseHead {
             return predicateText;
         }
         return predicateText.replace('_', ' ');
+    }
+
+    private enum MatchType {
+        DIRECT,
+        SYMMETRIC,
+        INVERSE
+    }
+
+    private record PredicateMatch(String predicate, MatchType type) {
+        boolean matchesSubject(RelationAssertion assertion, SymbolId subject) {
+            return isSwapped() ? assertion.object().equals(subject) : assertion.subject().equals(subject);
+        }
+
+        boolean matchesObject(RelationAssertion assertion, SymbolId object) {
+            return isSwapped() ? assertion.subject().equals(object) : assertion.object().equals(object);
+        }
+
+        boolean isSwapped() {
+            return type != MatchType.DIRECT;
+        }
+
+        boolean isInverse() {
+            return type == MatchType.INVERSE;
+        }
+
+        double queryMatchScore() {
+            return type == MatchType.INVERSE ? 0.9 : 1.0;
+        }
     }
 
 }

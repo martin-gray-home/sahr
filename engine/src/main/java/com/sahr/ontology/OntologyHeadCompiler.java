@@ -48,6 +48,7 @@ public final class OntologyHeadCompiler {
     private static final String EXECUTOR_TYPE = NS + "executorType";
     private static final String PARAM_KEY = NS + "paramKey";
     private static final String PARAM_VALUE = NS + "paramValue";
+    private static final String ENABLED = NS + "enabled";
     private static final double META_TRANSITIVE_WEIGHT = 0.75;
     private static final double META_SYMMETRIC_WEIGHT = 0.65;
     private static final double META_INVERSE_WEIGHT = 0.7;
@@ -84,6 +85,7 @@ public final class OntologyHeadCompiler {
         OWLDataProperty executorTypeProp = factory.getOWLDataProperty(IRI.create(EXECUTOR_TYPE));
         OWLDataProperty paramKeyProp = factory.getOWLDataProperty(IRI.create(PARAM_KEY));
         OWLDataProperty paramValueProp = factory.getOWLDataProperty(IRI.create(PARAM_VALUE));
+        OWLDataProperty enabledProp = factory.getOWLDataProperty(IRI.create(ENABLED));
 
         List<OntologyHeadDefinition> definitions = new ArrayList<>();
         Set<String> signature = new HashSet<>();
@@ -91,6 +93,12 @@ public final class OntologyHeadCompiler {
         for (OWLNamedIndividual head : heads) {
             String name = dataPropertyValue(ontology, head, nameProp)
                     .orElse(head.getIRI().getShortForm());
+            boolean enabled = dataPropertyValue(ontology, head, enabledProp)
+                    .map(OntologyHeadCompiler::parseBoolean)
+                    .orElse(true);
+            if (!enabled) {
+                continue;
+            }
             String executorType = dataPropertyValue(ontology, head, executorTypeProp)
                     .orElse(OntologyHeadDefinition.EXECUTOR_PATTERN_MATCH)
                     .toUpperCase(Locale.ROOT);
@@ -264,6 +272,13 @@ public final class OntologyHeadCompiler {
         } catch (NumberFormatException e) {
             return 0.7;
         }
+    }
+
+    private static boolean parseBoolean(String raw) {
+        if (raw == null) {
+            return false;
+        }
+        return Boolean.parseBoolean(raw.trim());
     }
 
     private static void addMetaHeads(OWLOntology ontology,
