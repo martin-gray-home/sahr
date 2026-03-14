@@ -15,6 +15,9 @@ sahr:Available a owl:NamedIndividual ;
     skos:altLabel "still operational" ;
     skos:altLabel "remains operational" ;
     skos:altLabel "remained operational" ;
+    skos:altLabel "still available" ;
+    skos:altLabel "remains available" ;
+    skos:altLabel "remained available" ;
     ann:semanticRole "resource_available" .
 
 sahr:Unavailable a owl:NamedIndividual ;

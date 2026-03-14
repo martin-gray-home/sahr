@@ -219,6 +219,8 @@ re-running interpretation heads.
 • Resource-state assignment now associates each state marker with the nearest resource mention, improving contrastive survivor selection without lexical heuristics.
 • Resource-state markers now come from ontology entities annotated with `ann:semanticRole` rather than requiring those entities to appear in the assertion graph.
 • Added a diagnostic reasoning dataset test suite (`SahrDiagnosticDatasetTest`) that loads `engine/src/test/resources/datasets/sahr-diagnostic-reasoning.txt` and runs loose keyword checks; strict assertions can be enabled via `-Dsahr.diagnostic.strict=true`.
+• The diagnostic dataset test now builds a full agent using the same ontology packs listed in `applications/src/main/resources/sahr/engine.properties`, so test behavior matches the REPL system configuration.
+• Engine tests now run with a larger heap (`4g`) to accommodate full ontology loading in the diagnostic dataset suite.
 • Resource-availability and dependency-contrast questions now detect resource mentions from ontology labels in the raw input, improving conditional dependency answers without hard-coded domain strings.
 
 # Recent Updates (2026-03-12)

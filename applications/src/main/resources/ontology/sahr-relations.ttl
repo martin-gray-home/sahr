@@ -25,6 +25,9 @@ sahr:surfaceContact a owl:ObjectProperty ;
 
 sahr:containment a owl:ObjectProperty ;
     rdfs:label "containment" ;
+    rdfs:label "contain" ;
+    rdfs:label "contains" ;
+    rdfs:label "contained" ;
     rdfs:subPropertyOf head:containment .
 
 sahr:proximity a owl:ObjectProperty ;

@@ -65,4 +65,9 @@ public final class GuardedKnowledgeBase implements KnowledgeBase {
     public List<EntityNode> getAllEntities() {
         return delegate.getAllEntities();
     }
+
+    @Override
+    public long version() {
+        return delegate.version();
+    }
 }

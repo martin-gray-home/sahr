@@ -10,5 +10,37 @@ dependencies {
 }
 
 tasks.withType(Test).configureEach {
-    maxHeapSize = "1g"
+    maxHeapSize = "4g"
+    def passthroughProps = [
+            "sahr.diagnostic.repl",
+            "sahr.diagnostic.repl.log.path",
+            "sahr.diagnostic.full",
+            "sahr.diagnostic.log.path",
+            "sahr.heads.timing",
+            "sahr.handle.timing",
+            "sahr.subgoal.timing",
+            "sahr.diagnostic.report",
+            "sahr.diagnostic.strict"
+    ]
+    passthroughProps.each { key ->
+        def value = System.getProperty(key)
+        if (value != null) {
+            systemProperty key, value
+        }
+    }
+    def passthroughEnv = [
+            "SAHR_DIAGNOSTIC_REPL",
+            "SAHR_DIAGNOSTIC_REPL_LOG",
+            "SAHR_DIAGNOSTIC_FULL",
+            "SAHR_DIAGNOSTIC_LOG",
+            "SAHR_HEADS_TIMING",
+            "SAHR_HANDLE_TIMING",
+            "SAHR_SUBGOAL_TIMING"
+    ]
+    passthroughEnv.each { key ->
+        def value = System.getenv(key)
+        if (value != null) {
+            environment key, value
+        }
+    }
 }

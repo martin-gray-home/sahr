@@ -5,26 +5,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public final class InMemoryKnowledgeBase implements KnowledgeBase {
     private final Map<SymbolId, EntityNode> entities = new ConcurrentHashMap<>();
     private final List<RelationAssertion> assertions = new ArrayList<>();
     private final List<RuleAssertion> rules = new ArrayList<>();
+    private final AtomicLong version = new AtomicLong();
 
     @Override
     public void addEntity(EntityNode entity) {
         entities.put(entity.id(), entity);
+        version.incrementAndGet();
     }
 
     @Override
     public void addAssertion(RelationAssertion assertion) {
         assertions.add(assertion);
+        version.incrementAndGet();
     }
 
     @Override
     public void addRule(RuleAssertion rule) {
         rules.add(rule);
+        version.incrementAndGet();
     }
 
     @Override
@@ -66,5 +71,10 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
     @Override
     public List<EntityNode> getAllEntities() {
         return new ArrayList<>(entities.values());
+    }
+
+    @Override
+    public long version() {
+        return version.get();
     }
 }

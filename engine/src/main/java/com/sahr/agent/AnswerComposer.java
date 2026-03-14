@@ -35,6 +35,7 @@ final class AnswerComposer {
     }
 
     private static final String PREDICATE_TYPE = "rdf:type";
+    private static final String TIMING_PROPERTY = "sahr.subgoal.timing";
 
     private final KnowledgeBase graph;
     private final OntologyService ontology;
@@ -46,6 +47,13 @@ final class AnswerComposer {
     private final AliasBridge aliasBridge;
     private final OntologyAnnotationResolver annotationResolver;
     private final Support support;
+    private final Object indexLock = new Object();
+    private long indexVersion = -1;
+    private Map<String, Set<SymbolId>> labelTokenIndex = new HashMap<>();
+    private Map<SymbolId, List<String>> labelPhrasesByEntity = new HashMap<>();
+    private Map<SymbolId, Set<SymbolId>> dependentsByResource = new HashMap<>();
+    private Map<String, List<RelationAssertion>> assertionsByLocalPredicate = new HashMap<>();
+    private Map<String, Boolean> semanticRoleCache = new HashMap<>();
 
     AnswerComposer(KnowledgeBase graph,
                    OntologyService ontology,
@@ -67,6 +75,41 @@ final class AnswerComposer {
         this.aliasBridge = aliasBridge;
         this.annotationResolver = annotationResolver;
         this.support = support;
+    }
+
+    void noteEntity(EntityNode entity) {
+        if (entity == null || entity.id() == null) {
+            return;
+        }
+        synchronized (indexLock) {
+            removeEntityTokens(entity.id());
+            List<String> phrases = buildLabelPhrases(entity.id());
+            labelPhrasesByEntity.put(entity.id(), phrases);
+            for (String phrase : phrases) {
+                for (String token : tokenize(phrase)) {
+                    labelTokenIndex.computeIfAbsent(token, key -> new HashSet<>()).add(entity.id());
+                }
+            }
+            indexVersion = graph.version();
+        }
+    }
+
+    void noteAssertion(RelationAssertion assertion) {
+        if (assertion == null) {
+            return;
+        }
+        synchronized (indexLock) {
+            String local = support.localName(assertion.predicate());
+            assertionsByLocalPredicate
+                    .computeIfAbsent(local, key -> new ArrayList<>())
+                    .add(assertion);
+            if ("poweredby".equals(local) || "require".equals(local) || "requires".equals(local)) {
+                dependentsByResource
+                        .computeIfAbsent(assertion.object(), key -> new HashSet<>())
+                        .add(assertion.subject());
+            }
+            indexVersion = graph.version();
+        }
     }
 
     String relationshipAnswer(QueryGoal goal) {
@@ -107,6 +150,7 @@ final class AnswerComposer {
     }
 
     String executeCauseChain(QueryGoal goal) {
+        boolean timing = Boolean.parseBoolean(System.getProperty(TIMING_PROPERTY, "false"));
         String predicate = support.localName(goal.predicate());
         SymbolId subject = (goal.subject() != null && !goal.subject().isBlank())
                 ? new SymbolId(goal.subject())
@@ -118,52 +162,96 @@ final class AnswerComposer {
             target = new SymbolId(goal.subject());
         }
         if ("backupfor".equals(predicate)) {
+            long start = timing ? System.nanoTime() : 0L;
             String backupExplanation = backupForFallback(subject, target);
+            if (timing) {
+                logCauseTiming("backup_for_fallback", goal, System.nanoTime() - start, null);
+            }
             if (backupExplanation != null) {
                 return backupExplanation;
             }
         }
+        long evidenceStart = timing ? System.nanoTime() : 0L;
         String evidenceSignal = evidenceSignalAnswer(goal);
+        if (timing) {
+            logCauseTiming("evidence_signal", goal, System.nanoTime() - evidenceStart, null);
+        }
         if (evidenceSignal != null) {
             return evidenceSignal;
         }
+        long dependencyListStart = timing ? System.nanoTime() : 0L;
         String dependencyList = dependencyFailureListAnswer(goal);
+        if (timing) {
+            logCauseTiming("dependency_failure_list", goal, System.nanoTime() - dependencyListStart, null);
+        }
         if (dependencyList != null) {
             return dependencyList;
         }
+        long relationshipStart = timing ? System.nanoTime() : 0L;
         String relationship = relationshipAnswer(goal);
+        if (timing) {
+            logCauseTiming("relationship_answer", goal, System.nanoTime() - relationshipStart, null);
+        }
         if (relationship != null && !relationship.isBlank()) {
             return relationship;
         }
         if (wantsRuledOutCauses(goal)) {
+            long ruledOutStart = timing ? System.nanoTime() : 0L;
             String ruledOut = ruledOutCauseAnswer(goal, target);
+            if (timing) {
+                logCauseTiming("ruled_out", goal, System.nanoTime() - ruledOutStart, null);
+            }
             if (ruledOut != null) {
                 return ruledOut;
             }
         }
         if (wantsDependencyContrast(goal)) {
+            long contrastStart = timing ? System.nanoTime() : 0L;
             String contrast = dependencyContrastAnswer(goal);
+            if (timing) {
+                logCauseTiming("dependency_contrast", goal, System.nanoTime() - contrastStart, null);
+            }
             if (contrast != null) {
                 return contrast;
             }
         }
         if (wantsConditionContrast(goal)) {
+            long contrastStart = timing ? System.nanoTime() : 0L;
             String contrast = conditionContrastAnswer(goal);
+            if (timing) {
+                logCauseTiming("condition_contrast", goal, System.nanoTime() - contrastStart, null);
+            }
             if (contrast != null) {
                 return contrast;
             }
         }
         if (!predicate.isBlank() && !"cause".equals(predicate) && !"causedby".equals(predicate)) {
+            long predicateStart = timing ? System.nanoTime() : 0L;
             List<String> predicateExplanation = predicateExplainer.buildPredicateExplanation(goal, predicate, 3);
+            if (timing) {
+                logCauseTiming("predicate_explainer", goal, System.nanoTime() - predicateStart, null);
+            }
             if (!predicateExplanation.isEmpty()) {
+                long explanationStart = timing ? System.nanoTime() : 0L;
                 ExplanationCandidate candidate = explanationChains.buildExplanationCandidate(target, 4);
+                if (timing) {
+                    logCauseTiming("build_candidate_predicate", goal, System.nanoTime() - explanationStart, null);
+                }
                 if (wantsRecoveryAgent(goal, predicate)) {
+                    long agentStart = timing ? System.nanoTime() : 0L;
                     SymbolId agent = selectBestRecoveryAgent(candidate, target);
+                    if (timing) {
+                        logCauseTiming("select_recovery_agent", goal, System.nanoTime() - agentStart, null);
+                    }
                     if (agent != null) {
                         return renderEntityAnswer(agent.value(), goal, AnswerRole.RECOVERY_AGENT);
                     }
                 }
+                long summaryStart = timing ? System.nanoTime() : 0L;
                 String explanation = summarizeRecoveryExplanation(goal, predicate, candidate, predicateExplanation);
+                if (timing) {
+                    logCauseTiming("summarize_recovery", goal, System.nanoTime() - summaryStart, null);
+                }
                 if (explanation != null) {
                     return explanation;
                 }
@@ -173,7 +261,11 @@ final class AnswerComposer {
         if (target == null) {
             return "No candidates produced.";
         }
+        long structuredStart = timing ? System.nanoTime() : 0L;
         ExplanationCandidate structuredCandidate = explanationChains.buildExplanationCandidate(target, 4);
+        if (timing) {
+            logCauseTiming("build_candidate_structured", goal, System.nanoTime() - structuredStart, null);
+        }
         if (structuredCandidate != null
                 && (wantsChainExplanation(goal)
                 || wantsRecoveryClause(goal)
@@ -181,7 +273,11 @@ final class AnswerComposer {
                 || "causedby".equals(predicate)
                 || "restore".equals(predicate)
                 || "regain".equals(predicate))) {
+            long chainStart = timing ? System.nanoTime() : 0L;
             List<String> structured = buildStructuredChain(structuredCandidate, goal, target, predicate);
+            if (timing) {
+                logCauseTiming("build_structured_chain", goal, System.nanoTime() - chainStart, null);
+            }
             List<String> candidateSentences = structuredCandidate.sentences();
             if (preferRicherChain(goal, structured, candidateSentences)) {
                 return joinWithOutcome(candidateSentences, goal, target);
@@ -192,7 +288,11 @@ final class AnswerComposer {
             if (candidateSentences != null && !candidateSentences.isEmpty()) {
                 return joinWithOutcome(candidateSentences, goal, target);
             }
+            long bestChainStart = timing ? System.nanoTime() : 0L;
             String chain = bestFailureChainToOutcome(structuredCandidate, target, goal);
+            if (timing) {
+                logCauseTiming("best_failure_chain", goal, System.nanoTime() - bestChainStart, null);
+            }
             if (chain != null) {
                 return joinWithOutcome(splitLines(chain), goal, target);
             }
@@ -201,16 +301,23 @@ final class AnswerComposer {
         List<SymbolId> targetCandidates = aliasBridge.expandAliasSymbols(target);
         if (subject != null && target != null && !subject.equals(target)) {
             ForwardChainSearch.ChainResult best = null;
+            long forwardTotal = 0L;
+            int forwardCount = 0;
             for (SymbolId subjectCandidate : subjectCandidates) {
                 for (SymbolId targetCandidate : targetCandidates) {
                     if (subjectCandidate.equals(targetCandidate)) {
                         continue;
                     }
+                    long forwardStart = timing ? System.nanoTime() : 0L;
                     ForwardChainSearch.ChainResult forward = forwardChainSearch.search(
                             subjectCandidate,
                             targetCandidate,
                             4
                     );
+                    if (timing) {
+                        forwardTotal += (System.nanoTime() - forwardStart);
+                        forwardCount++;
+                    }
                     if (forward == null || forward.sentences().isEmpty()) {
                         continue;
                     }
@@ -219,19 +326,49 @@ final class AnswerComposer {
                     }
                 }
             }
+            if (timing && forwardCount > 0) {
+                logCauseTiming("forward_chain_search", goal, forwardTotal, "count=" + forwardCount);
+            }
             if (best != null) {
                 return String.join("\n", best.sentences());
             }
         }
         if (subject == null && target != null) {
             for (SymbolId targetCandidate : targetCandidates) {
+                long ruleStart = timing ? System.nanoTime() : 0L;
                 String ruleChain = ruleChainFallback(targetCandidate);
+                if (timing) {
+                    logCauseTiming("rule_chain_fallback", goal, System.nanoTime() - ruleStart, null);
+                }
                 if (ruleChain != null) {
                     return ruleChain;
                 }
             }
         }
         return "No candidates produced.";
+    }
+
+    private void logCauseTiming(String step, QueryGoal goal, long durationNs, String extra) {
+        if (!Boolean.parseBoolean(System.getProperty(TIMING_PROPERTY, "false"))) {
+            return;
+        }
+        String subject = goal == null ? "" : safe(goal.subject());
+        String predicate = goal == null ? "" : safe(goal.predicate());
+        String object = goal == null ? "" : safe(goal.object());
+        String suffix = (extra == null || extra.isBlank()) ? "" : " " + extra;
+        System.out.println("cause_timing step=" + step
+                + " ms=" + Math.round(durationNs / 1_000_000.0)
+                + " subject=\"" + subject + "\""
+                + " predicate=\"" + predicate + "\""
+                + " object=\"" + object + "\""
+                + suffix);
+    }
+
+    private String safe(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replaceAll("\\s+", " ").trim();
     }
 
     private String relationshipChainAnswer(QueryGoal goal) {
@@ -1443,54 +1580,34 @@ final class AnswerComposer {
         if (input == null || input.isBlank()) {
             return resources;
         }
-        String normalizedInput = input.toLowerCase(Locale.ROOT);
-        for (EntityNode entity : graph.getAllEntities()) {
-            SymbolId id = entity.id();
+        refreshIndexesIfNeeded();
+        String normalizedInput = normalizeInput(input);
+        Set<SymbolId> candidates = findEntitiesByTokens(normalizedInput);
+        for (SymbolId id : candidates) {
             if (!hasSemanticRole(id, "resource")) {
                 continue;
             }
-            if (inputMentionsSymbol(normalizedInput, id)) {
+            if (inputMentionsEntity(normalizedInput, id)) {
                 resources.add(id);
             }
         }
         return resources;
     }
 
-    private boolean inputMentionsSymbol(String normalizedInput, SymbolId id) {
+    private boolean inputMentionsEntity(String normalizedInput, SymbolId id) {
         if (normalizedInput == null || normalizedInput.isBlank() || id == null) {
             return false;
         }
-        String display = displayValue(id);
-        if (display != null && !display.isBlank()) {
-            String displayLower = display.toLowerCase(Locale.ROOT);
-            if (normalizedInput.contains(displayLower)) {
-                return true;
-            }
-            String displayToken = annotationResolver.normalizeLabelToToken(display);
-            if (!displayToken.isBlank() && normalizedInput.contains(displayToken.replace('_', ' '))) {
-                return true;
-            }
+        List<String> phrases = labelPhrasesByEntity.get(id);
+        if (phrases == null || phrases.isEmpty()) {
+            return false;
         }
-        String value = id.value();
-        List<String> iris = new ArrayList<>();
-        if (value.startsWith("http://") || value.startsWith("https://")) {
-            iris.add(value);
-        } else {
-            iris.addAll(annotationResolver.entityIrisByLabel(annotationResolver.normalizeLabelToToken(value)));
-        }
-        for (String iri : iris) {
-            for (String label : annotationResolver.labelsForIri(iri)) {
-                if (label == null || label.isBlank()) {
-                    continue;
-                }
-                String labelLower = label.toLowerCase(Locale.ROOT);
-                if (normalizedInput.contains(labelLower)) {
-                    return true;
-                }
-                String token = annotationResolver.normalizeLabelToToken(label);
-                if (!token.isBlank() && normalizedInput.contains(token.replace('_', ' '))) {
-                    return true;
-                }
+        for (String phrase : phrases) {
+            if (phrase.isBlank()) {
+                continue;
+            }
+            if (normalizedInput.contains(phrase)) {
+                return true;
             }
         }
         return false;
@@ -1501,21 +1618,10 @@ final class AnswerComposer {
         if (resource == null) {
             return dependents;
         }
-        String resourceIri = resolveEntityIri(resource);
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = support.localName(assertion.predicate());
-            if ("poweredby".equals(predicate) || "require".equals(predicate) || "requires".equals(predicate)) {
-                if (resource.equals(assertion.object())) {
-                    dependents.add(assertion.subject());
-                    continue;
-                }
-                if (resourceIri != null) {
-                    String objectIri = resolveEntityIri(assertion.object());
-                    if (resourceIri.equals(objectIri)) {
-                        dependents.add(assertion.subject());
-                    }
-                }
-            }
+        refreshIndexesIfNeeded();
+        Set<SymbolId> direct = dependentsByResource.get(resource);
+        if (direct != null) {
+            dependents.addAll(direct);
         }
         return dependents;
     }
@@ -1647,15 +1753,16 @@ final class AnswerComposer {
         if (input == null || input.isBlank()) {
             return null;
         }
-        String normalizedInput = input.toLowerCase(Locale.ROOT);
+        refreshIndexesIfNeeded();
+        String normalizedInput = normalizeInput(input);
         SymbolId best = null;
         double bestScore = -1.0;
-        for (EntityNode entity : graph.getAllEntities()) {
-            SymbolId id = entity.id();
+        Set<SymbolId> candidates = findEntitiesByTokens(normalizedInput);
+        for (SymbolId id : candidates) {
             if (!hasSemanticRole(id, "evidence_signal")) {
                 continue;
             }
-            if (!inputMentionsSymbol(normalizedInput, id)) {
+            if (!inputMentionsEntity(normalizedInput, id)) {
                 continue;
             }
             double score = answerRanker.specificityScore(id.value());
@@ -1782,11 +1889,9 @@ final class AnswerComposer {
             return 0.0;
         }
         double score = 0.0;
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
+        refreshIndexesIfNeeded();
+        for (RelationAssertion assertion : assertionsByLocalPredicate("before", "after", "during")) {
             String predicate = support.localName(assertion.predicate());
-            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
-                continue;
-            }
             if (assertion.subject().equals(cause) && assertion.object().equals(effect)) {
                 score += 0.4;
             } else if ("after".equals(predicate) && assertion.subject().equals(effect) && assertion.object().equals(cause)) {
@@ -2077,11 +2182,9 @@ final class AnswerComposer {
         if (evidenceAligned && target != null && (componentFailure != null || subsystemFailure != null)) {
             SymbolId focus = componentFailure != null ? componentFailure : subsystemFailure;
             if (focus != null) {
-                for (RelationAssertion assertion : graph.getAllAssertions()) {
+                refreshIndexesIfNeeded();
+                for (RelationAssertion assertion : assertionsByLocalPredicate("before", "after")) {
                     String predicate = support.localName(assertion.predicate());
-                    if (!"before".equals(predicate) && !"after".equals(predicate)) {
-                        continue;
-                    }
                     if (assertion.subject().equals(focus) && assertion.object().equals(target)) {
                         sentences.add(answerRenderer.formatAssertionSentence(assertion));
                     } else if (assertion.subject().equals(target) && assertion.object().equals(focus)) {
@@ -2096,11 +2199,8 @@ final class AnswerComposer {
         if (node == null) {
             return false;
         }
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = support.localName(assertion.predicate());
-            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
-                continue;
-            }
+        refreshIndexesIfNeeded();
+        for (RelationAssertion assertion : assertionsByLocalPredicate("before", "after", "during")) {
             if (assertion.subject().equals(node) || assertion.object().equals(node)) {
                 return true;
             }
@@ -2689,13 +2789,21 @@ final class AnswerComposer {
         if (id == null || role == null || role.isBlank()) {
             return false;
         }
+        String cacheKey = id.value() + "|" + role.toLowerCase(Locale.ROOT);
+        Boolean cached = semanticRoleCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         String iri = resolveEntityIri(id);
         if (iri == null) {
+            semanticRoleCache.put(cacheKey, false);
             return false;
         }
-        return annotationResolver.annotationValue(iri, com.sahr.ontology.SahrAnnotationVocabulary.SEMANTIC_ROLE)
+        boolean result = annotationResolver.annotationValue(iri, com.sahr.ontology.SahrAnnotationVocabulary.SEMANTIC_ROLE)
                 .map(value -> roleMatches(value, role))
                 .orElse(false);
+        semanticRoleCache.put(cacheKey, result);
+        return result;
     }
 
     private boolean roleMatches(String value, String role) {
@@ -2723,6 +2831,138 @@ final class AnswerComposer {
             return iri;
         }
         return null;
+    }
+
+    private void refreshIndexesIfNeeded() {
+        long currentVersion = graph.version();
+        if (currentVersion == indexVersion) {
+            return;
+        }
+        synchronized (indexLock) {
+            if (currentVersion == indexVersion) {
+                return;
+            }
+            labelTokenIndex = new HashMap<>();
+            labelPhrasesByEntity = new HashMap<>();
+            dependentsByResource = new HashMap<>();
+            assertionsByLocalPredicate = new HashMap<>();
+            semanticRoleCache = new HashMap<>();
+            for (EntityNode entity : graph.getAllEntities()) {
+                SymbolId id = entity.id();
+                if (id == null) {
+                    continue;
+                }
+                List<String> phrases = buildLabelPhrases(id);
+                labelPhrasesByEntity.put(id, phrases);
+                for (String phrase : phrases) {
+                    for (String token : tokenize(phrase)) {
+                        labelTokenIndex.computeIfAbsent(token, key -> new HashSet<>()).add(id);
+                    }
+                }
+            }
+
+            for (RelationAssertion assertion : graph.getAllAssertions()) {
+                if (assertion == null) {
+                    continue;
+                }
+                String local = support.localName(assertion.predicate());
+                assertionsByLocalPredicate
+                        .computeIfAbsent(local, key -> new ArrayList<>())
+                        .add(assertion);
+                if ("poweredby".equals(local) || "require".equals(local) || "requires".equals(local)) {
+                    dependentsByResource
+                            .computeIfAbsent(assertion.object(), key -> new HashSet<>())
+                            .add(assertion.subject());
+                }
+            }
+            indexVersion = currentVersion;
+        }
+    }
+
+    private List<String> buildLabelPhrases(SymbolId id) {
+        Set<String> phrases = new LinkedHashSet<>();
+        String display = displayValue(id);
+        if (display != null && !display.isBlank()) {
+            phrases.add(normalizePhrase(display));
+        }
+        String value = id.value();
+        if (value != null && !value.isBlank()) {
+            phrases.add(normalizePhrase(value));
+        }
+        return new ArrayList<>(phrases);
+    }
+
+    private void removeEntityTokens(SymbolId id) {
+        List<String> phrases = labelPhrasesByEntity.remove(id);
+        if (phrases == null || phrases.isEmpty()) {
+            return;
+        }
+        for (String phrase : phrases) {
+            for (String token : tokenize(phrase)) {
+                Set<SymbolId> ids = labelTokenIndex.get(token);
+                if (ids == null) {
+                    continue;
+                }
+                ids.remove(id);
+                if (ids.isEmpty()) {
+                    labelTokenIndex.remove(token);
+                }
+            }
+        }
+    }
+
+    private String normalizePhrase(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.toLowerCase(Locale.ROOT).replace('_', ' ').trim();
+    }
+
+    private List<String> tokenize(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        String[] parts = value.toLowerCase(Locale.ROOT).split("[^a-z0-9]+");
+        List<String> tokens = new ArrayList<>();
+        for (String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            tokens.add(part);
+        }
+        return tokens;
+    }
+
+    private String normalizeInput(String input) {
+        if (input == null) {
+            return "";
+        }
+        return input.toLowerCase(Locale.ROOT);
+    }
+
+    private Set<SymbolId> findEntitiesByTokens(String normalizedInput) {
+        if (normalizedInput == null || normalizedInput.isBlank()) {
+            return Set.of();
+        }
+        Set<SymbolId> matches = new HashSet<>();
+        for (String token : tokenize(normalizedInput)) {
+            Set<SymbolId> ids = labelTokenIndex.get(token);
+            if (ids != null) {
+                matches.addAll(ids);
+            }
+        }
+        return matches;
+    }
+
+    private List<RelationAssertion> assertionsByLocalPredicate(String... predicates) {
+        List<RelationAssertion> results = new ArrayList<>();
+        for (String predicate : predicates) {
+            List<RelationAssertion> entries = assertionsByLocalPredicate.get(predicate);
+            if (entries != null) {
+                results.addAll(entries);
+            }
+        }
+        return results;
     }
 
     private boolean connectsMentionPair(RelationAssertion assertion, List<Set<SymbolId>> mentionAliases) {

@@ -31,6 +31,7 @@ import com.sahr.nlp.StatementBatch;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.SahrAnnotationVocabulary;
+import edu.stanford.nlp.process.Morphology;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -42,11 +43,14 @@ import java.util.logging.Logger;
 
 public final class SahrAgent {
     private static final Logger logger = Logger.getLogger(SahrAgent.class.getName());
+    private static final Morphology PREDICATE_MORPHOLOGY = new Morphology();
     private static final String PREDICATE_TYPE = "rdf:type";
     private static final int MAX_PROPAGATION_ITERATIONS = 5;
     private static final int MAX_DERIVED_ASSERTIONS = 100;
     private static final int MAX_SUBGOAL_DEPTH = 3;
     private static final int MAX_SUBGOALS = 20;
+    private static final String TIMING_PROPERTY = "sahr.handle.timing";
+    private static final String SUBGOAL_TIMING_PROPERTY = "sahr.subgoal.timing";
 
     private final KnowledgeBase graph;
     private final OntologyService ontology;
@@ -263,44 +267,171 @@ public final class SahrAgent {
     }
 
     public String handle(String input) {
+        boolean timing = Boolean.parseBoolean(System.getProperty(TIMING_PROPERTY, "false"));
+        long totalStart = timing ? System.nanoTime() : 0L;
         String normalizedInput = stripLeadingQuestionNumber(input);
         this.lastInput = normalizedInput;
         if (input != null && !input.equals(normalizedInput) && logger.isLoggable(java.util.logging.Level.FINE)) {
             logger.fine(() -> "Normalized input='" + input + "' -> '" + normalizedInput + "'");
         }
         ReasoningPhase previousPhase = phases.enter(ReasoningPhase.UPDATE);
+        long featuresStart = timing ? System.nanoTime() : 0L;
         InputFeatures features = InputFeatureExtractor.extract(normalizedInput);
+        long featuresEnd = timing ? System.nanoTime() : 0L;
+        long intentStart = timing ? System.nanoTime() : 0L;
         IntentDecision intentDecision = selectIntent(features);
+        long intentEnd = timing ? System.nanoTime() : 0L;
         boolean questionLike = parser.isQuestion(normalizedInput) || isQuestionIntent(intentDecision);
         boolean allowRuleParse = features.has("has_if")
                 && !features.has("has_question_mark")
                 && !features.has("has_wh");
+        long parseStart = timing ? System.nanoTime() : 0L;
         QueryGoal query = mapQuery(parser.parse(normalizedInput));
+        long parseEnd = timing ? System.nanoTime() : 0L;
+        long ruleStart = timing ? System.nanoTime() : 0L;
         Optional<RuleStatement> ruleStatement = (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
                 ? ruleParser.parse(normalizedInput).map(this::mapRuleStatement)
                 : Optional.empty();
+        long ruleEnd = timing ? System.nanoTime() : 0L;
         if (ruleStatement.isPresent()) {
             questionLike = false;
         }
         Optional<RuleAssertion> rule = ruleStatement.map(this::toRuleAssertion);
+        long statementStart = timing ? System.nanoTime() : 0L;
         Optional<Statement> statement = (questionLike || rule.isPresent())
                 ? Optional.empty()
                 : statementParser.parse(normalizedInput).map(this::mapStatement);
+        long statementEnd = timing ? System.nanoTime() : 0L;
         logger.fine(() -> "Input='" + normalizedInput + "' statementPresent=" + statement.isPresent()
                 + " queryIntent=" + query.type());
 
+        long memoryStart = timing ? System.nanoTime() : 0L;
         statement.ifPresent(this::updateWorkingMemoryFromStatement);
         updateWorkingMemoryFromQuery(query);
+        long memoryEnd = timing ? System.nanoTime() : 0L;
 
         try {
             if (!isQuestion(query)) {
                 HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), rule.orElse(null), workingMemory, features);
-                return handleSingle(context, query, questionLike, features);
+                long answerStart = timing ? System.nanoTime() : 0L;
+                String result = handleSingle(context, query, questionLike, features);
+                long answerEnd = timing ? System.nanoTime() : 0L;
+                if (timing) {
+                    logHandleTiming("statement", normalizedInput,
+                            featuresEnd - featuresStart,
+                            intentEnd - intentStart,
+                            parseEnd - parseStart,
+                            ruleEnd - ruleStart,
+                            statementEnd - statementStart,
+                            memoryEnd - memoryStart,
+                            answerEnd - answerStart,
+                            System.nanoTime() - totalStart);
+                }
+                return result;
             }
-            return handleWithSubgoals(query, statement.orElse(null), questionLike, rule.orElse(null), features);
+            long answerStart = timing ? System.nanoTime() : 0L;
+            String result = handleWithSubgoals(query, statement.orElse(null), questionLike, rule.orElse(null), features);
+            long answerEnd = timing ? System.nanoTime() : 0L;
+            if (timing) {
+                logHandleTiming("question", normalizedInput,
+                        featuresEnd - featuresStart,
+                        intentEnd - intentStart,
+                        parseEnd - parseStart,
+                        ruleEnd - ruleStart,
+                        statementEnd - statementStart,
+                        memoryEnd - memoryStart,
+                        answerEnd - answerStart,
+                        System.nanoTime() - totalStart);
+            }
+            return result;
         } finally {
             phases.restore(previousPhase);
         }
+    }
+
+    private void logHandleTiming(String kind,
+                                 String input,
+                                 long featuresNs,
+                                 long intentNs,
+                                 long parseNs,
+                                 long ruleNs,
+                                 long statementNs,
+                                 long memoryNs,
+                                 long answerNs,
+                                 long totalNs) {
+        String prefix = "handle_timing kind=" + kind;
+        System.out.println(prefix + " features_ms=" + nanosToMillis(featuresNs)
+                + " intent_ms=" + nanosToMillis(intentNs)
+                + " parse_ms=" + nanosToMillis(parseNs)
+                + " rule_ms=" + nanosToMillis(ruleNs)
+                + " statement_ms=" + nanosToMillis(statementNs)
+                + " memory_ms=" + nanosToMillis(memoryNs)
+                + " answer_ms=" + nanosToMillis(answerNs)
+                + " total_ms=" + nanosToMillis(totalNs)
+                + " input=\"" + sanitizeTimingInput(input) + "\"");
+    }
+
+    private void logSubgoalTiming(String action,
+                                  QueryGoal goal,
+                                  int processed,
+                                  int queueSize,
+                                  int candidateCount,
+                                  int filteredCount,
+                                  ReasoningCandidate winner,
+                                  long reasonNs,
+                                  long filterNs,
+                                  long selectNs,
+                                  long planNs,
+                                  long answerNs,
+                                  long totalNs) {
+        String winnerType = winner == null ? "none" : winner.type().name();
+        String producedBy = winner == null ? "" : safe(winner.producedBy());
+        String subject = goal == null ? "" : safe(goal.subject());
+        String predicate = goal == null ? "" : safe(goal.predicate());
+        String object = goal == null ? "" : safe(goal.object());
+        System.out.println("subgoal_timing action=" + action
+                + " processed=" + processed
+                + " queue=" + queueSize
+                + " depth=" + (goal == null ? 0 : goal.depth())
+                + " candidates=" + candidateCount
+                + " filtered=" + filteredCount
+                + " winner=" + winnerType
+                + " producedBy=" + producedBy
+                + " reason_ms=" + nanosToMillis(reasonNs)
+                + " filter_ms=" + nanosToMillis(filterNs)
+                + " select_ms=" + nanosToMillis(selectNs)
+                + " plan_ms=" + nanosToMillis(planNs)
+                + " answer_ms=" + nanosToMillis(answerNs)
+                + " total_ms=" + nanosToMillis(totalNs)
+                + " subject=\"" + subject + "\""
+                + " predicate=\"" + predicate + "\""
+                + " object=\"" + object + "\"");
+    }
+
+    private void logPlanTiming(String step,
+                               com.sahr.core.QueryPlan.Kind kind,
+                               QueryGoal goal,
+                               long durationNs) {
+        String subject = goal == null ? "" : safe(goal.subject());
+        String predicate = goal == null ? "" : safe(goal.predicate());
+        String object = goal == null ? "" : safe(goal.object());
+        System.out.println("plan_timing step=" + step
+                + " kind=" + kind
+                + " ms=" + nanosToMillis(durationNs)
+                + " subject=\"" + subject + "\""
+                + " predicate=\"" + predicate + "\""
+                + " object=\"" + object + "\"");
+    }
+
+    private long nanosToMillis(long nanos) {
+        return Math.round(nanos / 1_000_000.0);
+    }
+
+    private String sanitizeTimingInput(String input) {
+        if (input == null) {
+            return "";
+        }
+        return input.replace("\n", " ").replace("\"", "'");
     }
 
     public Optional<ReasoningTrace> trace() {
@@ -488,7 +619,60 @@ public final class SahrAgent {
             return predicate;
         }
         Optional<String> mappedPredicate = termMapper.mapPredicateToken(predicate);
-        return mappedPredicate.orElse(predicate);
+        if (mappedPredicate.isPresent()) {
+            return mappedPredicate.get();
+        }
+        if (isIri(predicate)) {
+            return predicate;
+        }
+        String lemma = lemmatizePredicate(predicate);
+        if (!lemma.equals(predicate)) {
+            Optional<String> mappedLemma = termMapper.mapPredicateToken(lemma);
+            if (mappedLemma.isPresent()) {
+                return mappedLemma.get();
+            }
+            return lemma;
+        }
+        return predicate;
+    }
+
+    private String lemmatizePredicate(String predicate) {
+        String trimmed = predicate.trim();
+        if (trimmed.isEmpty()) {
+            return predicate;
+        }
+        if (trimmed.contains("_")) {
+            return trimmed.toLowerCase(java.util.Locale.ROOT);
+        }
+        String lemma = PREDICATE_MORPHOLOGY.lemma(trimmed, "VB");
+        if (lemma == null || lemma.isBlank()) {
+            lemma = trimmed;
+        }
+        if (lemma.equalsIgnoreCase(trimmed)) {
+            String vbd = PREDICATE_MORPHOLOGY.lemma(trimmed, "VBD");
+            if (vbd != null && !vbd.isBlank()) {
+                lemma = vbd;
+            }
+        }
+        if (lemma.equalsIgnoreCase(trimmed)) {
+            String vbn = PREDICATE_MORPHOLOGY.lemma(trimmed, "VBN");
+            if (vbn != null && !vbn.isBlank()) {
+                lemma = vbn;
+            }
+        }
+        if (lemma.equalsIgnoreCase(trimmed)) {
+            String lowered = trimmed.toLowerCase(java.util.Locale.ROOT);
+            if (lowered.endsWith("ied") && lowered.length() > 3) {
+                lemma = lowered.substring(0, lowered.length() - 3) + "y";
+            } else if (lowered.endsWith("ed") && lowered.length() > 2) {
+                lemma = lowered.substring(0, lowered.length() - 2);
+            } else if (lowered.endsWith("ing") && lowered.length() > 3) {
+                lemma = lowered.substring(0, lowered.length() - 3);
+            } else if (lowered.endsWith("s") && lowered.length() > 1) {
+                lemma = lowered.substring(0, lowered.length() - 1);
+            }
+        }
+        return lemma.toLowerCase(java.util.Locale.ROOT);
     }
 
     private Statement mapStatement(Statement statement) {
@@ -957,11 +1141,14 @@ public final class SahrAgent {
         queue.add(root);
         int processed = 0;
         boolean question = isQuestion(root) || questionLike;
+        boolean subgoalTiming = Boolean.parseBoolean(System.getProperty(SUBGOAL_TIMING_PROPERTY, "false"));
 
         while (!queue.isEmpty() && processed < MAX_SUBGOALS) {
             QueryGoal current = queue.removeFirst();
             processed++;
             workingMemory.pushGoal(current);
+            long iterationStart = subgoalTiming ? System.nanoTime() : 0L;
+            long reasonStart = subgoalTiming ? System.nanoTime() : 0L;
 
             HeadContext context = new HeadContext(
                     current,
@@ -973,10 +1160,38 @@ public final class SahrAgent {
                     features
             );
             List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
+            long reasonEnd = subgoalTiming ? System.nanoTime() : 0L;
+            int candidateCount = candidates == null ? 0 : candidates.size();
+            int filteredCount = candidateCount;
+            long filterStart = 0L;
+            long filterEnd = 0L;
+            long selectStart = 0L;
+            long selectEnd = 0L;
+            long planStart = 0L;
+            long planEnd = 0L;
+            long answerStart = 0L;
+            long answerEnd = 0L;
             if (question) {
+                filterStart = subgoalTiming ? System.nanoTime() : 0L;
                 List<ReasoningCandidate> queryCandidates = filterQueryResolutionCandidates(candidates);
+                filterEnd = subgoalTiming ? System.nanoTime() : 0L;
                 if (queryCandidates.isEmpty()) {
                     workingMemory.popGoal();
+                    if (subgoalTiming) {
+                        logSubgoalTiming("no_candidates",
+                                current,
+                                processed,
+                                queue.size(),
+                                candidateCount,
+                                0,
+                                null,
+                                reasonEnd - reasonStart,
+                                filterEnd - filterStart,
+                                0L,
+                                0L,
+                                0L,
+                                System.nanoTime() - iterationStart);
+                    }
                     if (current.goalId().equals(root.goalId())) {
                         String fallback = directWhereMatch(current);
                         if (fallback != null) {
@@ -987,15 +1202,33 @@ public final class SahrAgent {
                     continue;
                 }
                 candidates = queryCandidates;
+                filteredCount = queryCandidates.size();
             }
             if (candidates.isEmpty()) {
                 workingMemory.popGoal();
+                if (subgoalTiming) {
+                    logSubgoalTiming("no_candidates",
+                            current,
+                            processed,
+                            queue.size(),
+                            candidateCount,
+                            filteredCount,
+                            null,
+                            reasonEnd - reasonStart,
+                            filterEnd - filterStart,
+                            0L,
+                            0L,
+                            0L,
+                            System.nanoTime() - iterationStart);
+                }
                 if (current.goalId().equals(root.goalId())) {
                     return isYesNo(root) ? "Unknown." : "No candidates produced.";
                 }
                 continue;
             }
+            selectStart = subgoalTiming ? System.nanoTime() : 0L;
             ReasoningCandidate winner = selectPreferredCandidate(candidates);
+            selectEnd = subgoalTiming ? System.nanoTime() : 0L;
             trace.addEntry(new ReasoningTraceEntry(current, candidates, winner));
             logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                     + " score=" + winner.score());
@@ -1015,16 +1248,63 @@ public final class SahrAgent {
                     queue.addLast(subgoal.withParent(current.goalId(), nextDepth));
                 }
                 workingMemory.popGoal();
+                if (subgoalTiming) {
+                    logSubgoalTiming("subgoal",
+                            current,
+                            processed,
+                            queue.size(),
+                            candidateCount,
+                            filteredCount,
+                            winner,
+                            reasonEnd - reasonStart,
+                            filterEnd - filterStart,
+                            selectEnd - selectStart,
+                            0L,
+                            0L,
+                            System.nanoTime() - iterationStart);
+                }
                 continue;
             }
 
             if (CandidateType.QUERY_PLAN.equals(winner.type()) && winner.payload() instanceof com.sahr.core.QueryPlan) {
+                planStart = subgoalTiming ? System.nanoTime() : 0L;
                 String planAnswer = executeQueryPlan((com.sahr.core.QueryPlan) winner.payload());
+                planEnd = subgoalTiming ? System.nanoTime() : 0L;
                 if (current.goalId().equals(root.goalId())) {
                     workingMemory.popGoal();
+                    if (subgoalTiming) {
+                        logSubgoalTiming("query_plan",
+                                current,
+                                processed,
+                                queue.size(),
+                                candidateCount,
+                                filteredCount,
+                                winner,
+                                reasonEnd - reasonStart,
+                                filterEnd - filterStart,
+                                selectEnd - selectStart,
+                                planEnd - planStart,
+                                0L,
+                                System.nanoTime() - iterationStart);
+                    }
                     return planAnswer;
                 }
                 workingMemory.popGoal();
+                if (subgoalTiming) {
+                    logSubgoalTiming("query_plan",
+                            current,
+                            processed,
+                            queue.size(),
+                            candidateCount,
+                            filteredCount,
+                            winner,
+                            reasonEnd - reasonStart,
+                            filterEnd - filterStart,
+                            selectEnd - selectStart,
+                            planEnd - planStart,
+                            0L,
+                            System.nanoTime() - iterationStart);
+                }
                 continue;
             }
 
@@ -1034,27 +1314,106 @@ public final class SahrAgent {
                     queue.addLast(root);
                 }
                 workingMemory.popGoal();
+                if (subgoalTiming) {
+                    logSubgoalTiming("assertion",
+                            current,
+                            processed,
+                            queue.size(),
+                            candidateCount,
+                            filteredCount,
+                            winner,
+                            reasonEnd - reasonStart,
+                            filterEnd - filterStart,
+                            selectEnd - selectStart,
+                            0L,
+                            0L,
+                            System.nanoTime() - iterationStart);
+                }
                 continue;
             }
 
             if (CandidateType.ANSWER.equals(winner.type())) {
+                answerStart = subgoalTiming ? System.nanoTime() : 0L;
                 if (!current.goalId().equals(root.goalId())) {
                     applyAnswerAsAssertion(winner.payload());
                     queue.addLast(root);
                     workingMemory.popGoal();
+                    answerEnd = subgoalTiming ? System.nanoTime() : 0L;
+                    if (subgoalTiming) {
+                        logSubgoalTiming("answer_as_assertion",
+                                current,
+                                processed,
+                                queue.size(),
+                                candidateCount,
+                                filteredCount,
+                                winner,
+                                reasonEnd - reasonStart,
+                                filterEnd - filterStart,
+                                selectEnd - selectStart,
+                                0L,
+                                answerEnd - answerStart,
+                                System.nanoTime() - iterationStart);
+                    }
                     continue;
                 }
                 String multiAnswer = buildMultiAnswer(root, candidates);
                 if (multiAnswer != null) {
                     recordAnswerValues(root, extractAnswerValues(candidates));
                     workingMemory.popGoal();
+                    answerEnd = subgoalTiming ? System.nanoTime() : 0L;
+                    if (subgoalTiming) {
+                        logSubgoalTiming("multi_answer",
+                                current,
+                                processed,
+                                queue.size(),
+                                candidateCount,
+                                filteredCount,
+                                winner,
+                                reasonEnd - reasonStart,
+                                filterEnd - filterStart,
+                                selectEnd - selectStart,
+                                0L,
+                                answerEnd - answerStart,
+                                System.nanoTime() - iterationStart);
+                    }
                     return multiAnswer;
                 }
                 recordAnswerIfPossible(root, winner.payload());
                 workingMemory.popGoal();
+                answerEnd = subgoalTiming ? System.nanoTime() : 0L;
+                if (subgoalTiming) {
+                    logSubgoalTiming("answer",
+                            current,
+                            processed,
+                            queue.size(),
+                            candidateCount,
+                            filteredCount,
+                            winner,
+                            reasonEnd - reasonStart,
+                            filterEnd - filterStart,
+                            selectEnd - selectStart,
+                            0L,
+                            answerEnd - answerStart,
+                            System.nanoTime() - iterationStart);
+                }
                 return winner.payload() == null ? "No payload." : winner.payload().toString();
             }
             workingMemory.popGoal();
+            if (subgoalTiming) {
+                logSubgoalTiming("unhandled",
+                        current,
+                        processed,
+                        queue.size(),
+                        candidateCount,
+                        filteredCount,
+                        winner,
+                        reasonEnd - reasonStart,
+                        filterEnd - filterStart,
+                        selectEnd - selectStart,
+                        0L,
+                        0L,
+                        System.nanoTime() - iterationStart);
+            }
         }
 
         return "No candidates produced.";
@@ -1146,36 +1505,77 @@ public final class SahrAgent {
                     + " predicate=" + safe(goal.predicate())
                     + " object=" + safe(goal.object()));
         }
+        boolean planTiming = Boolean.parseBoolean(System.getProperty(SUBGOAL_TIMING_PROPERTY, "false"));
         return switch (plan.kind()) {
             case RELATION_MATCH -> {
+                long relationshipStart = planTiming ? System.nanoTime() : 0L;
                 String relationship = answerComposer.relationshipAnswer(goal);
+                if (planTiming) {
+                    logPlanTiming("relationship_answer", plan.kind(), goal,
+                            System.nanoTime() - relationshipStart);
+                }
                 if (relationship != null && !relationship.isBlank()) {
                     yield relationship;
                 }
-                yield executeRelationMatch(goal);
+                long relationStart = planTiming ? System.nanoTime() : 0L;
+                String relationAnswer = executeRelationMatch(goal);
+                if (planTiming) {
+                    logPlanTiming("relation_match", plan.kind(), goal,
+                            System.nanoTime() - relationStart);
+                }
+                yield relationAnswer;
             }
             case TEMPORAL_MATCH -> executeTemporalMatch(goal);
             case CAUSE_CHAIN -> {
+                long causeStart = planTiming ? System.nanoTime() : 0L;
                 String answer = answerComposer.executeCauseChain(goal);
+                if (planTiming) {
+                    logPlanTiming("cause_chain", plan.kind(), goal,
+                            System.nanoTime() - causeStart);
+                }
                 if (answer == null || answer.isBlank()) {
                     yield "No candidates produced.";
                 }
                 yield answer;
             }
-            case EVIDENCE_MATCH -> executeRelationMatch(goal);
+            case EVIDENCE_MATCH -> {
+                long evidenceStart = planTiming ? System.nanoTime() : 0L;
+                String evidenceAnswer = executeRelationMatch(goal);
+                if (planTiming) {
+                    logPlanTiming("evidence_match", plan.kind(), goal,
+                            System.nanoTime() - evidenceStart);
+                }
+                yield evidenceAnswer;
+            }
         };
     }
 
     private String executeRelationMatch(QueryGoal goal) {
+        boolean planTiming = Boolean.parseBoolean(System.getProperty(SUBGOAL_TIMING_PROPERTY, "false"));
+        long evidenceStart = planTiming ? System.nanoTime() : 0L;
         String evidenceSignal = answerComposer.evidenceSignalAnswerIfApplicable(goal);
+        if (planTiming) {
+            logPlanTiming("evidence_signal", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                    System.nanoTime() - evidenceStart);
+        }
         if (evidenceSignal != null) {
             return evidenceSignal;
         }
+        long contrastStart = planTiming ? System.nanoTime() : 0L;
         String contrast = answerComposer.relationMatchFallbackAnswer(goal);
+        if (planTiming) {
+            logPlanTiming("relation_fallback", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                    System.nanoTime() - contrastStart);
+        }
         if (contrast != null) {
             return contrast;
         }
+        long relationshipStart = planTiming ? System.nanoTime() : 0L;
         String relationship = answerComposer.relationshipAnswer(goal);
+        if (planTiming) {
+            logPlanTiming("relationship_answer", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                    System.nanoTime() - relationshipStart);
+        }
         if (relationship != null && !relationship.isBlank()) {
             return relationship;
         }
@@ -1183,22 +1583,42 @@ public final class SahrAgent {
             return "No candidates produced.";
         }
         HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null);
+        long headStart = planTiming ? System.nanoTime() : 0L;
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
+        if (planTiming) {
+            logPlanTiming("reason", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                    System.nanoTime() - headStart);
+        }
         List<ReasoningCandidate> answers = new java.util.ArrayList<>();
         for (ReasoningCandidate candidate : candidates) {
             if (CandidateType.ANSWER.equals(candidate.type())) {
                 answers.add(candidate);
             }
         }
+        long filterStart = planTiming ? System.nanoTime() : 0L;
         List<ReasoningCandidate> filteredAnswers = answerRanker.filterEchoAnswers(answers, goal);
+        if (planTiming) {
+            logPlanTiming("filter_echo", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                    System.nanoTime() - filterStart);
+        }
         if (!filteredAnswers.isEmpty()) {
             answers = filteredAnswers;
         }
         if (answers.isEmpty()) {
+            long directStart = planTiming ? System.nanoTime() : 0L;
             java.util.List<String> directMatches = directRelationMatches(goal);
+            if (planTiming) {
+                logPlanTiming("direct_relation", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                        System.nanoTime() - directStart);
+            }
             if (!directMatches.isEmpty()) {
+                long rankStart = planTiming ? System.nanoTime() : 0L;
                 directMatches = answerRanker.filterEchoValues(directMatches, goal);
                 directMatches = answerRanker.rankAnswerValues(directMatches);
+                if (planTiming) {
+                    logPlanTiming("rank_direct", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                            System.nanoTime() - rankStart);
+                }
                 if (directMatches.size() == 1) {
                     String value = directMatches.get(0);
                     if (isEntityValue(value)) {
@@ -1211,20 +1631,35 @@ public final class SahrAgent {
                 }
                 return String.join(", ", directMatches);
             }
+            long ruleStart = planTiming ? System.nanoTime() : 0L;
             String ruleMatch = directRuleMatch(goal);
+            if (planTiming) {
+                logPlanTiming("direct_rule", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                        System.nanoTime() - ruleStart);
+            }
             if (ruleMatch != null) {
                 if (isEntityValue(ruleMatch)) {
                     return answerComposer.renderEntityAnswer(ruleMatch, goal);
                 }
                 return ruleMatch;
             }
+            long whereStart = planTiming ? System.nanoTime() : 0L;
             String whereFallback = directWhereMatch(goal);
+            if (planTiming) {
+                logPlanTiming("direct_where", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                        System.nanoTime() - whereStart);
+            }
             if (whereFallback != null) {
                 return whereFallback;
             }
             return isYesNo(goal) ? "Unknown." : "No candidates produced.";
         }
+        long selectStart = planTiming ? System.nanoTime() : 0L;
         ReasoningCandidate winner = answerRanker.selectBestAnswerCandidate(answers);
+        if (planTiming) {
+            logPlanTiming("select_best", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
+                    System.nanoTime() - selectStart);
+        }
         recordAnswerIfPossible(goal, winner.payload());
         if (winner.payload() == null) {
             return "No payload.";
@@ -1726,6 +2161,7 @@ public final class SahrAgent {
         graph.findEntity(id).orElseGet(() -> {
             EntityNode entity = new EntityNode(id, id.value(), types);
             graph.addEntity(entity);
+            answerComposer.noteEntity(entity);
             return entity;
         });
         workingMemory.addActiveEntity(id);
@@ -1741,9 +2177,11 @@ public final class SahrAgent {
             merged.add(normalized);
             EntityNode updated = new EntityNode(existing.id(), existing.surfaceForm(), merged);
             graph.addEntity(updated);
+            answerComposer.noteEntity(updated);
         }, () -> {
             EntityNode created = new EntityNode(id, id.value(), Set.of(normalized));
             graph.addEntity(created);
+            answerComposer.noteEntity(created);
         });
     }
 
@@ -1772,6 +2210,7 @@ public final class SahrAgent {
             return false;
         }
         graph.addAssertion(assertion);
+        answerComposer.noteAssertion(assertion);
         workingMemory.recordAssertion(assertion);
         workingMemory.addActiveEntity(assertion.subject());
         workingMemory.addActiveEntity(assertion.object());

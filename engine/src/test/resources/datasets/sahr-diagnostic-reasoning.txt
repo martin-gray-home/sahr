@@ -14,33 +14,35 @@ The dataset contains statements (knowledge) followed by questions with expected 
 
 Reaction wheels control spacecraft orientation.
 
-A reaction wheel contains a wheel motor.
+Reaction wheels contain a wheel motor.
 
-If a wheel motor fails then the reaction wheel fails.
+A wheel motor failure causes the reaction wheel to fail.
 
-If the reaction wheel fails then spacecraft orientation control is lost.
+A reaction wheel failure causes spacecraft orientation control to fail.
 
-If spacecraft orientation control is lost then the spacecraft becomes unstable.
+Spacecraft orientation control failing causes spacecraft instability.
 
-Thrusters can control spacecraft orientation using propellant.
+Thrusters control spacecraft orientation.
 
-Temperature spikes in the wheel motor often occur before a motor failure.
+Thrusters are powered by propellant.
 
-Loss of electrical power causes reaction wheels and magnetorquers to stop functioning.
+Reaction wheels are powered by electrical power.
 
-Thrusters do not require electrical power; they require propellant.
+Magnetorquers are powered by electrical power.
 
-Telemetry shows temperature spikes in the wheel motor before instability occurred.
+Temperature spikes occur before wheel motor failure.
 
-Telemetry shows that electrical bus voltage remained stable.
+Temperature spikes indicate impending wheel motor failure.
 
-Thrusters were not firing before the instability.
+Telemetry indicates temperature spikes.
 
-If thrusters are available they can restore spacecraft orientation.
+Telemetry indicates electrical power remained available.
 
-Thrusters require propellant.
+Electrical power remained available.
 
-During the anomaly the spacecraft still had propellant.
+Propellant remained available.
+
+Thrusters restore spacecraft orientation.
 
 # Questions, Expected Answers, and Expected Reasoning
 
@@ -55,7 +57,7 @@ wheel motor
 Expected Reasoning Chain
 wheel motor fails
 → reaction wheel fails
-→ spacecraft orientation control lost
+→ spacecraft orientation control fails
 → spacecraft instability
 
 ## Q2
@@ -69,7 +71,7 @@ wheel motor failure chain
 Expected Reasoning
 wheel motor fails
 → reaction wheel fails
-→ spacecraft orientation control lost
+→ spacecraft orientation control fails
 → spacecraft instability
 
 ## Q3
@@ -95,7 +97,7 @@ reaction wheel failure
 Expected Reasoning
 wheel motor fails
 → reaction wheel fails
-→ spacecraft orientation control lost
+→ spacecraft orientation control fails
 
 ## Q5
 
@@ -108,7 +110,7 @@ because the reaction wheel would fail
 Expected Reasoning
 wheel motor fails
 → reaction wheel fails
-→ spacecraft orientation control lost
+→ spacecraft orientation control fails
 
 ## Q6
 
@@ -121,8 +123,8 @@ magnetorquers
 
 Expected Reasoning
 electrical power lost
-→ reaction wheels stop functioning
-→ magnetorquers stop functioning
+→ reaction wheels fail
+→ magnetorquers fail
 
 ## Q7
 
@@ -154,13 +156,13 @@ Expected Reasoning Chains
 Cause 1
 wheel motor fails
 → reaction wheel fails
-→ spacecraft orientation control lost
+→ spacecraft orientation control fails
 → spacecraft instability
 
 Cause 2
 electrical power lost
-→ reaction wheels stop functioning
-→ spacecraft orientation control lost
+→ reaction wheels fail
+→ spacecraft orientation control fails
 → spacecraft instability
 
 ## Q9
@@ -172,7 +174,7 @@ Expected Answer
 electrical power failure
 
 Expected Reasoning
-telemetry shows electrical bus voltage stable
+telemetry indicates electrical power remained available
 → electrical power loss did not occur
 → eliminate electrical power failure
 
@@ -199,7 +201,7 @@ thrusters restored orientation
 
 Expected Reasoning
 reaction wheels failed
-→ spacecraft lost orientation control
+→ spacecraft orientation control fails
 
 thrusters available
 → thrusters can control spacecraft orientation
@@ -256,7 +258,7 @@ thrusters can control spacecraft orientation when reaction wheels fail
 
 Expected Reasoning
 reaction wheels fail
-→ orientation control lost
+→ orientation control fails
 
 thrusters can control orientation
 → thrusters act as backup system
@@ -288,7 +290,7 @@ wheel motor failure caused instability; thrusters restored control
 Expected Reasoning
 wheel motor fails
 → reaction wheel fails
-→ spacecraft orientation control lost
+→ spacecraft orientation control fails
 → spacecraft instability
 
 thrusters available

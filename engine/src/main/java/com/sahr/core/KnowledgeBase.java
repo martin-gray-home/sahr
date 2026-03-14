@@ -23,4 +23,6 @@ public interface KnowledgeBase {
     Optional<EntityNode> findEntity(SymbolId id);
 
     List<EntityNode> getAllEntities();
+
+    long version();
 }

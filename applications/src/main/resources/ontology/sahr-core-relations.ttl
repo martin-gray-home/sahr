@@ -1,0 +1,47 @@
+@prefix sahr: <https://sahr.ai/ontology/relations#> .
+@prefix ann: <https://sahr.ai/ontology/annotations#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://sahr.ai/ontology/core-relations>
+    a owl:Ontology ;
+    rdfs:label "SAHR Core Relations (Canonical Predicate Contract)" .
+
+ann:canonicalPredicate a owl:AnnotationProperty .
+
+sahr:cause a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "cause" .
+
+sahr:containment a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "containment" .
+
+sahr:control a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "control" .
+
+sahr:poweredBy a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "poweredBy" .
+
+sahr:before a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "before" .
+
+sahr:indicate a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "indicate" .
+
+sahr:restore a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "restore" .
+
+sahr:backupFor a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "backupFor" .
+
+sahr:fail a owl:ObjectProperty ;
+    ann:canonicalPredicate "true"^^xsd:boolean ;
+    rdfs:label "fail" .
