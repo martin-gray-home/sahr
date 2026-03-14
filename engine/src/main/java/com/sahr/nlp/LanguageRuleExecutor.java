@@ -3,9 +3,11 @@ package com.sahr.nlp;
 import com.sahr.core.QueryGoal;
 
 import java.util.Optional;
+import java.util.logging.Logger;
 
 public final class LanguageRuleExecutor {
     private static final double DEFAULT_SCORE = 0.35;
+    private static final Logger logger = Logger.getLogger(LanguageRuleExecutor.class.getName());
 
     private final boolean ontologyDriven;
 
@@ -14,7 +16,13 @@ public final class LanguageRuleExecutor {
     }
 
     public Optional<LanguageQueryCandidate> interpret(LanguageGraph graph) {
-        if (graph == null || graph.questionShape() != LanguageGraph.QuestionShape.WH_PREPOSITION) {
+        if (graph == null) {
+            return Optional.empty();
+        }
+
+        LanguageGraph.QuestionShape shape = graph.questionShape();
+        if (shape != LanguageGraph.QuestionShape.WH_PREPOSITION_LEADING
+                && shape != LanguageGraph.QuestionShape.WH_PREPOSITION_TRAILING) {
             return Optional.empty();
         }
 
@@ -31,11 +39,24 @@ public final class LanguageRuleExecutor {
         }
 
         String expectedType = expectedTypeForWh(wh);
-        String subject = "with".equals(predicate) ? anchor : null;
-        String object = "with".equals(predicate) ? null : anchor;
+        boolean trailing = shape == LanguageGraph.QuestionShape.WH_PREPOSITION_TRAILING;
+        String subject = trailing ? anchor : null;
+        String object = trailing ? null : anchor;
 
         QueryGoal goal = QueryGoal.relationWithModifier(subject, predicate, object, expectedType, graph.anchorModifier());
-        return Optional.of(new LanguageQueryCandidate(goal, DEFAULT_SCORE, "language-graph-preposition"));
+        LanguageQueryCandidate candidate = new LanguageQueryCandidate(goal, DEFAULT_SCORE, "language-graph-preposition");
+        if (diagnosticsEnabled()) {
+            logger.info(() -> "LanguageRuleExecutor candidate shape=" + shape
+                    + " wh=" + wh
+                    + " relation=" + relation
+                    + " predicate=" + predicate
+                    + " anchor=" + anchor
+                    + " subject=" + subject
+                    + " object=" + object
+                    + " expectedType=" + expectedType
+                    + " utterance=\"" + graph.utterance() + "\"");
+        }
+        return Optional.of(candidate);
     }
 
     private String expectedTypeForWh(String wh) {
@@ -56,5 +77,12 @@ public final class LanguageRuleExecutor {
             return "locatedIn";
         }
         return prep;
+    }
+
+    private boolean diagnosticsEnabled() {
+        return Boolean.getBoolean("sahr.diagnostic.full")
+                || Boolean.getBoolean("sahr.diagnostic.repl")
+                || Boolean.parseBoolean(System.getenv().getOrDefault("SAHR_DIAGNOSTIC_FULL", "false"))
+                || Boolean.parseBoolean(System.getenv().getOrDefault("SAHR_DIAGNOSTIC_REPL", "false"));
     }
 }

@@ -145,6 +145,10 @@ public final class RelationQueryHead extends BaseHead {
             }
         }
 
+        if (candidates.isEmpty() && subject == null && object != null && ontology.isSymmetricProperty(predicate)) {
+            candidates.addAll(evaluateSymmetricFallback(graph, ontology, memory, object, predicate, expectedType));
+        }
+
         return candidates;
     }
 
@@ -208,6 +212,49 @@ public final class RelationQueryHead extends BaseHead {
         }
         long count = matches.stream().map(SymbolId::value).distinct().count();
         return List.of(buildCountAnswer(count, predicate));
+    }
+
+    private List<ReasoningCandidate> evaluateSymmetricFallback(KnowledgeBase graph,
+                                                               OntologyService ontology,
+                                                               WorkingMemory memory,
+                                                               SymbolId anchor,
+                                                               String predicate,
+                                                               String expectedType) {
+        List<ReasoningCandidate> candidates = new ArrayList<>();
+        for (String predicateKey : expandPredicates(predicate, ontology)) {
+            for (RelationAssertion assertion : graph.findByPredicate(predicateKey)) {
+                if (!assertion.subject().equals(anchor)) {
+                    continue;
+                }
+                SymbolId answer = assertion.object();
+                if (!matchesExpectedType(graph, ontology, answer, expectedType)) {
+                    continue;
+                }
+
+                double queryMatch = 0.85;
+                double typeMatch = expectedType == null ? 0.5 : 1.0;
+                double graphConfidence = assertion.confidence();
+                double memoryFocus = memoryFocus(memory, anchor, null, answer);
+                double score = normalize(queryMatch, typeMatch, graphConfidence, memoryFocus);
+
+                Map<String, Double> breakdown = new HashMap<>();
+                breakdown.put("query_match", queryMatch);
+                breakdown.put("entity_type_match", typeMatch);
+                breakdown.put("graph_confidence", graphConfidence);
+                breakdown.put("working_memory_focus", memoryFocus);
+
+                candidates.add(new ReasoningCandidate(
+                        CandidateType.ANSWER,
+                        answer,
+                        score,
+                        getName(),
+                        List.of(assertion.toString()),
+                        breakdown,
+                        0
+                ));
+            }
+        }
+        return candidates;
     }
 
     private boolean matchesExpectedTypeForCount(KnowledgeBase graph,

@@ -5,7 +5,8 @@ import java.util.Objects;
 
 public final class LanguageGraph {
     public enum QuestionShape {
-        WH_PREPOSITION,
+        WH_PREPOSITION_LEADING,
+        WH_PREPOSITION_TRAILING,
         UNKNOWN
     }
 

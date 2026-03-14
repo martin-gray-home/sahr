@@ -49,7 +49,7 @@ class SimpleQueryParserTest {
         QueryGoal query = parser.parse("Who is with the man");
 
         assertEquals(QueryGoal.Type.RELATION, query.type());
-        assertEquals("man", query.subject());
+        assertEquals("man", query.object());
         assertEquals("with", query.predicate());
         assertEquals("person", query.expectedType());
     }
@@ -222,7 +222,7 @@ class SimpleQueryParserTest {
         QueryGoal query = parser.parse("Who is with the power bus");
 
         assertEquals(QueryGoal.Type.RELATION, query.type());
-        assertEquals("power_bus", query.subject());
+        assertEquals("power_bus", query.object());
         assertEquals("with", query.predicate());
         assertEquals("person", query.expectedType());
     }

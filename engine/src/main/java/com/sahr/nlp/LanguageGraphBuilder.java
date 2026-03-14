@@ -33,21 +33,38 @@ public final class LanguageGraphBuilder {
         int relationIndex = copulaIndex >= 0
                 ? findTokenIndex(tokens, PREPOSITION_RELATIONS, copulaIndex + 1)
                 : -1;
+        int trailingRelationIndex = tokens.isEmpty() ? -1 : tokens.size() - 1;
+        if (trailingRelationIndex >= 0 && !PREPOSITION_RELATIONS.contains(tokens.get(trailingRelationIndex))) {
+            trailingRelationIndex = -1;
+        }
 
         String copulaToken = copulaIndex >= 0 ? tokens.get(copulaIndex) : null;
         String relationToken = relationIndex >= 0 ? tokens.get(relationIndex) : null;
 
-        List<String> anchorTokens = relationIndex >= 0
-                ? extractAnchorTokens(tokens, relationIndex + 1)
-                : List.of();
+        LanguageGraph.QuestionShape shape = LanguageGraph.QuestionShape.UNKNOWN;
+        List<String> anchorTokens = List.of();
+
+        if (whToken != null && relationToken != null) {
+            anchorTokens = extractAnchorTokens(tokens, relationIndex + 1, tokens.size());
+            String anchorToken = anchorTokens.isEmpty() ? null : String.join("_", anchorTokens);
+            if (anchorToken != null && !anchorToken.isBlank()) {
+                shape = LanguageGraph.QuestionShape.WH_PREPOSITION_LEADING;
+            }
+        }
+
+        if (shape == LanguageGraph.QuestionShape.UNKNOWN && whToken != null && trailingRelationIndex >= 0 && copulaIndex >= 0) {
+            relationToken = tokens.get(trailingRelationIndex);
+            anchorTokens = extractAnchorTokens(tokens, copulaIndex + 1, trailingRelationIndex);
+            String anchorToken = anchorTokens.isEmpty() ? null : String.join("_", anchorTokens);
+            if (anchorToken != null && !anchorToken.isBlank() && !containsGerund(anchorTokens)) {
+                shape = LanguageGraph.QuestionShape.WH_PREPOSITION_TRAILING;
+            }
+        }
+
         String anchorToken = anchorTokens.isEmpty() ? null : String.join("_", anchorTokens);
         String anchorModifier = anchorTokens.size() > 1 && COLOR_MODIFIERS.contains(anchorTokens.get(0))
                 ? anchorTokens.get(0)
                 : null;
-
-        LanguageGraph.QuestionShape shape = (whToken != null && relationToken != null && anchorToken != null && !anchorToken.isBlank())
-                ? LanguageGraph.QuestionShape.WH_PREPOSITION
-                : LanguageGraph.QuestionShape.UNKNOWN;
 
         return new LanguageGraph(
                 normalized,
@@ -71,9 +88,9 @@ public final class LanguageGraphBuilder {
         return -1;
     }
 
-    private List<String> extractAnchorTokens(List<String> tokens, int start) {
+    private List<String> extractAnchorTokens(List<String> tokens, int start, int end) {
         List<String> anchor = new ArrayList<>();
-        for (int i = start; i < tokens.size(); i++) {
+        for (int i = start; i < end; i++) {
             String token = tokens.get(i);
             if (DETERMINERS.contains(token)) {
                 continue;
@@ -81,6 +98,23 @@ public final class LanguageGraphBuilder {
             anchor.add(token);
         }
         return anchor;
+    }
+
+    private boolean containsGerund(List<String> tokens) {
+        for (String token : tokens) {
+            if (isGerund(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isGerund(String token) {
+        if (token == null) {
+            return false;
+        }
+        String trimmed = token.trim().toLowerCase(Locale.ROOT);
+        return trimmed.length() > 4 && trimmed.endsWith("ing");
     }
 
     private List<String> tokenize(String normalized) {
