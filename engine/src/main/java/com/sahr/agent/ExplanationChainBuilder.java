@@ -32,6 +32,14 @@ final class ExplanationChainBuilder {
     private final Formatter formatter;
     private final ToDoubleFunction<String> specificityScore;
     private final OntologyAnnotationResolver annotationResolver;
+    private final Object indexLock = new Object();
+    private long indexVersion = -1;
+    private java.util.Map<String, java.util.Map<SymbolId, List<RelationAssertion>>> forwardAssertionsByPredicate = new java.util.HashMap<>();
+    private java.util.Map<String, java.util.Map<SymbolId, List<RelationAssertion>>> reverseAssertionsByPredicate = new java.util.HashMap<>();
+    private java.util.Map<String, Set<String>> predicatesByLocalName = new java.util.HashMap<>();
+    private java.util.Map<String, List<RelationAssertion>> assertionsByLocalName = new java.util.HashMap<>();
+    private java.util.Map<String, Double> evidenceWeightByPredicate = new java.util.HashMap<>();
+    private java.util.Set<String> nonEvidencePredicates = new java.util.HashSet<>();
 
     ExplanationChainBuilder(KnowledgeBase graph,
                             OntologyService ontology,
@@ -128,21 +136,12 @@ final class ExplanationChainBuilder {
 
     RelationAssertion selectBestCauseAssertion(SymbolId effect) {
         List<RelationAssertion> candidates = new ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = formatter.localName(assertion.predicate());
-            if (!"cause".equals(predicate) && !"causedby".equals(predicate)) {
-                continue;
-            }
-            if ("causedby".equals(predicate)) {
-                if (assertion.subject().equals(effect)) {
-                    candidates.add(assertion);
-                }
-                continue;
-            }
-            if (assertion.object().equals(effect)) {
-                candidates.add(assertion);
-            }
+        if (effect == null) {
+            return null;
         }
+        refreshIndexesIfNeeded();
+        candidates.addAll(assertionsByLocalNameAndObject("cause", effect));
+        candidates.addAll(assertionsByLocalNameAndSubject("causedby", effect));
         if (candidates.isEmpty()) {
             return null;
         }
@@ -192,11 +191,11 @@ final class ExplanationChainBuilder {
             return List.of();
         }
         List<String> sentences = new ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = formatter.localName(assertion.predicate());
-            if (!"during".equals(predicate) && !"after".equals(predicate)) {
-                continue;
-            }
+        refreshIndexesIfNeeded();
+        List<RelationAssertion> candidates = new ArrayList<>();
+        candidates.addAll(assertionsByLocalName("during"));
+        candidates.addAll(assertionsByLocalName("after"));
+        for (RelationAssertion assertion : candidates) {
             if (!hasSemanticRole(assertion.object(), "recovery_phase")) {
                 continue;
             }
@@ -210,11 +209,11 @@ final class ExplanationChainBuilder {
 
     List<SymbolId> collectRecoveryAgents() {
         List<SymbolId> agents = new ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = formatter.localName(assertion.predicate());
-            if (!"during".equals(predicate) && !"after".equals(predicate)) {
-                continue;
-            }
+        refreshIndexesIfNeeded();
+        List<RelationAssertion> candidates = new ArrayList<>();
+        candidates.addAll(assertionsByLocalName("during"));
+        candidates.addAll(assertionsByLocalName("after"));
+        for (RelationAssertion assertion : candidates) {
             if (!hasSemanticRole(assertion.object(), "recovery_phase")) {
                 continue;
             }
@@ -235,15 +234,25 @@ final class ExplanationChainBuilder {
             return List.of();
         }
         List<SymbolId> evidence = new ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            double weight = annotationResolver.resolveObjectPropertyIri(assertion.predicate())
-                    .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
-                    .orElse(0.0);
-            if (weight <= 0.0) {
-                continue;
+        refreshIndexesIfNeeded();
+        for (String predicate : evidenceWeightByPredicate.keySet()) {
+            java.util.Map<SymbolId, List<RelationAssertion>> bySubject = forwardAssertionsByPredicate.get(predicate);
+            if (bySubject != null) {
+                List<RelationAssertion> matches = bySubject.get(target);
+                if (matches != null) {
+                    for (RelationAssertion assertion : matches) {
+                        evidence.add(assertion.subject());
+                    }
+                }
             }
-            if (assertion.object().equals(target) || assertion.subject().equals(target)) {
-                evidence.add(assertion.subject());
+            java.util.Map<SymbolId, List<RelationAssertion>> byObject = reverseAssertionsByPredicate.get(predicate);
+            if (byObject != null) {
+                List<RelationAssertion> matches = byObject.get(target);
+                if (matches != null) {
+                    for (RelationAssertion assertion : matches) {
+                        evidence.add(assertion.subject());
+                    }
+                }
             }
         }
         return evidence;
@@ -254,14 +263,17 @@ final class ExplanationChainBuilder {
             return List.of();
         }
         List<SymbolId> signals = new ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            double weight = annotationResolver.resolveObjectPropertyIri(assertion.predicate())
-                    .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
-                    .orElse(0.0);
-            if (weight <= 0.0) {
+        refreshIndexesIfNeeded();
+        for (String predicate : evidenceWeightByPredicate.keySet()) {
+            java.util.Map<SymbolId, List<RelationAssertion>> byObject = reverseAssertionsByPredicate.get(predicate);
+            if (byObject == null) {
                 continue;
             }
-            if (assertion.object().equals(target)) {
+            List<RelationAssertion> matches = byObject.get(target);
+            if (matches == null) {
+                continue;
+            }
+            for (RelationAssertion assertion : matches) {
                 signals.add(assertion.subject());
             }
         }
@@ -270,16 +282,17 @@ final class ExplanationChainBuilder {
 
     List<SymbolId> collectFailures(boolean includeRules) {
         List<SymbolId> failures = new ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = formatter.localName(assertion.predicate());
-            if ("fail".equals(predicate)) {
-                if (isBooleanTrue(assertion.object()) || failureSelfReference(assertion)) {
+        refreshIndexesIfNeeded();
+        for (RelationAssertion assertion : assertionsByLocalName("fail")) {
+            if (isBooleanTrue(assertion.object()) || failureSelfReference(assertion)) {
+                failures.add(assertion.subject());
+            }
+        }
+        for (String predicate : List.of("operate", "function", "work", "respond", "stop", "stop_responding")) {
+            for (RelationAssertion assertion : assertionsByLocalName(predicate)) {
+                if (isBooleanFalse(assertion.object())) {
                     failures.add(assertion.subject());
                 }
-                continue;
-            }
-            if (isFailureLike(predicate) && isBooleanFalse(assertion.object())) {
-                failures.add(assertion.subject());
             }
         }
         if (includeRules) {
@@ -307,11 +320,8 @@ final class ExplanationChainBuilder {
 
     List<SymbolId> collectCapabilityLosses() {
         List<SymbolId> losses = new ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = formatter.localName(assertion.predicate());
-            if (!"control".equals(predicate)) {
-                continue;
-            }
+        refreshIndexesIfNeeded();
+        for (RelationAssertion assertion : assertionsByLocalName("control")) {
             if (isBooleanFalse(assertion.object())) {
                 losses.add(assertion.subject());
             }
@@ -416,11 +426,16 @@ final class ExplanationChainBuilder {
             return 0.0;
         }
         double score = 0.0;
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
+        refreshIndexesIfNeeded();
+        List<RelationAssertion> candidates = new ArrayList<>();
+        candidates.addAll(assertionsByLocalNameAndSubject("before", cause));
+        candidates.addAll(assertionsByLocalNameAndSubject("after", cause));
+        candidates.addAll(assertionsByLocalNameAndSubject("during", cause));
+        candidates.addAll(assertionsByLocalNameAndSubject("before", effect));
+        candidates.addAll(assertionsByLocalNameAndSubject("after", effect));
+        candidates.addAll(assertionsByLocalNameAndSubject("during", effect));
+        for (RelationAssertion assertion : candidates) {
             String predicate = formatter.localName(assertion.predicate());
-            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
-                continue;
-            }
             if (assertion.subject().equals(cause) && assertion.object().equals(effect)) {
                 score += 0.4;
             } else if ("after".equals(predicate) && assertion.subject().equals(effect) && assertion.object().equals(cause)) {
@@ -440,19 +455,23 @@ final class ExplanationChainBuilder {
             return 0.0;
         }
         double score = 0.0;
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = formatter.localName(assertion.predicate());
-            if (annotationResolver == null) {
-                continue;
+        refreshIndexesIfNeeded();
+        for (var entry : evidenceWeightByPredicate.entrySet()) {
+            String predicate = entry.getKey();
+            double weight = entry.getValue();
+            java.util.Map<SymbolId, List<RelationAssertion>> bySubject = forwardAssertionsByPredicate.get(predicate);
+            if (bySubject != null) {
+                List<RelationAssertion> matches = bySubject.get(cause);
+                if (matches != null) {
+                    score += weight * matches.size();
+                }
             }
-            Double weight = annotationResolver.resolveObjectPropertyIri(assertion.predicate())
-                    .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
-                    .orElse(null);
-            if (weight == null || weight == 0.0) {
-                continue;
-            }
-            if (assertion.object().equals(cause) || assertion.subject().equals(cause)) {
-                score += weight;
+            java.util.Map<SymbolId, List<RelationAssertion>> byObject = reverseAssertionsByPredicate.get(predicate);
+            if (byObject != null) {
+                List<RelationAssertion> matches = byObject.get(cause);
+                if (matches != null) {
+                    score += weight * matches.size();
+                }
             }
         }
         return score;
@@ -512,11 +531,22 @@ final class ExplanationChainBuilder {
             return List.of();
         }
         List<String> sentences = new ArrayList<>();
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            String predicate = formatter.localName(assertion.predicate());
-            if (!"before".equals(predicate) && !"after".equals(predicate) && !"during".equals(predicate)) {
-                continue;
-            }
+        refreshIndexesIfNeeded();
+        List<RelationAssertion> candidates = new ArrayList<>();
+        if (cause != null) {
+            candidates.addAll(assertionsByLocalNameAndSubject("before", cause));
+            candidates.addAll(assertionsByLocalNameAndSubject("after", cause));
+            candidates.addAll(assertionsByLocalNameAndSubject("during", cause));
+        }
+        if (effect != null) {
+            candidates.addAll(assertionsByLocalNameAndSubject("before", effect));
+            candidates.addAll(assertionsByLocalNameAndSubject("after", effect));
+            candidates.addAll(assertionsByLocalNameAndSubject("during", effect));
+        }
+        if (cause == null && effect == null) {
+            return sentences;
+        }
+        for (RelationAssertion assertion : candidates) {
             boolean matches = false;
             if (cause != null && effect != null) {
                 matches = assertion.subject().equals(cause) && assertion.object().equals(effect);
@@ -538,6 +568,112 @@ final class ExplanationChainBuilder {
             }
         }
         return sentences;
+    }
+
+    private void refreshIndexesIfNeeded() {
+        long currentVersion = graph.version();
+        if (currentVersion == indexVersion) {
+            return;
+        }
+        synchronized (indexLock) {
+            if (currentVersion == indexVersion) {
+                return;
+            }
+            forwardAssertionsByPredicate = new java.util.HashMap<>();
+            reverseAssertionsByPredicate = new java.util.HashMap<>();
+            predicatesByLocalName = new java.util.HashMap<>();
+            assertionsByLocalName = new java.util.HashMap<>();
+            evidenceWeightByPredicate = new java.util.HashMap<>();
+            nonEvidencePredicates = new java.util.HashSet<>();
+            for (RelationAssertion assertion : graph.getAllAssertions()) {
+                if (assertion == null) {
+                    continue;
+                }
+                String predicate = assertion.predicate();
+                forwardAssertionsByPredicate
+                        .computeIfAbsent(predicate, key -> new java.util.HashMap<>())
+                        .computeIfAbsent(assertion.subject(), key -> new java.util.ArrayList<>())
+                        .add(assertion);
+                reverseAssertionsByPredicate
+                        .computeIfAbsent(predicate, key -> new java.util.HashMap<>())
+                        .computeIfAbsent(assertion.object(), key -> new java.util.ArrayList<>())
+                        .add(assertion);
+                String local = formatter.localName(predicate);
+                predicatesByLocalName
+                        .computeIfAbsent(local, key -> new java.util.HashSet<>())
+                        .add(predicate);
+                assertionsByLocalName
+                        .computeIfAbsent(local, key -> new java.util.ArrayList<>())
+                        .add(assertion);
+                if (annotationResolver != null && !evidenceWeightByPredicate.containsKey(predicate)
+                        && !nonEvidencePredicates.contains(predicate)) {
+                    Double weight = annotationResolver.resolveObjectPropertyIri(predicate)
+                            .flatMap(iri -> annotationResolver.annotationDouble(iri, SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
+                            .orElse(null);
+                    if (weight != null && weight > 0.0) {
+                        evidenceWeightByPredicate.put(predicate, weight);
+                    } else {
+                        nonEvidencePredicates.add(predicate);
+                    }
+                }
+            }
+            indexVersion = currentVersion;
+        }
+    }
+
+    private List<RelationAssertion> assertionsByLocalName(String localName) {
+        if (localName == null || localName.isBlank()) {
+            return List.of();
+        }
+        List<RelationAssertion> results = assertionsByLocalName.get(localName);
+        if (results == null) {
+            return List.of();
+        }
+        return results;
+    }
+
+    private List<RelationAssertion> assertionsByLocalNameAndSubject(String localName, SymbolId subject) {
+        if (localName == null || subject == null) {
+            return List.of();
+        }
+        List<RelationAssertion> results = new ArrayList<>();
+        Set<String> predicates = predicatesByLocalName.get(localName);
+        if (predicates == null || predicates.isEmpty()) {
+            return results;
+        }
+        for (String predicate : predicates) {
+            java.util.Map<SymbolId, List<RelationAssertion>> bySubject = forwardAssertionsByPredicate.get(predicate);
+            if (bySubject == null) {
+                continue;
+            }
+            List<RelationAssertion> matches = bySubject.get(subject);
+            if (matches != null && !matches.isEmpty()) {
+                results.addAll(matches);
+            }
+        }
+        return results;
+    }
+
+    private List<RelationAssertion> assertionsByLocalNameAndObject(String localName, SymbolId object) {
+        if (localName == null || object == null) {
+            return List.of();
+        }
+        List<RelationAssertion> results = new ArrayList<>();
+        Set<String> predicates = predicatesByLocalName.get(localName);
+        if (predicates == null || predicates.isEmpty()) {
+            return results;
+        }
+        for (String predicate : predicates) {
+            java.util.Map<SymbolId, List<RelationAssertion>> byObject = reverseAssertionsByPredicate.get(predicate);
+            if (byObject == null) {
+                continue;
+            }
+            List<RelationAssertion> matches = byObject.get(object);
+            if (matches != null && !matches.isEmpty()) {
+                results.addAll(matches);
+            }
+        }
+        return results;
     }
 
     private SymbolId causeFromAssertion(RelationAssertion assertion, SymbolId effect) {
