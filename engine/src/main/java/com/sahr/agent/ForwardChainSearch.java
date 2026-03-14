@@ -35,6 +35,10 @@ final class ForwardChainSearch {
     private final ToDoubleFunction<String> predicateDynamismScore;
     private final ToDoubleFunction<RelationAssertion> assertionSpecificity;
     private final ToDoubleFunction<RuleAssertion> ruleSpecificity;
+    private final Object indexLock = new Object();
+    private long indexVersion = -1;
+    private Map<SymbolId, List<RelationAssertion>> assertionsBySubject = new HashMap<>();
+    private Map<SymbolId, List<RuleAssertion>> rulesByAntecedent = new HashMap<>();
 
     ForwardChainSearch(KnowledgeBase graph,
                        AliasBridge aliasBridge,
@@ -55,6 +59,7 @@ final class ForwardChainSearch {
         if (start == null || target == null) {
             return new ChainResult(sentences, 0.0);
         }
+        refreshIndexesIfNeeded();
         Map<SymbolId, Double> bestScore = new HashMap<>();
         PriorityQueue<ChainStep> queue = new PriorityQueue<>(
                 Comparator.<ChainStep>comparingDouble(step -> -step.score)
@@ -89,20 +94,26 @@ final class ForwardChainSearch {
             for (SymbolId next : aliasBridge.temporalBridgeNodes(current.node, temporalPredicates)) {
                 enqueueChainStep(queue, bestScore, current, next, 0.25, null, null);
             }
-            for (RelationAssertion assertion : graph.getAllAssertions()) {
-                List<SymbolId> nextNodes = nextNodesFromAssertion(current.node, assertion);
-                for (SymbolId next : nextNodes) {
-                    double stepScore = assertionSpecificity.applyAsDouble(assertion)
-                            + predicateDynamismScore.applyAsDouble(formatter.localName(assertion.predicate()));
-                    enqueueChainStep(queue, bestScore, current, next, stepScore, assertion, null);
+            List<RelationAssertion> assertions = assertionsBySubject.get(current.node);
+            if (assertions != null) {
+                for (RelationAssertion assertion : assertions) {
+                    List<SymbolId> nextNodes = nextNodesFromAssertion(current.node, assertion);
+                    for (SymbolId next : nextNodes) {
+                        double stepScore = assertionSpecificity.applyAsDouble(assertion)
+                                + predicateDynamismScore.applyAsDouble(formatter.localName(assertion.predicate()));
+                        enqueueChainStep(queue, bestScore, current, next, stepScore, assertion, null);
+                    }
                 }
             }
-            for (RuleAssertion rule : graph.getAllRules()) {
-                List<SymbolId> nextNodes = nextNodesFromRule(current.node, rule);
-                for (SymbolId next : nextNodes) {
-                    double stepScore = ruleSpecificity.applyAsDouble(rule)
-                            + predicateDynamismScore.applyAsDouble(formatter.localName(rule.consequent().predicate()));
-                    enqueueChainStep(queue, bestScore, current, next, stepScore, null, rule);
+            List<RuleAssertion> rules = rulesByAntecedent.get(current.node);
+            if (rules != null) {
+                for (RuleAssertion rule : rules) {
+                    List<SymbolId> nextNodes = nextNodesFromRule(current.node, rule);
+                    for (SymbolId next : nextNodes) {
+                        double stepScore = ruleSpecificity.applyAsDouble(rule)
+                                + predicateDynamismScore.applyAsDouble(formatter.localName(rule.consequent().predicate()));
+                        enqueueChainStep(queue, bestScore, current, next, stepScore, null, rule);
+                    }
                 }
             }
         }
@@ -181,6 +192,50 @@ final class ForwardChainSearch {
             current = current.parent;
         }
         return new ArrayList<>(stack);
+    }
+
+    private void refreshIndexesIfNeeded() {
+        long currentVersion = graph.version();
+        if (currentVersion == indexVersion) {
+            return;
+        }
+        synchronized (indexLock) {
+            if (currentVersion == indexVersion) {
+                return;
+            }
+            assertionsBySubject = new HashMap<>();
+            rulesByAntecedent = new HashMap<>();
+            for (RelationAssertion assertion : graph.getAllAssertions()) {
+                if (assertion == null || assertion.subject() == null) {
+                    continue;
+                }
+                assertionsBySubject
+                        .computeIfAbsent(assertion.subject(), key -> new ArrayList<>())
+                        .add(assertion);
+            }
+            for (RuleAssertion rule : graph.getAllRules()) {
+                if (rule == null) {
+                    continue;
+                }
+                RelationAssertion antecedent = rule.antecedent();
+                if (antecedent == null) {
+                    continue;
+                }
+                SymbolId subject = antecedent.subject();
+                SymbolId object = antecedent.object();
+                if (subject != null) {
+                    rulesByAntecedent
+                            .computeIfAbsent(subject, key -> new ArrayList<>())
+                            .add(rule);
+                }
+                if (object != null) {
+                    rulesByAntecedent
+                            .computeIfAbsent(object, key -> new ArrayList<>())
+                            .add(rule);
+                }
+            }
+            indexVersion = currentVersion;
+        }
     }
 
     private static final class ChainStep {

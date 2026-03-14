@@ -13,6 +13,8 @@ import java.util.Locale;
 
 final class AnswerRanker {
     private final OntologyAnnotationResolver resolver;
+    private final java.util.Map<String, Double> specificityCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Map<String, Boolean> genericLossCache = new java.util.concurrent.ConcurrentHashMap<>();
 
     AnswerRanker(OntologyAnnotationResolver resolver) {
         this.resolver = resolver;
@@ -30,6 +32,10 @@ final class AnswerRanker {
     double specificityScore(String value) {
         if (value == null || value.isBlank()) {
             return 0.0;
+        }
+        Double cached = specificityCache.get(value);
+        if (cached != null) {
+            return cached;
         }
         double score = 0.0;
         if (value.startsWith("entity:")) {
@@ -50,6 +56,7 @@ final class AnswerRanker {
                 score -= 0.3;
             }
         }
+        specificityCache.put(value, score);
         return score;
     }
 
@@ -199,15 +206,21 @@ final class AnswerRanker {
         if (value == null || value.isBlank()) {
             return false;
         }
+        Boolean cached = genericLossCache.get(value);
+        if (cached != null) {
+            return cached;
+        }
         String normalized = value.toLowerCase(Locale.ROOT);
         normalized = normalized.replace("entity:", "").replace("concept:", "");
         normalized = normalized.replaceAll("[^a-z0-9_ ]", "");
         String[] tokens = normalized.split("[_\\s]+");
         for (String token : tokens) {
             if (isLossToken(token)) {
+                genericLossCache.put(value, true);
                 return true;
             }
         }
+        genericLossCache.put(value, false);
         return false;
     }
 

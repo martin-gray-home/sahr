@@ -38,8 +38,20 @@ final class ExplanationChainBuilder {
     private java.util.Map<String, java.util.Map<SymbolId, List<RelationAssertion>>> reverseAssertionsByPredicate = new java.util.HashMap<>();
     private java.util.Map<String, Set<String>> predicatesByLocalName = new java.util.HashMap<>();
     private java.util.Map<String, List<RelationAssertion>> assertionsByLocalName = new java.util.HashMap<>();
+    private java.util.Map<SymbolId, List<RuleAssertion>> rulesByConsequent = new java.util.HashMap<>();
     private java.util.Map<String, Double> evidenceWeightByPredicate = new java.util.HashMap<>();
     private java.util.Set<String> nonEvidencePredicates = new java.util.HashSet<>();
+    private java.util.Map<String, Double> temporalSupportCache = new java.util.HashMap<>();
+    private java.util.Map<SymbolId, Double> telemetrySupportCache = new java.util.HashMap<>();
+    private List<SymbolId> cachedComponentFailures = List.of();
+    private List<SymbolId> cachedSubsystemFailures = List.of();
+    private List<SymbolId> cachedCapabilityLosses = List.of();
+    private List<SymbolId> cachedRecoveryAgents = List.of();
+    private java.util.Map<SymbolId, List<SymbolId>> cachedEvidenceNodesByTarget = new java.util.HashMap<>();
+    private java.util.Map<SymbolId, List<SymbolId>> cachedPrecursorSignalsByTarget = new java.util.HashMap<>();
+    private boolean failureCacheReady = false;
+    private boolean capabilityLossCacheReady = false;
+    private boolean recoveryAgentCacheReady = false;
 
     ExplanationChainBuilder(KnowledgeBase graph,
                             OntologyService ontology,
@@ -162,14 +174,12 @@ final class ExplanationChainBuilder {
     }
 
     RuleAssertion selectBestRuleForConsequent(SymbolId effect) {
-        List<RuleAssertion> candidates = new ArrayList<>();
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
-            if (consequent.subject().equals(effect) || consequent.object().equals(effect)) {
-                candidates.add(rule);
-            }
+        if (effect == null) {
+            return null;
         }
-        if (candidates.isEmpty()) {
+        refreshIndexesIfNeeded();
+        List<RuleAssertion> candidates = rulesByConsequent.get(effect);
+        if (candidates == null || candidates.isEmpty()) {
             return null;
         }
         RuleAssertion best = candidates.get(0);
@@ -208,6 +218,9 @@ final class ExplanationChainBuilder {
     }
 
     List<SymbolId> collectRecoveryAgents() {
+        if (recoveryAgentCacheReady) {
+            return cachedRecoveryAgents;
+        }
         List<SymbolId> agents = new ArrayList<>();
         refreshIndexesIfNeeded();
         List<RelationAssertion> candidates = new ArrayList<>();
@@ -226,12 +239,18 @@ final class ExplanationChainBuilder {
             }
             agents.add(subject);
         }
-        return agents;
+        cachedRecoveryAgents = List.copyOf(agents);
+        recoveryAgentCacheReady = true;
+        return cachedRecoveryAgents;
     }
 
     List<SymbolId> collectEvidenceNodes(SymbolId target) {
         if (annotationResolver == null || target == null) {
             return List.of();
+        }
+        List<SymbolId> cached = cachedEvidenceNodesByTarget.get(target);
+        if (cached != null) {
+            return cached;
         }
         List<SymbolId> evidence = new ArrayList<>();
         refreshIndexesIfNeeded();
@@ -255,12 +274,18 @@ final class ExplanationChainBuilder {
                 }
             }
         }
-        return evidence;
+        List<SymbolId> result = List.copyOf(evidence);
+        cachedEvidenceNodesByTarget.put(target, result);
+        return result;
     }
 
     List<SymbolId> collectPrecursorSignals(SymbolId target) {
         if (annotationResolver == null || target == null) {
             return List.of();
+        }
+        List<SymbolId> cached = cachedPrecursorSignalsByTarget.get(target);
+        if (cached != null) {
+            return cached;
         }
         List<SymbolId> signals = new ArrayList<>();
         refreshIndexesIfNeeded();
@@ -277,48 +302,20 @@ final class ExplanationChainBuilder {
                 signals.add(assertion.subject());
             }
         }
-        return signals;
+        List<SymbolId> result = List.copyOf(signals);
+        cachedPrecursorSignalsByTarget.put(target, result);
+        return result;
     }
 
     List<SymbolId> collectFailures(boolean includeRules) {
-        List<SymbolId> failures = new ArrayList<>();
-        refreshIndexesIfNeeded();
-        for (RelationAssertion assertion : assertionsByLocalName("fail")) {
-            if (isBooleanTrue(assertion.object()) || failureSelfReference(assertion)) {
-                failures.add(assertion.subject());
-            }
-        }
-        for (String predicate : List.of("operate", "function", "work", "respond", "stop", "stop_responding")) {
-            for (RelationAssertion assertion : assertionsByLocalName(predicate)) {
-                if (isBooleanFalse(assertion.object())) {
-                    failures.add(assertion.subject());
-                }
-            }
-        }
-        if (includeRules) {
-            for (RuleAssertion rule : graph.getAllRules()) {
-                RelationAssertion consequent = rule.consequent();
-                RelationAssertion antecedent = rule.antecedent();
-                String predicate = formatter.localName(consequent.predicate());
-                if ("fail".equals(predicate)) {
-                    if (isBooleanTrue(consequent.object()) || failureSelfReference(consequent)) {
-                        failures.add(consequent.subject());
-                    }
-                    if ("fail".equals(formatter.localName(antecedent.predicate()))
-                            && (isBooleanTrue(antecedent.object()) || failureSelfReference(antecedent))) {
-                        failures.add(antecedent.subject());
-                    }
-                    continue;
-                }
-                if (isFailureLike(predicate) && isBooleanFalse(consequent.object())) {
-                    failures.add(consequent.subject());
-                }
-            }
-        }
-        return failures;
+        ensureFailureCaches();
+        return includeRules ? cachedSubsystemFailures : cachedComponentFailures;
     }
 
     List<SymbolId> collectCapabilityLosses() {
+        if (capabilityLossCacheReady) {
+            return cachedCapabilityLosses;
+        }
         List<SymbolId> losses = new ArrayList<>();
         refreshIndexesIfNeeded();
         for (RelationAssertion assertion : assertionsByLocalName("control")) {
@@ -336,7 +333,9 @@ final class ExplanationChainBuilder {
                 losses.add(consequent.subject());
             }
         }
-        return losses;
+        cachedCapabilityLosses = List.copyOf(losses);
+        capabilityLossCacheReady = true;
+        return cachedCapabilityLosses;
     }
 
     private boolean isBooleanTrue(SymbolId id) {
@@ -425,6 +424,11 @@ final class ExplanationChainBuilder {
         if (cause == null || effect == null) {
             return 0.0;
         }
+        String key = cause.value() + "->" + effect.value();
+        Double cached = temporalSupportCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
         double score = 0.0;
         refreshIndexesIfNeeded();
         List<RelationAssertion> candidates = new ArrayList<>();
@@ -447,12 +451,17 @@ final class ExplanationChainBuilder {
                 score += 0.2;
             }
         }
+        temporalSupportCache.put(key, score);
         return score;
     }
 
     private double telemetrySupportScore(SymbolId cause) {
         if (cause == null) {
             return 0.0;
+        }
+        Double cached = telemetrySupportCache.get(cause);
+        if (cached != null) {
+            return cached;
         }
         double score = 0.0;
         refreshIndexesIfNeeded();
@@ -474,6 +483,7 @@ final class ExplanationChainBuilder {
                 }
             }
         }
+        telemetrySupportCache.put(cause, score);
         return score;
     }
 
@@ -583,8 +593,20 @@ final class ExplanationChainBuilder {
             reverseAssertionsByPredicate = new java.util.HashMap<>();
             predicatesByLocalName = new java.util.HashMap<>();
             assertionsByLocalName = new java.util.HashMap<>();
+            rulesByConsequent = new java.util.HashMap<>();
             evidenceWeightByPredicate = new java.util.HashMap<>();
             nonEvidencePredicates = new java.util.HashSet<>();
+            temporalSupportCache = new java.util.HashMap<>();
+            telemetrySupportCache = new java.util.HashMap<>();
+            cachedComponentFailures = List.of();
+            cachedSubsystemFailures = List.of();
+            cachedCapabilityLosses = List.of();
+            cachedRecoveryAgents = List.of();
+            cachedEvidenceNodesByTarget = new java.util.HashMap<>();
+            cachedPrecursorSignalsByTarget = new java.util.HashMap<>();
+            failureCacheReady = false;
+            capabilityLossCacheReady = false;
+            recoveryAgentCacheReady = false;
             for (RelationAssertion assertion : graph.getAllAssertions()) {
                 if (assertion == null) {
                     continue;
@@ -617,8 +639,71 @@ final class ExplanationChainBuilder {
                     }
                 }
             }
+            for (RuleAssertion rule : graph.getAllRules()) {
+                if (rule == null) {
+                    continue;
+                }
+                RelationAssertion consequent = rule.consequent();
+                if (consequent == null) {
+                    continue;
+                }
+                SymbolId subject = consequent.subject();
+                if (subject != null) {
+                    rulesByConsequent
+                            .computeIfAbsent(subject, key -> new java.util.ArrayList<>())
+                            .add(rule);
+                }
+                SymbolId object = consequent.object();
+                if (object != null) {
+                    rulesByConsequent
+                            .computeIfAbsent(object, key -> new java.util.ArrayList<>())
+                            .add(rule);
+                }
+            }
             indexVersion = currentVersion;
         }
+    }
+
+    private void ensureFailureCaches() {
+        if (failureCacheReady) {
+            return;
+        }
+        List<SymbolId> componentFailures = new ArrayList<>();
+        refreshIndexesIfNeeded();
+        for (RelationAssertion assertion : assertionsByLocalName("fail")) {
+            if (isBooleanTrue(assertion.object()) || failureSelfReference(assertion)) {
+                componentFailures.add(assertion.subject());
+            }
+        }
+        for (String predicate : List.of("operate", "function", "work", "respond", "stop", "stop_responding")) {
+            for (RelationAssertion assertion : assertionsByLocalName(predicate)) {
+                if (isBooleanFalse(assertion.object())) {
+                    componentFailures.add(assertion.subject());
+                }
+            }
+        }
+        List<SymbolId> subsystemFailures = new ArrayList<>(componentFailures);
+        for (RuleAssertion rule : graph.getAllRules()) {
+            RelationAssertion consequent = rule.consequent();
+            RelationAssertion antecedent = rule.antecedent();
+            String predicate = formatter.localName(consequent.predicate());
+            if ("fail".equals(predicate)) {
+                if (isBooleanTrue(consequent.object()) || failureSelfReference(consequent)) {
+                    subsystemFailures.add(consequent.subject());
+                }
+                if ("fail".equals(formatter.localName(antecedent.predicate()))
+                        && (isBooleanTrue(antecedent.object()) || failureSelfReference(antecedent))) {
+                    subsystemFailures.add(antecedent.subject());
+                }
+                continue;
+            }
+            if (isFailureLike(predicate) && isBooleanFalse(consequent.object())) {
+                subsystemFailures.add(consequent.subject());
+            }
+        }
+        cachedComponentFailures = List.copyOf(componentFailures);
+        cachedSubsystemFailures = List.copyOf(subsystemFailures);
+        failureCacheReady = true;
     }
 
     private List<RelationAssertion> assertionsByLocalName(String localName) {

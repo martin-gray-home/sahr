@@ -53,7 +53,18 @@ final class AnswerComposer {
     private Map<SymbolId, List<String>> labelPhrasesByEntity = new HashMap<>();
     private Map<SymbolId, Set<SymbolId>> dependentsByResource = new HashMap<>();
     private Map<String, List<RelationAssertion>> assertionsByLocalPredicate = new HashMap<>();
+    private Map<String, Double> evidencePredicateWeight = new HashMap<>();
+    private Map<SymbolId, Double> evidenceSignalWeightBySubject = new HashMap<>();
+    private Map<SymbolId, Boolean> temporalContextBySymbol = new HashMap<>();
+    private Map<SymbolId, String> entityIriCache = new HashMap<>();
     private Map<String, Boolean> semanticRoleCache = new HashMap<>();
+    private Map<String, Double> temporalSupportCache = new HashMap<>();
+    private Map<String, Double> evidenceAlignmentCache = new HashMap<>();
+    private Map<String, List<String>> structuredChainCache = new HashMap<>();
+    private Map<String, String> evidenceSignalCache = new HashMap<>();
+    private Map<String, String> dependencyFailureCache = new HashMap<>();
+    private Map<String, ExplanationCandidate> explanationCandidateCache = new HashMap<>();
+    private Map<String, Boolean> temporalContextCache = new HashMap<>();
 
     AnswerComposer(KnowledgeBase graph,
                    OntologyService ontology,
@@ -90,6 +101,15 @@ final class AnswerComposer {
                     labelTokenIndex.computeIfAbsent(token, key -> new HashSet<>()).add(entity.id());
                 }
             }
+            temporalSupportCache.clear();
+            evidenceAlignmentCache.clear();
+            structuredChainCache.clear();
+            evidenceSignalCache.clear();
+            dependencyFailureCache.clear();
+            explanationCandidateCache.clear();
+            temporalContextCache.clear();
+            semanticRoleCache.clear();
+            entityIriCache.clear();
             indexVersion = graph.version();
         }
     }
@@ -108,6 +128,28 @@ final class AnswerComposer {
                         .computeIfAbsent(assertion.object(), key -> new HashSet<>())
                         .add(assertion.subject());
             }
+            if ("before".equals(local) || "after".equals(local) || "during".equals(local)) {
+                if (assertion.subject() != null) {
+                    temporalContextBySymbol.put(assertion.subject(), true);
+                }
+                if (assertion.object() != null) {
+                    temporalContextBySymbol.put(assertion.object(), true);
+                }
+            }
+            double weight = predicateEvidenceWeightCached(assertion.predicate());
+            if (weight > 0.0 && hasSemanticRole(assertion.subject(), "evidence_signal")) {
+                Double existing = evidenceSignalWeightBySubject.get(assertion.subject());
+                if (existing == null || weight > existing) {
+                    evidenceSignalWeightBySubject.put(assertion.subject(), weight);
+                }
+            }
+            temporalSupportCache.clear();
+            evidenceAlignmentCache.clear();
+            structuredChainCache.clear();
+            evidenceSignalCache.clear();
+            dependencyFailureCache.clear();
+            explanationCandidateCache.clear();
+            temporalContextCache.clear();
             indexVersion = graph.version();
         }
     }
@@ -144,7 +186,7 @@ final class AnswerComposer {
         if (target == null) {
             return null;
         }
-        ExplanationCandidate candidate = explanationChains.buildExplanationCandidate(target, 4);
+        ExplanationCandidate candidate = explanationCandidate(target, 4);
         SymbolId failure = selectBestFailure(candidate, true);
         return failure == null ? null : failure.value();
     }
@@ -171,13 +213,16 @@ final class AnswerComposer {
                 return backupExplanation;
             }
         }
-        long evidenceStart = timing ? System.nanoTime() : 0L;
-        String evidenceSignal = evidenceSignalAnswer(goal);
-        if (timing) {
-            logCauseTiming("evidence_signal", goal, System.nanoTime() - evidenceStart, null);
-        }
-        if (evidenceSignal != null) {
-            return evidenceSignal;
+        boolean chainRequest = wantsChainExplanation(goal) || wantsEvidenceAlignedChain(goal);
+        if (!chainRequest) {
+            long evidenceStart = timing ? System.nanoTime() : 0L;
+            String evidenceSignal = evidenceSignalAnswer(goal);
+            if (timing) {
+                logCauseTiming("evidence_signal", goal, System.nanoTime() - evidenceStart, null);
+            }
+            if (evidenceSignal != null) {
+                return evidenceSignal;
+            }
         }
         long dependencyListStart = timing ? System.nanoTime() : 0L;
         String dependencyList = dependencyFailureListAnswer(goal);
@@ -233,7 +278,7 @@ final class AnswerComposer {
             }
             if (!predicateExplanation.isEmpty()) {
                 long explanationStart = timing ? System.nanoTime() : 0L;
-                ExplanationCandidate candidate = explanationChains.buildExplanationCandidate(target, 4);
+                ExplanationCandidate candidate = explanationCandidate(target, 4);
                 if (timing) {
                     logCauseTiming("build_candidate_predicate", goal, System.nanoTime() - explanationStart, null);
                 }
@@ -262,7 +307,7 @@ final class AnswerComposer {
             return "No candidates produced.";
         }
         long structuredStart = timing ? System.nanoTime() : 0L;
-        ExplanationCandidate structuredCandidate = explanationChains.buildExplanationCandidate(target, 4);
+        ExplanationCandidate structuredCandidate = explanationCandidate(target, 4);
         if (timing) {
             logCauseTiming("build_candidate_structured", goal, System.nanoTime() - structuredStart, null);
         }
@@ -792,6 +837,9 @@ final class AnswerComposer {
                 }
                 SymbolId matched = matchEntityByPhraseExact(phrase);
                 if (matched == null) {
+                    matched = matchEntityBySurfaceTokens(phrase);
+                }
+                if (matched == null) {
                     matched = fallbackEntityFromPhrase(phrase);
                 }
                 if (matched == null) {
@@ -814,7 +862,13 @@ final class AnswerComposer {
                 if (phrase.isBlank()) {
                     continue;
                 }
-                SymbolId matched = matchEntityByPhrase(phrase, 0.8);
+                SymbolId matched = matchEntityByPhraseExact(phrase);
+                if (matched == null) {
+                    matched = matchEntityBySurfaceTokens(phrase);
+                }
+                if (matched == null) {
+                    matched = matchEntityByPhrase(phrase, 0.8);
+                }
                 if (matched == null) {
                     matched = matchEntityByOntologyLabel(phrase);
                 }
@@ -942,6 +996,31 @@ final class AnswerComposer {
         return bestScore >= minScore ? best : null;
     }
 
+    private SymbolId matchEntityBySurfaceTokens(String phrase) {
+        if (phrase == null || phrase.isBlank()) {
+            return null;
+        }
+        refreshIndexesIfNeeded();
+        String normalized = normalizeInput(phrase);
+        Set<SymbolId> candidates = findEntitiesByTokens(normalized);
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        SymbolId best = null;
+        double bestScore = -1.0;
+        for (SymbolId id : candidates) {
+            if (!inputMentionsEntity(normalized, id)) {
+                continue;
+            }
+            double score = answerRanker.specificityScore(id.value());
+            if (score > bestScore) {
+                bestScore = score;
+                best = id;
+            }
+        }
+        return best;
+    }
+
     private SymbolId matchEntityByPhraseExact(String phrase) {
         String normalized = phrase.trim().replaceAll("[^a-z0-9_\\s-]", "");
         normalized = normalized.replace('-', '_').replace(' ', '_');
@@ -1040,18 +1119,22 @@ final class AnswerComposer {
         if (token == null || token.isBlank()) {
             return null;
         }
+        refreshIndexesIfNeeded();
         String target = token.toLowerCase(Locale.ROOT);
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            SymbolId subject = assertion.subject();
-            if (subject != null && subject.value() != null && subject.value().toLowerCase(Locale.ROOT).contains(target)) {
-                return subject;
-            }
-            SymbolId object = assertion.object();
-            if (object != null && object.value() != null && object.value().toLowerCase(Locale.ROOT).contains(target)) {
-                return object;
+        Set<SymbolId> matches = labelTokenIndex.get(target);
+        if (matches == null || matches.isEmpty()) {
+            return null;
+        }
+        SymbolId best = null;
+        double bestScore = -1.0;
+        for (SymbolId candidate : matches) {
+            double score = answerRanker.specificityScore(candidate.value());
+            if (score > bestScore) {
+                bestScore = score;
+                best = candidate;
             }
         }
-        return null;
+        return best;
     }
 
     private boolean isKnownSymbol(SymbolId id) {
@@ -1547,6 +1630,14 @@ final class AnswerComposer {
         if (goal == null) {
             return null;
         }
+        if (!wantsDependencyList(goal)) {
+            return null;
+        }
+        String dependencyKey = buildGoalCacheKey("dependency_failure", goal);
+        String cached = dependencyFailureCache.get(dependencyKey);
+        if (cached != null) {
+            return cached;
+        }
         List<SymbolId> resources = resourceMentions(goal);
         if (resources.isEmpty()) {
             return null;
@@ -1562,7 +1653,9 @@ final class AnswerComposer {
         for (SymbolId dependent : dependents) {
             values.add(dependent.value());
         }
-        return renderEntityList(values, goal);
+        String rendered = renderEntityList(values, goal);
+        dependencyFailureCache.put(dependencyKey, rendered);
+        return rendered;
     }
 
     private List<SymbolId> resourceMentions(QueryGoal goal) {
@@ -1580,6 +1673,10 @@ final class AnswerComposer {
         if (input == null || input.isBlank()) {
             return resources;
         }
+        if (!containsCue(input, "power", "propellant", "resource", "battery", "fuel", "electric", "supply",
+                "dependency", "depend", "requires", "require")) {
+            return resources;
+        }
         refreshIndexesIfNeeded();
         String normalizedInput = normalizeInput(input);
         Set<SymbolId> candidates = findEntitiesByTokens(normalizedInput);
@@ -1592,6 +1689,30 @@ final class AnswerComposer {
             }
         }
         return resources;
+    }
+
+    private boolean wantsDependencyList(QueryGoal goal) {
+        if (goal == null) {
+            return false;
+        }
+        String predicate = support.localName(goal.predicate());
+        if ("poweredby".equals(predicate) || "require".equals(predicate) || "requires".equals(predicate)) {
+            return true;
+        }
+        for (String fragment : goalTextFragments(goal)) {
+            if (fragment == null) {
+                continue;
+            }
+            String normalized = fragment.toLowerCase(Locale.ROOT);
+            if (normalized.contains("depend") || normalized.contains("dependency")
+                    || normalized.contains("resource") || normalized.contains("power")
+                    || normalized.contains("propellant") || normalized.contains("battery")
+                    || normalized.contains("fuel")) {
+                return true;
+            }
+        }
+        return containsCue(support.lastInput(), "depend", "dependency", "resource", "power",
+                "propellant", "battery", "fuel", "electric", "requires", "require");
     }
 
     private boolean inputMentionsEntity(String normalizedInput, SymbolId id) {
@@ -1688,16 +1809,25 @@ final class AnswerComposer {
         if (wantsChainExplanation(goal) || wantsEvidenceAlignedChain(goal)) {
             return null;
         }
-        SymbolId outcome = selectPrimaryOutcomeCandidate();
-        ExplanationCandidate candidate = outcome == null ? null : explanationChains.buildExplanationCandidate(outcome, 4);
-        SymbolId signal = selectBestEvidenceSignal(candidate);
+        String cacheKey = buildGoalCacheKey("evidence_signal", goal);
+        String cached = evidenceSignalCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        SymbolId signal = selectEvidenceSignalFromInput();
         if (signal == null) {
             signal = selectEvidenceSignalFromGraph();
         }
         if (signal == null) {
-            signal = selectEvidenceSignalFromInput();
+            SymbolId outcome = selectPrimaryOutcomeCandidate();
+            ExplanationCandidate candidate = outcome == null ? null : explanationCandidate(outcome, 4);
+            signal = selectBestEvidenceSignal(candidate);
         }
-        return signal == null ? null : renderEntityAnswer(signal.value(), goal, AnswerRole.EVIDENCE_SIGNAL);
+        String rendered = signal == null ? null : renderEntityAnswer(signal.value(), goal, AnswerRole.EVIDENCE_SIGNAL);
+        if (rendered != null) {
+            evidenceSignalCache.put(cacheKey, rendered);
+        }
+        return rendered;
     }
 
     String evidenceSignalAnswerIfApplicable(QueryGoal goal) {
@@ -1775,18 +1905,12 @@ final class AnswerComposer {
     }
 
     private SymbolId selectEvidenceSignalFromGraph() {
+        refreshIndexesIfNeeded();
         SymbolId best = null;
         double bestScore = -1.0;
-        for (RelationAssertion assertion : graph.getAllAssertions()) {
-            double weight = predicateEvidenceWeight(assertion.predicate());
-            if (weight <= 0.0) {
-                continue;
-            }
-            SymbolId subject = assertion.subject();
-            if (!hasSemanticRole(subject, "evidence_signal")) {
-                continue;
-            }
-            double score = weight + answerRanker.specificityScore(subject.value());
+        for (Map.Entry<SymbolId, Double> entry : evidenceSignalWeightBySubject.entrySet()) {
+            SymbolId subject = entry.getKey();
+            double score = entry.getValue() + answerRanker.specificityScore(subject.value());
             if (best == null || score > bestScore) {
                 best = subject;
                 bestScore = score;
@@ -1796,12 +1920,22 @@ final class AnswerComposer {
     }
 
     private double predicateEvidenceWeight(String predicate) {
+        return predicateEvidenceWeightCached(predicate);
+    }
+
+    private double predicateEvidenceWeightCached(String predicate) {
         if (predicate == null || predicate.isBlank()) {
             return 0.0;
         }
-        return annotationResolver.resolveObjectPropertyIri(predicate)
+        Double cached = evidencePredicateWeight.get(predicate);
+        if (cached != null) {
+            return cached;
+        }
+        double weight = annotationResolver.resolveObjectPropertyIri(predicate)
                 .flatMap(iri -> annotationResolver.annotationDouble(iri, com.sahr.ontology.SahrAnnotationVocabulary.EVIDENCE_WEIGHT))
                 .orElse(0.0);
+        evidencePredicateWeight.put(predicate, weight);
+        return weight;
     }
 
     private SymbolId selectPrimaryOutcomeCandidate() {
@@ -1857,6 +1991,11 @@ final class AnswerComposer {
                                           SymbolId failure,
                                           SymbolId outcome,
                                           QueryGoal goal) {
+        String alignmentKey = buildEvidenceAlignmentKey(candidate, failure, outcome, goal);
+        Double cachedAlignment = evidenceAlignmentCache.get(alignmentKey);
+        if (cachedAlignment != null) {
+            return cachedAlignment;
+        }
         double score = 0.0;
         List<SymbolId> precursorSignals = candidate.precursorSignals();
         for (SymbolId signal : precursorSignals) {
@@ -1881,12 +2020,18 @@ final class AnswerComposer {
         if (goal != null && goal.modifier() != null && goal.modifier().toLowerCase(Locale.ROOT).contains("sequence")) {
             score += 0.2;
         }
+        evidenceAlignmentCache.put(alignmentKey, score);
         return score;
     }
 
     private double temporalSupportScore(SymbolId cause, SymbolId effect) {
         if (cause == null || effect == null) {
             return 0.0;
+        }
+        String temporalKey = buildTemporalSupportKey(cause, effect);
+        Double cachedTemporal = temporalSupportCache.get(temporalKey);
+        if (cachedTemporal != null) {
+            return cachedTemporal;
         }
         double score = 0.0;
         refreshIndexesIfNeeded();
@@ -1903,7 +2048,65 @@ final class AnswerComposer {
                 score += 0.2;
             }
         }
+        temporalSupportCache.put(temporalKey, score);
         return score;
+    }
+
+    private String buildTemporalSupportKey(SymbolId cause, SymbolId effect) {
+        return cause.value() + "->" + effect.value();
+    }
+
+    private String buildEvidenceAlignmentKey(ExplanationCandidate candidate,
+                                             SymbolId failure,
+                                             SymbolId outcome,
+                                             QueryGoal goal) {
+        String candidateId = candidate == null ? "none" : String.valueOf(System.identityHashCode(candidate));
+        String failureKey = failure == null ? "none" : failure.value();
+        String outcomeKey = outcome == null ? "none" : outcome.value();
+        String sequence = (goal != null && goal.modifier() != null
+                && goal.modifier().toLowerCase(Locale.ROOT).contains("sequence")) ? "1" : "0";
+        return candidateId + "|" + failureKey + "|" + outcomeKey + "|" + sequence;
+    }
+
+    private String buildGoalCacheKey(String prefix, QueryGoal goal) {
+        String subject = goal == null ? "" : safe(goal.subject());
+        String predicate = goal == null ? "" : safe(goal.predicate());
+        String object = goal == null ? "" : safe(goal.object());
+        String modifier = goal == null ? "" : safe(goal.modifier());
+        String expected = goal == null ? "" : safe(goal.expectedType());
+        String entityType = goal == null ? "" : safe(goal.entityType());
+        String type = goal == null || goal.type() == null ? "" : goal.type().name();
+        String input = safe(support.lastInput());
+        return prefix + "|" + type + "|" + subject + "|" + predicate + "|" + object
+                + "|" + modifier + "|" + expected + "|" + entityType + "|" + input;
+    }
+
+    private String buildStructuredChainKey(ExplanationCandidate candidate,
+                                           QueryGoal goal,
+                                           SymbolId target,
+                                           String predicate,
+                                           boolean evidenceAligned) {
+        String candidateId = candidate == null ? "none" : String.valueOf(System.identityHashCode(candidate));
+        String targetKey = target == null ? "" : target.value();
+        String pred = predicate == null ? "" : predicate;
+        String goalKey = buildGoalCacheKey("structured_chain", goal);
+        return candidateId + "|" + goalKey + "|" + targetKey + "|" + pred + "|" + (evidenceAligned ? "1" : "0");
+    }
+
+    private ExplanationCandidate explanationCandidate(SymbolId target, int depth) {
+        if (target == null) {
+            return null;
+        }
+        String key = target.value() + "|" + depth;
+        ExplanationCandidate cached = explanationCandidateCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        ExplanationCandidate candidate = explanationChains.buildExplanationCandidate(target, depth);
+        if (candidate != null) {
+            explanationCandidateCache.put(key, candidate);
+        }
+        return candidate;
     }
 
     private List<String> buildStructuredChain(ExplanationCandidate candidate,
@@ -1914,23 +2117,62 @@ final class AnswerComposer {
         if (candidate == null) {
             return sentences;
         }
-        List<SymbolId> subsystemFailures = new ArrayList<>(candidate.subsystemFailures());
-        if (target != null) {
-            subsystemFailures.removeIf(target::equals);
-        }
-        SymbolId outcomeTarget = resolveOutcomeTarget(candidate, target, goal);
-        SymbolId precursor = selectBestSpecific(candidate.precursorSignals(), true);
-        if (precursor != null) {
-            sentences.add(roleSentence("Precursor signal", precursor));
-        }
+        boolean timing = Boolean.parseBoolean(System.getProperty(TIMING_PROPERTY, "false"));
         boolean evidenceAligned = wantsEvidenceAlignedChain(goal)
                 || "cause".equals(predicate)
                 || "causedby".equals(predicate)
                 || hasTemporalContext(target);
+        String chainKey = buildStructuredChainKey(candidate, goal, target, predicate, evidenceAligned);
+        List<String> cached = structuredChainCache.get(chainKey);
+        if (cached != null) {
+            return new ArrayList<>(cached);
+        }
+        List<SymbolId> componentFailures = new ArrayList<>(candidate.componentFailures());
+        List<SymbolId> subsystemFailures = new ArrayList<>(candidate.subsystemFailures());
+        if (target != null) {
+            subsystemFailures.removeIf(target::equals);
+        }
+        if (componentFailures.size() > 200) {
+            componentFailures = selectTopSpecific(componentFailures, 200, true, null);
+        }
+        if (subsystemFailures.size() > 200) {
+            subsystemFailures = selectTopSpecific(subsystemFailures, 200, true, null);
+        }
+        SymbolId outcomeTarget = resolveOutcomeTarget(candidate, target, goal);
+        if (timing) {
+            String extra = "componentFailures=" + componentFailures.size()
+                    + " subsystemFailures=" + subsystemFailures.size()
+                    + " precursors=" + candidate.precursorSignals().size()
+                    + " evidence=" + candidate.evidenceNodes().size()
+                    + " losses=" + candidate.capabilityLosses().size()
+                    + " sentences=" + candidate.sentences().size();
+            logCauseTiming("structured_candidate_sizes", goal, 0L, extra);
+        }
+        if (componentFailures.isEmpty()
+                && subsystemFailures.isEmpty()
+                && candidate.precursorSignals().isEmpty()
+                && candidate.evidenceNodes().isEmpty()
+                && candidate.capabilityLosses().isEmpty()
+                && candidate.sentences().isEmpty()) {
+            List<String> fallback = new ArrayList<>();
+            if (outcomeTarget != null) {
+                fallback.add(normalizeOutcomeLine(outcomeTarget));
+            }
+            structuredChainCache.put(chainKey, List.copyOf(fallback));
+            return fallback;
+        }
+        SymbolId precursor = selectBestSpecific(candidate.precursorSignals(), true);
+        if (precursor != null) {
+            sentences.add(roleSentence("Precursor signal", precursor));
+        }
         SymbolId componentFailure = null;
         SymbolId subsystemFailure = null;
         if (evidenceAligned) {
+            long selectFailureStart = timing ? System.nanoTime() : 0L;
             SymbolId bestFailure = selectEvidenceAlignedFailure(candidate, target, goal);
+            if (timing) {
+                logCauseTiming("structured_select_failure", goal, System.nanoTime() - selectFailureStart, null);
+            }
             if (bestFailure != null && candidate.componentFailures().contains(bestFailure)) {
                 componentFailure = bestFailure;
             } else {
@@ -1938,14 +2180,14 @@ final class AnswerComposer {
             }
         }
         if (componentFailure == null) {
-            componentFailure = selectBestSpecific(candidate.componentFailures(), true);
+            componentFailure = selectBestSpecific(componentFailures, true);
         }
         List<SymbolId> failureChain = new ArrayList<>();
-        if (candidate.componentFailures().isEmpty()) {
+        if (componentFailures.isEmpty()) {
             List<SymbolId> subsystemTop = selectTopSpecific(subsystemFailures, 2, true, null);
             failureChain.addAll(subsystemTop);
         } else {
-            List<SymbolId> componentTop = selectTopSpecific(candidate.componentFailures(), 2, true, null);
+            List<SymbolId> componentTop = selectTopSpecific(componentFailures, 2, true, null);
             failureChain.addAll(componentTop);
             if (subsystemFailure == null) {
                 subsystemFailure = selectBestSpecificExcluding(subsystemFailures, componentFailure, true);
@@ -1955,7 +2197,11 @@ final class AnswerComposer {
             }
         }
         appendFailureChain(sentences, failureChain);
+        long expandStart = timing ? System.nanoTime() : 0L;
         List<String> expandedChain = expandFailureChainIfShort(sentences, precursor, failureChain, outcomeTarget);
+        if (timing) {
+            logCauseTiming("structured_expand_chain", goal, System.nanoTime() - expandStart, null);
+        }
         if (expandedChain != null) {
             sentences.clear();
             sentences.addAll(expandedChain);
@@ -1974,12 +2220,21 @@ final class AnswerComposer {
             sentences.add(normalizeOutcomeLine(outcomeTarget));
         }
         if (shouldIncludeRecovery(goal, predicate, outcomeTarget) || wantsRecoveryClause(goal)) {
+            long recoveryStart = timing ? System.nanoTime() : 0L;
             SymbolId agent = selectBestRecoveryAgent(candidate, outcomeTarget);
+            if (timing) {
+                logCauseTiming("structured_recovery_agent", goal, System.nanoTime() - recoveryStart, null);
+            }
             if (agent != null) {
                 sentences.add(formatRecoverySentence(agent, outcomeTarget));
             }
         }
+        long evidenceStart = timing ? System.nanoTime() : 0L;
         appendEvidenceLines(candidate, componentFailure, subsystemFailure, outcomeTarget, evidenceAligned, sentences);
+        if (timing) {
+            logCauseTiming("structured_append_evidence", goal, System.nanoTime() - evidenceStart, null);
+        }
+        structuredChainCache.put(chainKey, List.copyOf(sentences));
         return sentences;
     }
 
@@ -1990,7 +2245,13 @@ final class AnswerComposer {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
-        List<SymbolId> filtered = new ArrayList<>();
+        if (limit <= 0) {
+            return List.of();
+        }
+        record Scored(SymbolId id, double score) {}
+        java.util.PriorityQueue<Scored> heap = new java.util.PriorityQueue<>(
+                Comparator.comparingDouble(Scored::score)
+        );
         for (SymbolId candidate : candidates) {
             if (candidate == null) {
                 continue;
@@ -2001,13 +2262,24 @@ final class AnswerComposer {
             if (avoidLoss && answerRanker.isGenericLossValue(candidate.value())) {
                 continue;
             }
-            filtered.add(candidate);
+            double score = answerRanker.specificityScore(candidate.value());
+            if (heap.size() < limit) {
+                heap.add(new Scored(candidate, score));
+            } else if (score > heap.peek().score()) {
+                heap.poll();
+                heap.add(new Scored(candidate, score));
+            }
         }
-        filtered.sort(Comparator.comparingDouble((SymbolId id) -> answerRanker.specificityScore(id.value())).reversed());
-        if (filtered.size() > limit) {
-            return filtered.subList(0, limit);
+        if (heap.isEmpty()) {
+            return List.of();
         }
-        return filtered;
+        List<Scored> scored = new ArrayList<>(heap);
+        scored.sort((left, right) -> Double.compare(right.score(), left.score()));
+        List<SymbolId> results = new ArrayList<>(scored.size());
+        for (Scored entry : scored) {
+            results.add(entry.id());
+        }
+        return results;
     }
 
     private SymbolId selectBestSpecific(List<SymbolId> candidates, boolean avoidLoss) {
@@ -2124,9 +2396,13 @@ final class AnswerComposer {
         if (failures.isEmpty()) {
             return null;
         }
+        List<SymbolId> scoredFailures = failures;
+        if (failures.size() > 25) {
+            scoredFailures = selectTopSpecific(failures, 25, false, null);
+        }
         SymbolId best = null;
         double bestScore = Double.NEGATIVE_INFINITY;
-        for (SymbolId failure : failures) {
+        for (SymbolId failure : scoredFailures) {
             if (failure == null || answerRanker.isGenericLossValue(failure.value())) {
                 continue;
             }
@@ -2199,13 +2475,15 @@ final class AnswerComposer {
         if (node == null) {
             return false;
         }
-        refreshIndexesIfNeeded();
-        for (RelationAssertion assertion : assertionsByLocalPredicate("before", "after", "during")) {
-            if (assertion.subject().equals(node) || assertion.object().equals(node)) {
-                return true;
-            }
+        String key = node.value();
+        Boolean cached = temporalContextCache.get(key);
+        if (cached != null) {
+            return cached;
         }
-        return false;
+        refreshIndexesIfNeeded();
+        boolean hasContext = temporalContextBySymbol.getOrDefault(node, false);
+        temporalContextCache.put(key, hasContext);
+        return hasContext;
     }
 
     private boolean wantsEvidenceAlignedChain(QueryGoal goal) {
@@ -2823,13 +3101,20 @@ final class AnswerComposer {
         if (id == null || id.value() == null) {
             return null;
         }
+        String cached = entityIriCache.get(id);
+        if (cached != null) {
+            return cached.isEmpty() ? null : cached;
+        }
         String token = annotationResolver.normalizeLabelToToken(displayValue(id));
         if (token.isBlank()) {
+            entityIriCache.put(id, "");
             return null;
         }
         for (String iri : annotationResolver.entityIrisByLabel(token)) {
+            entityIriCache.put(id, iri);
             return iri;
         }
+        entityIriCache.put(id, "");
         return null;
     }
 
@@ -2846,7 +3131,18 @@ final class AnswerComposer {
             labelPhrasesByEntity = new HashMap<>();
             dependentsByResource = new HashMap<>();
             assertionsByLocalPredicate = new HashMap<>();
+            evidencePredicateWeight = new HashMap<>();
+            evidenceSignalWeightBySubject = new HashMap<>();
+            temporalContextBySymbol = new HashMap<>();
+            entityIriCache = new HashMap<>();
             semanticRoleCache = new HashMap<>();
+            temporalSupportCache = new HashMap<>();
+            evidenceAlignmentCache = new HashMap<>();
+            structuredChainCache = new HashMap<>();
+            evidenceSignalCache = new HashMap<>();
+            dependencyFailureCache = new HashMap<>();
+            explanationCandidateCache = new HashMap<>();
+            temporalContextCache = new HashMap<>();
             for (EntityNode entity : graph.getAllEntities()) {
                 SymbolId id = entity.id();
                 if (id == null) {
@@ -2873,6 +3169,21 @@ final class AnswerComposer {
                     dependentsByResource
                             .computeIfAbsent(assertion.object(), key -> new HashSet<>())
                             .add(assertion.subject());
+                }
+                if ("before".equals(local) || "after".equals(local) || "during".equals(local)) {
+                    if (assertion.subject() != null) {
+                        temporalContextBySymbol.put(assertion.subject(), true);
+                    }
+                    if (assertion.object() != null) {
+                        temporalContextBySymbol.put(assertion.object(), true);
+                    }
+                }
+                double weight = predicateEvidenceWeightCached(assertion.predicate());
+                if (weight > 0.0 && hasSemanticRole(assertion.subject(), "evidence_signal")) {
+                    Double existing = evidenceSignalWeightBySubject.get(assertion.subject());
+                    if (existing == null || weight > existing) {
+                        evidenceSignalWeightBySubject.put(assertion.subject(), weight);
+                    }
                 }
             }
             indexVersion = currentVersion;
