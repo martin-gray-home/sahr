@@ -24,6 +24,8 @@ public final class SimpleQueryParser {
     private static final Morphology MORPHOLOGY = new Morphology();
 
     private final boolean ontologyDriven;
+    private final LanguageGraphBuilder languageGraphBuilder;
+    private final LanguageRuleExecutor languageRuleExecutor;
 
     public SimpleQueryParser() {
         this(true);
@@ -31,6 +33,8 @@ public final class SimpleQueryParser {
 
     public SimpleQueryParser(boolean ontologyDriven) {
         this.ontologyDriven = ontologyDriven;
+        this.languageGraphBuilder = new LanguageGraphBuilder(ontologyDriven);
+        this.languageRuleExecutor = new LanguageRuleExecutor(ontologyDriven);
     }
 
     public QueryGoal parse(String input) {
@@ -63,6 +67,12 @@ public final class SimpleQueryParser {
                 return QueryGoal.unknown();
             }
             return applyDiscourseModifier(QueryGoal.where(type, "concept:location"), discourse);
+        }
+
+        Optional<QueryGoal> languageGraphQuery = languageRuleExecutor.interpret(languageGraphBuilder.build(normalized))
+                .map(LanguageQueryCandidate::queryGoal);
+        if (languageGraphQuery.isPresent()) {
+            return applyDiscourseModifier(languageGraphQuery.get(), discourse);
         }
 
         Optional<QueryGoal> prepositionWhSimple = parseWhPrepositionSimple(normalized);
