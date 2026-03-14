@@ -25,6 +25,24 @@ public final class SimpleQueryParser {
 
     private final boolean ontologyDriven;
 
+    public static final class ParsedQuery {
+        private final QueryGoal query;
+        private final String producedBy;
+
+        public ParsedQuery(QueryGoal query, String producedBy) {
+            this.query = query;
+            this.producedBy = producedBy;
+        }
+
+        public QueryGoal query() {
+            return query;
+        }
+
+        public String producedBy() {
+            return producedBy;
+        }
+    }
+
     public SimpleQueryParser() {
         this(true);
     }
@@ -38,53 +56,57 @@ public final class SimpleQueryParser {
     }
 
     public QueryGoal parse(String input) {
+        return parseWithProvenance(input).query();
+    }
+
+    public ParsedQuery parseWithProvenance(String input) {
         String normalized = input == null ? "" : input.toLowerCase(Locale.ROOT).trim();
 
         if (normalized.isEmpty()) {
-            return QueryGoal.unknown();
+            return new ParsedQuery(QueryGoal.unknown(), "parser-empty");
         }
 
         if (!isQuestion(normalized)) {
-            return QueryGoal.unknown();
+            return new ParsedQuery(QueryGoal.unknown(), "parser-not-question");
         }
 
         String discourse = findDiscourseModifier(tokenize(normalized));
         Optional<QueryGoal> attribute = parseAttributeQuery(normalized);
         if (attribute.isPresent()) {
-            return applyDiscourseModifier(attribute.get(), discourse);
+            return new ParsedQuery(applyDiscourseModifier(attribute.get(), discourse), "parser-attribute");
         }
 
         if (normalized.startsWith("how many")) {
             Optional<QueryGoal> count = parseCountQuery(normalized);
             if (count.isPresent()) {
-                return applyDiscourseModifier(count.get(), discourse);
+                return new ParsedQuery(applyDiscourseModifier(count.get(), discourse), "parser-count");
             }
         }
 
         if (normalized.contains("where")) {
             String type = extractEntityType(normalized);
             if (type == null || type.isBlank()) {
-                return QueryGoal.unknown();
+                return new ParsedQuery(QueryGoal.unknown(), "parser-where-missing-entity");
             }
-            return applyDiscourseModifier(QueryGoal.where(type, "concept:location"), discourse);
+            return new ParsedQuery(applyDiscourseModifier(QueryGoal.where(type, "concept:location"), discourse), "parser-where");
         }
 
         Optional<QueryGoal> prepositionWhSimple = parseWhPrepositionSimple(normalized);
         if (prepositionWhSimple.isPresent()) {
-            return applyDiscourseModifier(prepositionWhSimple.get(), discourse);
+            return new ParsedQuery(applyDiscourseModifier(prepositionWhSimple.get(), discourse), "parser-wh-preposition-simple");
         }
 
         Optional<QueryGoal> yesNo = parseYesNoQuery(input);
         if (yesNo.isPresent()) {
-            return applyDiscourseModifier(yesNo.get(), discourse);
+            return new ParsedQuery(applyDiscourseModifier(yesNo.get(), discourse), "parser-yesno");
         }
 
-        Optional<QueryGoal> relation = parseRelationQuery(input);
+        Optional<ParsedQuery> relation = parseRelationQueryWithProvenance(input, discourse);
         if (relation.isPresent()) {
-            return applyDiscourseModifier(relation.get(), discourse);
+            return relation.get();
         }
 
-        return QueryGoal.unknown();
+        return new ParsedQuery(QueryGoal.unknown(), "parser-unknown");
     }
 
     public boolean isQuestion(String input) {
@@ -245,6 +267,81 @@ public final class SimpleQueryParser {
             return whDativeFallback;
         }
         return parsePrepositionFallback(input);
+    }
+
+    private Optional<ParsedQuery> parseRelationQueryWithProvenance(String input, String discourse) {
+        Annotation doc = new Annotation(input);
+        CoreNlpPipeline.get().annotate(doc);
+        for (CoreMap sentence : doc.get(CoreAnnotations.SentencesAnnotation.class)) {
+            SemanticGraph graph = sentence.get(SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class);
+            if (graph == null) {
+                continue;
+            }
+
+            Optional<QueryGoal> objQuery = parseWhObjectQuery(graph);
+            if (objQuery.isPresent()) {
+                return Optional.of(new ParsedQuery(applyDiscourseModifier(objQuery.get(), discourse), "parser-wh-object"));
+            }
+
+            Optional<QueryGoal> withQuery = parseWithQuery(graph);
+            if (withQuery.isPresent()) {
+                return Optional.of(new ParsedQuery(applyDiscourseModifier(withQuery.get(), discourse), "parser-wh-with"));
+            }
+
+            Optional<QueryGoal> dativeQuery = parseWhDativeQuery(graph);
+            if (dativeQuery.isPresent()) {
+                return Optional.of(new ParsedQuery(applyDiscourseModifier(dativeQuery.get(), discourse), "parser-wh-dative"));
+            }
+
+            Optional<QueryGoal> passiveBy = parseWhPassiveByQuery(graph);
+            if (passiveBy.isPresent()) {
+                return Optional.of(new ParsedQuery(applyDiscourseModifier(passiveBy.get(), discourse), "parser-wh-passive-by"));
+            }
+
+            Optional<QueryGoal> whPrepObject = parseWhPrepositionObjectQuery(graph);
+            if (whPrepObject.isPresent()) {
+                return Optional.of(new ParsedQuery(applyDiscourseModifier(whPrepObject.get(), discourse), "parser-wh-preposition-object"));
+            }
+
+            Optional<QueryGoal> whSubject = parseWhSubjectQuery(graph);
+            if (whSubject.isPresent()) {
+                return Optional.of(new ParsedQuery(applyDiscourseModifier(whSubject.get(), discourse), "parser-wh-subject"));
+            }
+
+            Optional<QueryGoal> whPrepSubject = parseWhPrepositionSubjectQuery(graph);
+            if (whPrepSubject.isPresent()) {
+                return Optional.of(new ParsedQuery(applyDiscourseModifier(whPrepSubject.get(), discourse), "parser-wh-preposition-subject"));
+            }
+        }
+        Optional<QueryGoal> powerFallback = parsePowerFallback(input);
+        if (powerFallback.isPresent()) {
+            return Optional.of(new ParsedQuery(applyDiscourseModifier(powerFallback.get(), discourse), "parser-fallback-power"));
+        }
+        Optional<QueryGoal> withFallback = parseWithFallback(input);
+        if (withFallback.isPresent()) {
+            return Optional.of(new ParsedQuery(applyDiscourseModifier(withFallback.get(), discourse), "parser-fallback-with"));
+        }
+        Optional<QueryGoal> whPrepFallback = parseWhPrepositionFallback(input);
+        if (whPrepFallback.isPresent()) {
+            return Optional.of(new ParsedQuery(applyDiscourseModifier(whPrepFallback.get(), discourse), "parser-fallback-wh-preposition"));
+        }
+        Optional<QueryGoal> whAuxFallback = parseWhAuxVerbFallback(input);
+        if (whAuxFallback.isPresent()) {
+            return Optional.of(new ParsedQuery(applyDiscourseModifier(whAuxFallback.get(), discourse), "parser-fallback-wh-aux"));
+        }
+        Optional<QueryGoal> whVerbFallback = parseWhVerbFallback(input);
+        if (whVerbFallback.isPresent()) {
+            return Optional.of(new ParsedQuery(applyDiscourseModifier(whVerbFallback.get(), discourse), "parser-fallback-wh-verb"));
+        }
+        Optional<QueryGoal> whDativeFallback = parseWhDativeFallback(input);
+        if (whDativeFallback.isPresent()) {
+            return Optional.of(new ParsedQuery(applyDiscourseModifier(whDativeFallback.get(), discourse), "parser-fallback-wh-dative"));
+        }
+        Optional<QueryGoal> prepositionFallback = parsePrepositionFallback(input);
+        if (prepositionFallback.isPresent()) {
+            return Optional.of(new ParsedQuery(applyDiscourseModifier(prepositionFallback.get(), discourse), "parser-fallback-preposition"));
+        }
+        return Optional.empty();
     }
 
     private Optional<QueryGoal> parsePowerFallback(String input) {

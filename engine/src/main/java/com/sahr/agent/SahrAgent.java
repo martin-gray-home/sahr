@@ -365,9 +365,10 @@ public final class SahrAgent {
                     mapped
             ));
         }
-        QueryGoal parsed = mapQuery(parser.parse(normalizedInput));
-        double parserScore = scoreParserCandidate(normalizedInput, parsed);
-        candidates.add(new QueryCandidate("parser", "simple-query-parser", parserScore, parsed));
+        SimpleQueryParser.ParsedQuery parsedQuery = parser.parseWithProvenance(normalizedInput);
+        QueryGoal parsed = mapQuery(parsedQuery.query());
+        double parserScore = scoreParserCandidate(normalizedInput, parsed, parsedQuery.producedBy());
+        candidates.add(new QueryCandidate("parser", parsedQuery.producedBy(), parserScore, parsed));
 
         QueryCandidate winner = selectBestCandidate(candidates);
         logCandidateCompetition(candidates, winner);
@@ -411,7 +412,7 @@ public final class SahrAgent {
         return 1;
     }
 
-    private double scoreParserCandidate(String normalizedInput, QueryGoal goal) {
+    private double scoreParserCandidate(String normalizedInput, QueryGoal goal, String producedBy) {
         if (goal == null || goal.type() == QueryGoal.Type.UNKNOWN) {
             return 0.0;
         }
@@ -448,7 +449,36 @@ public final class SahrAgent {
         } else if (!isBlank(goal.predicate())) {
             score -= 0.05;
         }
+        score += parserProvenanceWeight(producedBy);
         return Math.max(0.0, Math.min(0.9, score));
+    }
+
+    private double parserProvenanceWeight(String producedBy) {
+        if (producedBy == null || producedBy.isBlank()) {
+            return 0.0;
+        }
+        return switch (producedBy) {
+            case "parser-wh-object",
+                    "parser-wh-with",
+                    "parser-wh-dative",
+                    "parser-wh-passive-by",
+                    "parser-wh-preposition-object",
+                    "parser-wh-subject",
+                    "parser-wh-preposition-subject" -> 0.15;
+            case "parser-wh-preposition-simple",
+                    "parser-yesno",
+                    "parser-where",
+                    "parser-count",
+                    "parser-attribute" -> 0.1;
+            case "parser-fallback-power",
+                    "parser-fallback-with",
+                    "parser-fallback-wh-preposition",
+                    "parser-fallback-wh-aux",
+                    "parser-fallback-wh-verb",
+                    "parser-fallback-wh-dative",
+                    "parser-fallback-preposition" -> -0.05;
+            default -> 0.0;
+        };
     }
 
     private boolean predicateAppearsInInput(String normalizedInput, String predicate) {
