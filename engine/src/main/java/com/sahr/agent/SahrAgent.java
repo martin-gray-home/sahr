@@ -33,6 +33,7 @@ import com.sahr.nlp.Statement;
 import com.sahr.nlp.StatementBatch;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
+import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
 import com.sahr.ontology.SahrAnnotationVocabulary;
 import edu.stanford.nlp.process.Morphology;
@@ -63,6 +64,7 @@ public final class SahrAgent {
     private final StatementParser statementParser;
     private final RuleParser ruleParser;
     private final TermMapper termMapper;
+    private final SemanticNodeNormalizer semanticNormalizer;
     private final ReasoningTrace trace;
     private final WorkingMemory workingMemory;
     private final ReasoningPhaseCoordinator phases;
@@ -112,6 +114,7 @@ public final class SahrAgent {
         this.statementParser = statementParser;
         this.ruleParser = new RuleParser(statementParser);
         this.termMapper = termMapper;
+        this.semanticNormalizer = new SemanticNodeNormalizer(termMapper);
         this.trace = new ReasoningTrace();
         this.workingMemory = new WorkingMemory(phases);
         this.languageCandidateProducer = new LanguageRuleCandidateProducer(parser.isOntologyDriven());
@@ -1028,9 +1031,9 @@ public final class SahrAgent {
         if (isGenericExpectedType(stripped)) {
             return null;
         }
-        Optional<String> mappedType = termMapper.mapToken(stripped);
-        if (mappedType.isPresent()) {
-            return mappedType.get();
+        Optional<String> normalized = semanticNormalizer.canonicalType(expectedType);
+        if (normalized.isPresent()) {
+            return normalized.get();
         }
         if (expectedType.startsWith("concept:")) {
             return expectedType;
@@ -1312,8 +1315,7 @@ public final class SahrAgent {
     private Set<String> mapTypes(Set<String> types) {
         Set<String> mapped = new HashSet<>();
         for (String type : types) {
-            Optional<String> iri = termMapper.mapToken(stripPrefix(type));
-            mapped.add(iri.orElse("concept:" + type));
+            mapped.add(semanticNormalizer.canonicalTypeOrConcept(type));
         }
         return mapped;
     }
