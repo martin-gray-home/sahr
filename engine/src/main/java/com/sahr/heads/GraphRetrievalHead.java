@@ -11,6 +11,7 @@ import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
+import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
 
 import java.util.ArrayList;
@@ -49,7 +50,8 @@ public final class GraphRetrievalHead extends BaseHead {
         }
 
         String requestedType = query.entityType();
-        String canonicalRequestedType = canonicalRequestedType(context.ontology(), requestedType);
+        SemanticNodeNormalizer normalizer = context.semanticNormalizer().orElse(null);
+        String canonicalRequestedType = canonicalRequestedType(context.ontology(), normalizer, requestedType);
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
@@ -257,7 +259,9 @@ public final class GraphRetrievalHead extends BaseHead {
                 .orElse(false);
     }
 
-    private String canonicalRequestedType(OntologyService ontology, String requestedType) {
+    private String canonicalRequestedType(OntologyService ontology,
+                                          SemanticNodeNormalizer normalizer,
+                                          String requestedType) {
         if (requestedType == null || requestedType.isBlank()) {
             return null;
         }
@@ -273,6 +277,9 @@ public final class GraphRetrievalHead extends BaseHead {
         }
         java.util.Set<String> iris = ontology.getEntityIrisByLabel(stripped);
         if (iris.isEmpty()) {
+            if (normalizer != null) {
+                return normalizer.canonicalType(stripped).orElse(requestedType);
+            }
             return requestedType;
         }
         String synset = selectWordNetSynset(iris);

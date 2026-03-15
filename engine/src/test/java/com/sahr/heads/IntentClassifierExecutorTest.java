@@ -41,7 +41,8 @@ class IntentClassifierExecutorTest {
                 null,
                 null,
                 null,
-                features
+                features,
+                null
         );
 
         List<ReasoningCandidate> candidates = head.evaluate(context);

@@ -322,7 +322,8 @@ public final class SahrAgent {
 
         try {
             if (!isQuestion(query)) {
-                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), rule.orElse(null), workingMemory, features);
+                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), rule.orElse(null),
+                        workingMemory, features, semanticNormalizer);
                 long answerStart = timing ? System.nanoTime() : 0L;
                 String result = handleSingle(context, query, questionLike, features);
                 long answerEnd = timing ? System.nanoTime() : 0L;
@@ -666,7 +667,7 @@ public final class SahrAgent {
         if (query == null) {
             return List.of();
         }
-        HeadContext context = new HeadContext(query, graph, ontology, null, null, workingMemory);
+        HeadContext context = new HeadContext(query, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
         return reasoner.heads().stream()
                 .map(head -> head.explain(context))
                 .toList();
@@ -1486,7 +1487,7 @@ public final class SahrAgent {
 
     private String resolveQuestionAfterAssertion(QueryGoal query, int maxIterations) {
         for (int i = 0; i < maxIterations; i++) {
-            HeadContext followUpContext = new HeadContext(query, graph, ontology, workingMemory);
+            HeadContext followUpContext = new HeadContext(query, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
             List<ReasoningCandidate> followUp = withReadPhase(() -> reasoner.reason(followUpContext));
             if (followUp.isEmpty()) {
                 return isYesNo(query) ? "Unknown." : "No candidates produced.";
@@ -1601,7 +1602,8 @@ public final class SahrAgent {
                     current.goalId().equals(root.goalId()) ? statement : null,
                     current.goalId().equals(root.goalId()) ? rule : null,
                     workingMemory,
-                    features
+                    features,
+                    semanticNormalizer
             );
             List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
             long reasonEnd = subgoalTiming ? System.nanoTime() : 0L;
@@ -2026,7 +2028,7 @@ public final class SahrAgent {
         if (answerComposer.isRelationshipQuestion(goal)) {
             return "No candidates produced.";
         }
-        HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null);
+        HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
         long headStart = planTiming ? System.nanoTime() : 0L;
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         if (planTiming) {
@@ -2723,7 +2725,7 @@ public final class SahrAgent {
     }
 
     private void runPropagationClosure() {
-        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, workingMemory);
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, workingMemory, null, semanticNormalizer);
         int totalAdded = 0;
 
         for (int i = 0; i < MAX_PROPAGATION_ITERATIONS; i++) {
@@ -2761,7 +2763,7 @@ public final class SahrAgent {
         if (features == null) {
             return new IntentDecision(IntentType.UNKNOWN, 0.0, List.of());
         }
-        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, workingMemory, features);
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, workingMemory, features, semanticNormalizer);
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         IntentDecision winner = null;
         double bestScore = -1.0;
