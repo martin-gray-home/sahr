@@ -29,4 +29,6 @@ public interface OntologyService {
     Optional<String> getAnnotationValue(String iri, String annotationIri);
 
     Set<String> getEntitiesWithAnnotation(String annotationIri, String value);
+
+    Set<String> getObjectPropertyTargets(String subjectIri, String propertyIri);
 }

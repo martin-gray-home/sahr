@@ -25,6 +25,7 @@ public final class CachedOntologyService implements OntologyService {
     private final ConcurrentMap<String, Optional<String>> annotationCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<String>> entityAnnotationCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ConcurrentMap<String, Boolean>> subclassCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Set<String>> objectPropertyTargetsCache = new ConcurrentHashMap<>();
 
     public CachedOntologyService(OntologyService delegate) {
         this.delegate = delegate;
@@ -98,5 +99,12 @@ public final class CachedOntologyService implements OntologyService {
     public Set<String> getEntitiesWithAnnotation(String annotationIri, String value) {
         String key = annotationIri + "|" + value;
         return entityAnnotationCache.computeIfAbsent(key, ignored -> delegate.getEntitiesWithAnnotation(annotationIri, value));
+    }
+
+    @Override
+    public Set<String> getObjectPropertyTargets(String subjectIri, String propertyIri) {
+        String key = subjectIri + "|" + propertyIri;
+        return objectPropertyTargetsCache.computeIfAbsent(key,
+                ignored -> delegate.getObjectPropertyTargets(subjectIri, propertyIri));
     }
 }

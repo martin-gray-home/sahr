@@ -11,6 +11,7 @@ import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
+import com.sahr.ontology.SemanticTypeCompatibilityService;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -67,6 +68,7 @@ public final class RelationQueryHead extends BaseHead {
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
         WorkingMemory memory = context.workingMemory();
+        SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         SymbolId subject = subjectBinding == null || subjectBinding.isBlank() ? null : new SymbolId(subjectBinding);
         SymbolId object = objectBinding == null || objectBinding.isBlank() ? null : new SymbolId(objectBinding);
         String modifier = query.modifier();
@@ -88,7 +90,7 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         if (query.type() == QueryGoal.Type.COUNT) {
-            return evaluateCount(query, graph, ontology, subject, object, predicate, expectedType);
+            return evaluateCount(query, graph, ontology, compatibility, subject, object, predicate, expectedType);
         }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
@@ -99,7 +101,7 @@ public final class RelationQueryHead extends BaseHead {
                 SymbolId answer = null;
 
                 if (predicateOnly) {
-                    answer = selectPredicateOnlyAnswer(graph, ontology, assertion, expectedType);
+                    answer = selectPredicateOnlyAnswer(graph, ontology, compatibility, assertion, expectedType);
                     if (answer == null) {
                         continue;
                     }
@@ -116,7 +118,7 @@ public final class RelationQueryHead extends BaseHead {
                 if (answer == null) {
                     continue;
                 }
-                if (!matchesExpectedType(graph, ontology, answer, expectedType)) {
+                if (!matchesExpectedType(graph, ontology, compatibility, answer, expectedType)) {
                     continue;
                 }
 
@@ -145,7 +147,7 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         if (candidates.isEmpty() && subject == null && object != null && ontology.isSymmetricProperty(predicate)) {
-            candidates.addAll(evaluateSymmetricFallback(graph, ontology, memory, object, predicate, expectedType));
+            candidates.addAll(evaluateSymmetricFallback(graph, ontology, compatibility, memory, object, predicate, expectedType));
         }
 
         return candidates;
@@ -153,6 +155,7 @@ public final class RelationQueryHead extends BaseHead {
 
     private SymbolId selectPredicateOnlyAnswer(KnowledgeBase graph,
                                                OntologyService ontology,
+                                               SemanticTypeCompatibilityService compatibility,
                                                RelationAssertion assertion,
                                                String expectedType) {
         SymbolId subject = assertion.subject();
@@ -160,10 +163,10 @@ public final class RelationQueryHead extends BaseHead {
         if (expectedType == null || expectedType.isBlank()) {
             return subject;
         }
-        if (matchesExpectedType(graph, ontology, subject, expectedType)) {
+        if (matchesExpectedType(graph, ontology, compatibility, subject, expectedType)) {
             return subject;
         }
-        if (matchesExpectedType(graph, ontology, object, expectedType)) {
+        if (matchesExpectedType(graph, ontology, compatibility, object, expectedType)) {
             return object;
         }
         return null;
@@ -172,6 +175,7 @@ public final class RelationQueryHead extends BaseHead {
     private List<ReasoningCandidate> evaluateCount(QueryGoal query,
                                                    KnowledgeBase graph,
                                                    OntologyService ontology,
+                                                   SemanticTypeCompatibilityService compatibility,
                                                    SymbolId subject,
                                                    SymbolId object,
                                                    String predicate,
@@ -202,7 +206,7 @@ public final class RelationQueryHead extends BaseHead {
                 } else if (subject != null) {
                     candidate = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
                 }
-                if (!matchesExpectedTypeForCount(graph, ontology, candidate, expectedType)) {
+                if (!matchesExpectedTypeForCount(graph, ontology, compatibility, candidate, expectedType)) {
                     continue;
                 }
                 matches.add(candidate);
@@ -214,6 +218,7 @@ public final class RelationQueryHead extends BaseHead {
 
     private List<ReasoningCandidate> evaluateSymmetricFallback(KnowledgeBase graph,
                                                                OntologyService ontology,
+                                                               SemanticTypeCompatibilityService compatibility,
                                                                WorkingMemory memory,
                                                                SymbolId anchor,
                                                                String predicate,
@@ -228,7 +233,7 @@ public final class RelationQueryHead extends BaseHead {
                     continue;
                 }
                 SymbolId answer = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
-                if (!matchesExpectedType(graph, ontology, answer, expectedType)) {
+                if (!matchesExpectedType(graph, ontology, compatibility, answer, expectedType)) {
                     continue;
                 }
 
@@ -259,9 +264,10 @@ public final class RelationQueryHead extends BaseHead {
     }
 
     private boolean matchesExpectedTypeForCount(KnowledgeBase graph,
-                                                OntologyService ontology,
-                                                SymbolId candidate,
-                                                String expectedType) {
+                                               OntologyService ontology,
+                                               SemanticTypeCompatibilityService compatibility,
+                                               SymbolId candidate,
+                                               String expectedType) {
         if (expectedType == null || expectedType.isBlank()) {
             return true;
         }
@@ -274,7 +280,7 @@ public final class RelationQueryHead extends BaseHead {
             return stripPrefix(candidate.value()).equalsIgnoreCase(normalized)
                     || hasTypeMatch(graph, candidate, Set.of(normalized));
         }
-        return matchesExpectedType(graph, ontology, candidate, expectedType);
+        return matchesExpectedType(graph, ontology, compatibility, candidate, expectedType);
     }
 
     private boolean hasTypeMatch(KnowledgeBase graph, SymbolId candidate, Set<String> expected) {
@@ -376,7 +382,11 @@ public final class RelationQueryHead extends BaseHead {
         return focus;
     }
 
-    private boolean matchesExpectedType(KnowledgeBase graph, OntologyService ontology, SymbolId answer, String expectedType) {
+    private boolean matchesExpectedType(KnowledgeBase graph,
+                                        OntologyService ontology,
+                                        SemanticTypeCompatibilityService compatibility,
+                                        SymbolId answer,
+                                        String expectedType) {
         if (expectedType == null || expectedType.isBlank()) {
             return true;
         }
@@ -384,23 +394,25 @@ public final class RelationQueryHead extends BaseHead {
         if (entity.isEmpty()) {
             return false;
         }
-        for (String type : entity.get().conceptTypes()) {
-            if (type.equals(expectedType)) {
-                return true;
-            }
-            if (ontology.isSubclassOf(type, expectedType)) {
-                return true;
-            }
-        }
         if (!isIri(expectedType)) {
             return true;
         }
-        // If we only have non-IRI concept tags, avoid hard filtering; let attention scoring rank.
         boolean hasIriType = entity.get().conceptTypes().stream().anyMatch(this::isIri);
+        if (!hasIriType) {
+            return !isPersonLikeExpectedType(ontology, expectedType);
+        }
+        for (String type : entity.get().conceptTypes()) {
+            if (!isIri(type)) {
+                continue;
+            }
+            if (compatibility.isCompatible(type, expectedType)) {
+                return true;
+            }
+        }
         if (isPersonLikeExpectedType(ontology, expectedType)) {
             return false;
         }
-        return !hasIriType;
+        return false;
     }
 
     private boolean isPersonLikeExpectedType(OntologyService ontology, String expectedType) {

@@ -1,5 +1,7 @@
 package com.sahr.core;
 
+import com.sahr.ontology.SemanticTypeCompatibilityService;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -177,7 +179,11 @@ public final class SymbolicAttentionScorer {
         if (entity.isEmpty()) {
             return DEFAULT_TYPE_MATCH;
         }
+        SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         for (String type : entity.get().conceptTypes()) {
+            if (isIri(expectedType) && isIri(type) && compatibility.isCompatible(type, expectedType)) {
+                return 1.0;
+            }
             if (type.equals(expectedType)) {
                 return 1.0;
             }

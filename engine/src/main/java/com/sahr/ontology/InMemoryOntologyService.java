@@ -20,6 +20,7 @@ public final class InMemoryOntologyService implements OntologyService {
     private final Map<String, Set<String>> entityLabels = new HashMap<>();
     private final Map<String, Set<String>> labelsByIri = new HashMap<>();
     private final Map<String, Map<String, String>> annotations = new HashMap<>();
+    private final Map<String, Map<String, Set<String>>> objectPropertyTargets = new HashMap<>();
 
     public void addSubclass(String child, String parent) {
         subclassMap.computeIfAbsent(child, key -> new HashSet<>()).add(parent);
@@ -60,6 +61,16 @@ public final class InMemoryOntologyService implements OntologyService {
 
     public void addAnnotation(String iri, String annotationIri, String value) {
         annotations.computeIfAbsent(iri, key -> new HashMap<>()).put(annotationIri, value);
+    }
+
+    public void addObjectPropertyAssertion(String subject, String property, String object) {
+        if (subject == null || property == null || object == null) {
+            return;
+        }
+        objectPropertyTargets
+                .computeIfAbsent(subject, key -> new HashMap<>())
+                .computeIfAbsent(property, key -> new HashSet<>())
+                .add(object);
     }
 
     @Override
@@ -141,5 +152,17 @@ public final class InMemoryOntologyService implements OntologyService {
             }
         }
         return results;
+    }
+
+    @Override
+    public Set<String> getObjectPropertyTargets(String subjectIri, String propertyIri) {
+        if (subjectIri == null || propertyIri == null) {
+            return Set.of();
+        }
+        Map<String, Set<String>> byProperty = objectPropertyTargets.get(subjectIri);
+        if (byProperty == null) {
+            return Set.of();
+        }
+        return Collections.unmodifiableSet(byProperty.getOrDefault(propertyIri, Set.of()));
     }
 }

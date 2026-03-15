@@ -10,6 +10,7 @@ import org.semanticweb.owlapi.model.OWLAnnotationProperty;
 import org.semanticweb.owlapi.model.OWLObjectProperty;
 import org.semanticweb.owlapi.model.OWLObjectPropertyRangeAxiom;
 import org.semanticweb.owlapi.model.OWLNamedIndividual;
+import org.semanticweb.owlapi.model.OWLObjectPropertyAssertionAxiom;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
 import org.semanticweb.owlapi.reasoner.NodeSet;
@@ -222,6 +223,28 @@ public final class OwlApiOntologyService implements OntologyService {
                 results.add(individual.getIRI().toString());
             }
         });
+        return results;
+    }
+
+    @Override
+    public Set<String> getObjectPropertyTargets(String subjectIri, String propertyIri) {
+        if (!isIri(subjectIri) || !isIri(propertyIri)) {
+            return Set.of();
+        }
+        OWLNamedIndividual subject = manager.getOWLDataFactory().getOWLNamedIndividual(IRI.create(subjectIri));
+        OWLObjectProperty property = manager.getOWLDataFactory().getOWLObjectProperty(IRI.create(propertyIri));
+        Set<String> results = new HashSet<>();
+        for (OWLObjectPropertyAssertionAxiom axiom : ontology.getObjectPropertyAssertionAxioms(subject)) {
+            if (!axiom.getProperty().isNamed()) {
+                continue;
+            }
+            if (!axiom.getProperty().asOWLObjectProperty().equals(property)) {
+                continue;
+            }
+            if (!axiom.getObject().isAnonymous()) {
+                results.add(axiom.getObject().asOWLNamedIndividual().getIRI().toString());
+            }
+        }
         return results;
     }
 

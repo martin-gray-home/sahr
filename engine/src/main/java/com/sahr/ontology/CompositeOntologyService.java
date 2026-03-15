@@ -122,4 +122,13 @@ public final class CompositeOntologyService implements OntologyService {
         }
         return results;
     }
+
+    @Override
+    public Set<String> getObjectPropertyTargets(String subjectIri, String propertyIri) {
+        Set<String> results = new LinkedHashSet<>();
+        for (OntologyService service : delegates) {
+            results.addAll(service.getObjectPropertyTargets(subjectIri, propertyIri));
+        }
+        return results;
+    }
 }
