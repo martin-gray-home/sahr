@@ -28,7 +28,8 @@ public final class LabelLexicalMapper implements TermMapper {
             "man", "https://en-word.net/id/oewn-10306910-n",
             "woman", "https://en-word.net/id/oewn-10807146-n",
             "boy", "https://en-word.net/id/oewn-10305010-n",
-            "girl", "https://en-word.net/id/oewn-10104064-n"
+            "girl", "https://en-word.net/id/oewn-10104064-n",
+            "hat", "https://en-word.net/id/oewn-03502782-n"
     );
 
     private final Map<String, String> labelToEntityIri = new ConcurrentHashMap<>();
