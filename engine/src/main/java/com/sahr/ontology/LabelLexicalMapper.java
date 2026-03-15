@@ -40,7 +40,15 @@ public final class LabelLexicalMapper implements TermMapper {
             Map.entry("door", "https://en-word.net/id/oewn-03226423-n"),
             Map.entry("window", "https://en-word.net/id/oewn-04594951-n"),
             Map.entry("ceiling", "https://en-word.net/id/oewn-02993828-n"),
-            Map.entry("wall", "https://en-word.net/id/oewn-04554141-n")
+            Map.entry("wall", "https://en-word.net/id/oewn-04554141-n"),
+            Map.entry("roof", "https://en-word.net/id/oewn-04112162-n"),
+            Map.entry("shelf", "https://en-word.net/id/oewn-04197095-n"),
+            Map.entry("drawer", "https://en-word.net/id/oewn-03238608-n"),
+            Map.entry("cupboard", "https://en-word.net/id/oewn-03152990-n"),
+            Map.entry("cup", "https://en-word.net/id/oewn-03152175-n"),
+            Map.entry("plate", "https://en-word.net/id/oewn-03965779-n"),
+            Map.entry("book", "https://en-word.net/id/oewn-02873453-n"),
+            Map.entry("lamp", "https://en-word.net/id/oewn-03641539-n")
     );
 
     private final Map<String, String> labelToEntityIri = new ConcurrentHashMap<>();
