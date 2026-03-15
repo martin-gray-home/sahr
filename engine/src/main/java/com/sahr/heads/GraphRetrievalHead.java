@@ -11,10 +11,12 @@ import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
+import com.sahr.ontology.SemanticTypeCompatibilityService;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public final class GraphRetrievalHead extends BaseHead {
@@ -47,8 +49,10 @@ public final class GraphRetrievalHead extends BaseHead {
         }
 
         String requestedType = query.entityType();
+        String canonicalRequestedType = canonicalRequestedType(context.ontology(), requestedType);
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
+        SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         WorkingMemory memory = context.workingMemory();
         java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(query, graph);
 
@@ -63,7 +67,8 @@ public final class GraphRetrievalHead extends BaseHead {
         java.util.Set<String> expandedCoLocation = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION);
         for (String predicate : locationPredicates) {
             for (RelationAssertion assertion : graph.findByPredicate(predicate)) {
-                boolean typeMatch = matchesType(graph, ontology, assertion, requestedType, requestedEntity);
+                boolean typeMatch = matchesType(graph, ontology, compatibility, assertion,
+                        requestedType, canonicalRequestedType, requestedEntity);
                 if (!typeMatch) {
                     continue;
                 }
@@ -120,7 +125,8 @@ public final class GraphRetrievalHead extends BaseHead {
                 if (inferredSubject == null) {
                     continue;
                 }
-                if (!matchesType(graph, ontology, inferredSubject, requestedType, requestedEntity)) {
+                if (!matchesType(graph, ontology, compatibility, inferredSubject,
+                        requestedType, canonicalRequestedType, requestedEntity)) {
                     continue;
                 }
                 String key = inferredSubject.value() + "|" + location.object().value();
@@ -199,8 +205,10 @@ public final class GraphRetrievalHead extends BaseHead {
 
     private boolean matchesType(KnowledgeBase graph,
                                 OntologyService ontology,
+                                SemanticTypeCompatibilityService compatibility,
                                 SymbolId subject,
                                 String requestedType,
+                                String canonicalRequestedType,
                                 java.util.Optional<SymbolId> requestedEntity) {
         if (requestedType == null || requestedType.isBlank()) {
             return true;
@@ -215,16 +223,19 @@ public final class GraphRetrievalHead extends BaseHead {
         return graph.findEntity(subject)
                 .map(EntityNode::conceptTypes)
                 .map(types -> types.stream().anyMatch(type ->
-                        type.equals(requestedType)
+                        type.equals(canonicalRequestedType)
                                 || normalizeTypeToken(type).equals(normalizedRequested)
-                                || ontology.isSubclassOf(type, requestedType)))
+                                || (isIri(type) && isIri(canonicalRequestedType)
+                                && compatibility.isCompatible(type, canonicalRequestedType))))
                 .orElse(false);
     }
 
     private boolean matchesType(KnowledgeBase graph,
                                 OntologyService ontology,
+                                SemanticTypeCompatibilityService compatibility,
                                 RelationAssertion assertion,
                                 String requestedType,
+                                String canonicalRequestedType,
                                 java.util.Optional<SymbolId> requestedEntity) {
         if (requestedType == null || requestedType.isBlank()) {
             return true;
@@ -239,10 +250,45 @@ public final class GraphRetrievalHead extends BaseHead {
         return graph.findEntity(assertion.subject())
                 .map(EntityNode::conceptTypes)
                 .map(types -> types.stream().anyMatch(type ->
-                        type.equals(requestedType)
+                        type.equals(canonicalRequestedType)
                                 || normalizeTypeToken(type).equals(normalizedRequested)
-                                || ontology.isSubclassOf(type, requestedType)))
+                                || (isIri(type) && isIri(canonicalRequestedType)
+                                && compatibility.isCompatible(type, canonicalRequestedType))))
                 .orElse(false);
+    }
+
+    private String canonicalRequestedType(OntologyService ontology, String requestedType) {
+        if (requestedType == null || requestedType.isBlank()) {
+            return null;
+        }
+        if (isIri(requestedType)) {
+            return requestedType;
+        }
+        String stripped = normalizeTypeToken(requestedType).toLowerCase(java.util.Locale.ROOT);
+        if (stripped.isBlank()) {
+            return null;
+        }
+        if ("entity".equals(stripped) || "concept".equals(stripped) || "thing".equals(stripped)) {
+            return null;
+        }
+        java.util.Set<String> iris = ontology.getEntityIrisByLabel(stripped);
+        if (iris.isEmpty()) {
+            return requestedType;
+        }
+        String synset = selectWordNetSynset(iris);
+        if (synset != null) {
+            return synset;
+        }
+        return iris.stream().sorted().findFirst().orElse(requestedType);
+    }
+
+    private String selectWordNetSynset(java.util.Set<String> iris) {
+        for (String iri : iris) {
+            if (iri != null && iri.startsWith("https://en-word.net/id/")) {
+                return iri;
+            }
+        }
+        return null;
     }
 
 }

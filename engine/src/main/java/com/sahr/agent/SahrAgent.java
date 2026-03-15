@@ -2242,12 +2242,15 @@ public final class SahrAgent {
         }
         String requestedType = goal.entityType();
         String normalizedRequested = normalizeTypeToken(requestedType);
+        String canonicalRequested = canonicalRequestedType(requestedType);
+        SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String predicateName = localName(assertion.predicate());
             if (!locationPredicates.contains(assertion.predicate()) && !locationNames.contains(predicateName)) {
                 continue;
             }
-            if (!matchesRequestedType(assertion.subject(), normalizedRequested, requestedType)) {
+            if (!matchesRequestedType(assertion.subject(), normalizedRequested, requestedType,
+                    canonicalRequested, compatibility)) {
                 continue;
             }
             return assertion.subject().value() + " " + predicateName + " " + assertion.object().value();
@@ -2255,7 +2258,11 @@ public final class SahrAgent {
         return null;
     }
 
-    private boolean matchesRequestedType(SymbolId subject, String normalizedRequested, String requestedType) {
+    private boolean matchesRequestedType(SymbolId subject,
+                                         String normalizedRequested,
+                                         String requestedType,
+                                         String canonicalRequested,
+                                         SemanticTypeCompatibilityService compatibility) {
         if (normalizedRequested == null || normalizedRequested.isBlank()) {
             return true;
         }
@@ -2266,10 +2273,46 @@ public final class SahrAgent {
         return graph.findEntity(subject)
                 .map(EntityNode::conceptTypes)
                 .map(types -> types.stream().anyMatch(type ->
-                        type.equals(requestedType)
+                        type.equals(canonicalRequested)
                                 || normalizeTypeToken(type).equals(normalizedRequested)
-                                || ontology.isSubclassOf(type, requestedType)))
+                                || (isIri(type) && isIri(canonicalRequested)
+                                && compatibility.isCompatible(type, canonicalRequested))))
                 .orElse(false);
+    }
+
+    private String canonicalRequestedType(String requestedType) {
+        if (requestedType == null || requestedType.isBlank()) {
+            return null;
+        }
+        if (isIri(requestedType)) {
+            return requestedType;
+        }
+        String stripped = normalizeTypeToken(requestedType).toLowerCase(java.util.Locale.ROOT);
+        if (stripped.isBlank()) {
+            return null;
+        }
+        if (isGenericExpectedType(stripped) || "entity".equals(stripped)
+                || "concept".equals(stripped) || "thing".equals(stripped)) {
+            return null;
+        }
+        java.util.Set<String> iris = ontology.getEntityIrisByLabel(stripped);
+        if (!iris.isEmpty()) {
+            String synset = selectWordNetSynset(iris);
+            if (synset != null) {
+                return synset;
+            }
+            return iris.stream().sorted().findFirst().orElse(requestedType);
+        }
+        return semanticNormalizer.canonicalType(stripped).orElse(requestedType);
+    }
+
+    private String selectWordNetSynset(java.util.Set<String> iris) {
+        for (String iri : iris) {
+            if (iri != null && iri.startsWith("https://en-word.net/id/")) {
+                return iri;
+            }
+        }
+        return null;
     }
 
     private String normalizeTypeToken(String raw) {
