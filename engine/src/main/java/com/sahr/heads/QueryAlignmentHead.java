@@ -8,10 +8,13 @@ import com.sahr.core.OntologyService;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
+import com.sahr.ontology.SemanticNodeNormalizer;
+import com.sahr.ontology.SemanticTypeCompatibilityService;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public final class QueryAlignmentHead extends BaseHead {
@@ -33,13 +36,16 @@ public final class QueryAlignmentHead extends BaseHead {
         }
 
         String requestedType = query.entityType();
-        String expectedRange = query.expectedRange();
+        SemanticNodeNormalizer normalizer = context.semanticNormalizer().orElse(null);
+        String canonicalRequestedType = canonicalRequestedType(context.ontology(), normalizer, requestedType);
+        String expectedRange = canonicalExpectedRange(context.ontology(), normalizer, query.expectedRange());
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
+        SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         List<ReasoningCandidate> candidates = new ArrayList<>();
 
         for (RelationAssertion assertion : graph.getAllAssertions()) {
-            if (!matchesType(graph, ontology, assertion, requestedType)) {
+            if (!matchesType(graph, compatibility, assertion, requestedType, canonicalRequestedType)) {
                 continue;
             }
             if (!matchesRange(ontology, assertion, expectedRange)) {
@@ -74,13 +80,20 @@ public final class QueryAlignmentHead extends BaseHead {
         return candidates;
     }
 
-    private boolean matchesType(KnowledgeBase graph, OntologyService ontology, RelationAssertion assertion, String requestedType) {
+    private boolean matchesType(KnowledgeBase graph,
+                                SemanticTypeCompatibilityService compatibility,
+                                RelationAssertion assertion,
+                                String requestedType,
+                                String canonicalRequestedType) {
         if (requestedType == null || requestedType.isBlank()) {
             return true;
         }
         return graph.findEntity(assertion.subject())
                 .map(EntityNode::conceptTypes)
-                .map(types -> types.stream().anyMatch(type -> type.equals(requestedType) || ontology.isSubclassOf(type, requestedType)))
+                .map(types -> types.stream().anyMatch(type ->
+                        type.equals(canonicalRequestedType)
+                                || (isIri(type) && isIri(canonicalRequestedType)
+                                && compatibility.isCompatible(type, canonicalRequestedType))))
                 .orElse(false);
     }
 
@@ -97,6 +110,72 @@ public final class QueryAlignmentHead extends BaseHead {
             }
         }
         return false;
+    }
+
+    private String canonicalRequestedType(OntologyService ontology,
+                                          SemanticNodeNormalizer normalizer,
+                                          String requestedType) {
+        if (requestedType == null || requestedType.isBlank()) {
+            return null;
+        }
+        if (isIri(requestedType)) {
+            return requestedType;
+        }
+        String stripped = normalizeTypeToken(requestedType).toLowerCase(java.util.Locale.ROOT);
+        if (stripped.isBlank()) {
+            return null;
+        }
+        if ("entity".equals(stripped) || "concept".equals(stripped) || "thing".equals(stripped)) {
+            return null;
+        }
+        java.util.Set<String> iris = ontology.getEntityIrisByLabel(stripped);
+        if (iris.isEmpty()) {
+            if (normalizer != null) {
+                return normalizer.canonicalType(stripped).orElse(requestedType);
+            }
+            return requestedType;
+        }
+        String synset = selectWordNetSynset(iris);
+        if (synset != null) {
+            return synset;
+        }
+        return iris.stream().sorted().findFirst().orElse(requestedType);
+    }
+
+    private String canonicalExpectedRange(OntologyService ontology,
+                                          SemanticNodeNormalizer normalizer,
+                                          String expectedRange) {
+        if (expectedRange == null || expectedRange.isBlank()) {
+            return null;
+        }
+        if (isIri(expectedRange)) {
+            return expectedRange;
+        }
+        String stripped = normalizeTypeToken(expectedRange).toLowerCase(java.util.Locale.ROOT);
+        if (stripped.isBlank()) {
+            return null;
+        }
+        java.util.Set<String> iris = ontology.getEntityIrisByLabel(stripped);
+        if (iris.isEmpty()) {
+            if (normalizer != null) {
+                return normalizer.canonicalType(stripped).orElse(expectedRange);
+            }
+            return expectedRange;
+        }
+        String synset = selectWordNetSynset(iris);
+        if (synset != null) {
+            return synset;
+        }
+        return iris.stream().sorted().findFirst().orElse(expectedRange);
+    }
+
+    private String selectWordNetSynset(java.util.Set<String> iris) {
+        for (String iri : iris) {
+            if (iri != null && iri.startsWith("https://en-word.net/id/")) {
+                return iri;
+            }
+        }
+        return null;
     }
 
 }
