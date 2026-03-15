@@ -2757,6 +2757,9 @@ final class AnswerComposer {
             }
         }
         String label = answerLabel(goal);
+        if (shouldSuppressExpectedLabel(goal, List.of(value))) {
+            label = null;
+        }
         if (label != null) {
             String verb = isPlural(label) ? "were" : "was";
             return "The " + label + " " + verb + " " + display + ".";
@@ -2779,6 +2782,9 @@ final class AnswerComposer {
         String list = String.join(", ", rendered);
         boolean pluralList = rendered.size() > 1;
         String label = answerLabel(goal);
+        if (shouldSuppressExpectedLabel(goal, values)) {
+            label = null;
+        }
         if (label != null) {
             String noun = label;
             if (pluralList && !isPlural(noun)) {
@@ -2823,6 +2829,60 @@ final class AnswerComposer {
             return null;
         }
         return label;
+    }
+
+    private boolean shouldSuppressExpectedLabel(QueryGoal goal, List<String> values) {
+        if (goal == null || values == null || values.isEmpty()) {
+            return false;
+        }
+        String expectedType = goal.expectedType();
+        if (!isPersonLikeExpectedType(expectedType)) {
+            return false;
+        }
+        for (String value : values) {
+            if (isPersonLikeValue(value)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isPersonLikeExpectedType(String expectedType) {
+        if (!isIri(expectedType)) {
+            return false;
+        }
+        Set<String> labels = annotationResolver.labelsForIri(expectedType);
+        for (String label : labels) {
+            String normalized = annotationResolver.normalizeLabelToToken(label);
+            if (WORDNET_PERSON_LABELS.contains(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isPersonLikeValue(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        SymbolId id = new SymbolId(value);
+        EntityNode entity = graph.findEntity(id).orElse(null);
+        if (entity == null) {
+            return false;
+        }
+        for (String type : entity.conceptTypes()) {
+            if (!isIri(type)) {
+                continue;
+            }
+            Set<String> labels = annotationResolver.labelsForIri(type);
+            for (String label : labels) {
+                String normalized = annotationResolver.normalizeLabelToToken(label);
+                if (WORDNET_PERSON_LABELS.contains(normalized)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private String labelForIri(String iri) {
