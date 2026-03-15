@@ -2638,11 +2638,10 @@ public final class SahrAgent {
     }
 
     private String normalizeType(String raw) {
-        String value = raw;
-        if (value.startsWith("entity:")) {
-            value = value.substring("entity:".length());
+        if (raw == null || raw.isBlank()) {
+            return "";
         }
-        return value;
+        return semanticNormalizer.canonicalTypeOrConcept(raw);
     }
 
     private String normalizeEntityBinding(String value) {
