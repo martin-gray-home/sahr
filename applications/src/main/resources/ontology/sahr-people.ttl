@@ -40,8 +40,20 @@ sahrp:Girl a owl:Class ;
     owl:equivalentClass wnid:oewn-10104064-n ;
     skos:exactMatch wnid:oewn-10104064-n .
 
-wnid:oewn-00007846-n a owl:Class .
-wnid:oewn-10306910-n a owl:Class .
-wnid:oewn-10807146-n a owl:Class .
-wnid:oewn-10305010-n a owl:Class .
-wnid:oewn-10104064-n a owl:Class .
+wnid:oewn-00007846-n a owl:Class ;
+    rdfs:label "person" ;
+    rdfs:label "people" ;
+    rdfs:label "human" ;
+    rdfs:label "agent" .
+
+wnid:oewn-10306910-n a owl:Class ;
+    rdfs:label "man" .
+
+wnid:oewn-10807146-n a owl:Class ;
+    rdfs:label "woman" .
+
+wnid:oewn-10305010-n a owl:Class ;
+    rdfs:label "boy" .
+
+wnid:oewn-10104064-n a owl:Class ;
+    rdfs:label "girl" .

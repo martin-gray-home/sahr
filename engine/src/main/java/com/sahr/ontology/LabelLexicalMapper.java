@@ -21,11 +21,27 @@ public final class LabelLexicalMapper implements TermMapper {
     private static final String RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label";
     private static final String SKOS_PREF_LABEL = "http://www.w3.org/2004/02/skos/core#prefLabel";
     private static final String ONTOLEX_WRITTEN_REP = "http://www.w3.org/ns/lemon/ontolex#writtenRep";
+    private static final Map<String, String> CANONICAL_SYNSET_OVERRIDES = Map.of(
+            "person", "https://en-word.net/id/oewn-00007846-n",
+            "people", "https://en-word.net/id/oewn-00007846-n",
+            "human", "https://en-word.net/id/oewn-00007846-n",
+            "man", "https://en-word.net/id/oewn-10306910-n",
+            "woman", "https://en-word.net/id/oewn-10807146-n",
+            "boy", "https://en-word.net/id/oewn-10305010-n",
+            "girl", "https://en-word.net/id/oewn-10104064-n"
+    );
 
     private final Map<String, String> labelToEntityIri = new ConcurrentHashMap<>();
     private final Map<String, String> labelToPropertyIri = new ConcurrentHashMap<>();
+    private final Map<String, String> synsetOverrides = new ConcurrentHashMap<>();
 
     public LabelLexicalMapper(OWLOntology ontology) {
+        for (Map.Entry<String, String> entry : CANONICAL_SYNSET_OVERRIDES.entrySet()) {
+            IRI iri = IRI.create(entry.getValue());
+            if (ontology.containsEntityInSignature(iri)) {
+                synsetOverrides.put(entry.getKey(), entry.getValue());
+            }
+        }
         indexAnnotations(ontology);
         indexDataProperties(ontology);
         indexObjectPropertyLabels(ontology);
@@ -36,7 +52,12 @@ public final class LabelLexicalMapper implements TermMapper {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(labelToEntityIri.get(normalize(token)));
+        String normalized = normalize(token);
+        String override = synsetOverrides.get(normalized);
+        if (override != null) {
+            return Optional.of(override);
+        }
+        return Optional.ofNullable(labelToEntityIri.get(normalized));
     }
 
     @Override

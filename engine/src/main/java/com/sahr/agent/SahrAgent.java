@@ -33,6 +33,7 @@ import com.sahr.nlp.Statement;
 import com.sahr.nlp.StatementBatch;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
+import com.sahr.ontology.SemanticTypeCompatibilityService;
 import com.sahr.ontology.SahrAnnotationVocabulary;
 import edu.stanford.nlp.process.Morphology;
 
@@ -779,7 +780,9 @@ public final class SahrAgent {
         if (!prefersPersonLike(goal.expectedType())) {
             return java.util.List.of();
         }
+        boolean strictPersonLike = WORDNET_PERSON_SYNSET.equals(goal.expectedType());
         java.util.Set<String> expectedIris = resolveExpectedTypeIris(goal.expectedType());
+        SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         java.util.List<ReasoningCandidate> ontologyMatches = new java.util.ArrayList<>();
         java.util.List<ReasoningCandidate> fallbackMatches = new java.util.ArrayList<>();
         for (ReasoningCandidate candidate : answers) {
@@ -789,15 +792,19 @@ public final class SahrAgent {
             SymbolId symbol = (SymbolId) candidate.payload();
             EntityNode entity = graph.findEntity(symbol).orElse(null);
             if (entity == null) {
+                if (matchesPersonLikeSurface(symbol, expectedIris)) {
+                    ontologyMatches.add(candidate);
+                }
                 continue;
             }
             java.util.Set<String> types = entity.conceptTypes();
-            if (matchesExpectedIris(types, expectedIris) || matchesPersonLikeType(types)) {
+            if (matchesExpectedIris(types, expectedIris)
+                    || matchesPersonLikeType(types)
+                    || (!strictPersonLike && compatibility.hasCompatibleType(types, goal.expectedType()))) {
                 ontologyMatches.add(candidate);
                 continue;
             }
-            if ((types == null || types.isEmpty() || !containsIri(types))
-                    && matchesPersonLikeSurface(entity.id(), expectedIris)) {
+            if (matchesPersonLikeSurface(entity.id(), expectedIris)) {
                 ontologyMatches.add(candidate);
                 continue;
             }
@@ -818,7 +825,9 @@ public final class SahrAgent {
         if (!prefersPersonLike(goal.expectedType())) {
             return java.util.List.of();
         }
+        boolean strictPersonLike = WORDNET_PERSON_SYNSET.equals(goal.expectedType());
         java.util.Set<String> expectedIris = resolveExpectedTypeIris(goal.expectedType());
+        SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         java.util.List<String> ontologyMatches = new java.util.ArrayList<>();
         java.util.List<String> fallbackMatches = new java.util.ArrayList<>();
         for (String value : values) {
@@ -828,15 +837,19 @@ public final class SahrAgent {
             SymbolId symbol = new SymbolId(value);
             EntityNode entity = graph.findEntity(symbol).orElse(null);
             if (entity == null) {
+                if (matchesPersonLikeSurface(symbol, expectedIris)) {
+                    ontologyMatches.add(value);
+                }
                 continue;
             }
             java.util.Set<String> types = entity.conceptTypes();
-            if (matchesExpectedIris(types, expectedIris) || matchesPersonLikeType(types)) {
+            if (matchesExpectedIris(types, expectedIris)
+                    || matchesPersonLikeType(types)
+                    || (!strictPersonLike && compatibility.hasCompatibleType(types, goal.expectedType()))) {
                 ontologyMatches.add(value);
                 continue;
             }
-            if ((types == null || types.isEmpty() || !containsIri(types))
-                    && matchesPersonLikeSurface(entity.id(), expectedIris)) {
+            if (matchesPersonLikeSurface(entity.id(), expectedIris)) {
                 ontologyMatches.add(value);
                 continue;
             }
@@ -855,6 +868,9 @@ public final class SahrAgent {
             return false;
         }
         if (isIri(expectedType)) {
+            if (WORDNET_PERSON_SYNSET.equals(expectedType)) {
+                return true;
+            }
             for (String label : annotationResolver.labelsForIri(expectedType)) {
                 String normalized = annotationResolver.normalizeLabelToToken(label);
                 if (PERSON_LIKE_TOKENS.contains(normalized)) {
@@ -980,6 +996,8 @@ public final class SahrAgent {
             "boy",
             "girl"
     );
+
+    private static final String WORDNET_PERSON_SYNSET = "https://en-word.net/id/oewn-00007846-n";
 
     private String mapEntityType(String requestedType) {
         if (requestedType == null || requestedType.isBlank()) {
