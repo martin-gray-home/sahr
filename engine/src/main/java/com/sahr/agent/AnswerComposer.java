@@ -2814,7 +2814,7 @@ final class AnswerComposer {
         if (candidate == null || candidate.isBlank()) {
             return null;
         }
-        String label = displayValue(candidate);
+        String label = isIri(candidate) ? labelForIri(candidate) : displayValue(candidate);
         if (label.isBlank()) {
             return null;
         }
@@ -2824,6 +2824,52 @@ final class AnswerComposer {
         }
         return label;
     }
+
+    private String labelForIri(String iri) {
+        if (iri == null || iri.isBlank()) {
+            return "";
+        }
+        Set<String> labels = annotationResolver.labelsForIri(iri);
+        if (labels == null || labels.isEmpty()) {
+            return "";
+        }
+        Set<String> normalizedLabels = new HashSet<>();
+        String best = "";
+        for (String label : labels) {
+            if (label == null) {
+                continue;
+            }
+            String trimmed = label.trim();
+            if (trimmed.isBlank()) {
+                continue;
+            }
+            String normalized = trimmed.toLowerCase(Locale.ROOT);
+            normalizedLabels.add(normalized);
+            if (best.isBlank() || trimmed.length() < best.length()) {
+                best = trimmed;
+            }
+        }
+        for (String preferred : WORDNET_PERSON_LABELS) {
+            if (normalizedLabels.contains(preferred)) {
+                return preferred;
+            }
+        }
+        if (best.isBlank()) {
+            return "";
+        }
+        return best.replace('_', ' ').trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isIri(String value) {
+        return value != null && (value.startsWith("http://") || value.startsWith("https://"));
+    }
+
+    private static final List<String> WORDNET_PERSON_LABELS = List.of(
+            "person",
+            "people",
+            "human",
+            "agent"
+    );
 
     private SymbolId selectBestRecoveryAgent(ExplanationCandidate candidate, SymbolId target) {
         if (candidate == null) {
