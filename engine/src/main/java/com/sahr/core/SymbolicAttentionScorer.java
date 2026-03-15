@@ -168,7 +168,8 @@ public final class SymbolicAttentionScorer {
     }
 
     private double matchExpectedType(KnowledgeBase graph, OntologyService ontology, ReasoningCandidate candidate, String expectedType) {
-        if (expectedType == null || expectedType.isBlank()) {
+        String canonicalExpectedType = canonicalExpectedType(ontology, expectedType);
+        if (canonicalExpectedType == null || canonicalExpectedType.isBlank()) {
             return DEFAULT_TYPE_MATCH;
         }
         if (!(candidate.payload() instanceof SymbolId)) {
@@ -181,17 +182,71 @@ public final class SymbolicAttentionScorer {
         }
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         for (String type : entity.get().conceptTypes()) {
-            if (isIri(expectedType) && isIri(type) && compatibility.isCompatible(type, expectedType)) {
+            if (isIri(canonicalExpectedType) && isIri(type) && compatibility.isCompatible(type, canonicalExpectedType)) {
                 return 1.0;
             }
-            if (type.equals(expectedType)) {
+            if (type.equals(canonicalExpectedType)) {
                 return 1.0;
             }
-            if (ontology.isSubclassOf(type, expectedType)) {
+            if (ontology.isSubclassOf(type, canonicalExpectedType)) {
                 return 1.0;
             }
         }
         return 0.2;
+    }
+
+    private String canonicalExpectedType(OntologyService ontology, String expectedType) {
+        if (expectedType == null || expectedType.isBlank()) {
+            return expectedType;
+        }
+        if (isIri(expectedType)) {
+            return expectedType;
+        }
+        String stripped = stripPrefix(expectedType);
+        if (stripped.isBlank()) {
+            return expectedType;
+        }
+        String normalized = normalizeLabelToToken(stripped);
+        if ("entity".equals(normalized) || "concept".equals(normalized) || "thing".equals(normalized)) {
+            return null;
+        }
+        Set<String> iris = ontology.getEntityIrisByLabel(normalized);
+        if (iris.isEmpty()) {
+            return expectedType;
+        }
+        String synset = selectWordNetSynset(iris);
+        if (synset != null) {
+            return synset;
+        }
+        return iris.stream().sorted().findFirst().orElse(expectedType);
+    }
+
+    private String selectWordNetSynset(Set<String> iris) {
+        for (String iri : iris) {
+            if (iri != null && iri.startsWith("https://en-word.net/id/")) {
+                return iri;
+            }
+        }
+        return null;
+    }
+
+    private String stripPrefix(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.startsWith("concept:")) {
+            return value.substring("concept:".length());
+        }
+        if (value.startsWith("entity:")) {
+            return value.substring("entity:".length());
+        }
+        return value;
+    }
+
+    private String normalizeLabelToToken(String label) {
+        String normalized = label == null ? "" : label.trim().toLowerCase(java.util.Locale.ROOT);
+        normalized = normalized.replaceAll("[^a-z0-9]+", "_");
+        return normalized.replaceAll("^_+", "").replaceAll("_+$", "");
     }
 
     private Optional<Triple> extractTriple(ReasoningCandidate candidate) {

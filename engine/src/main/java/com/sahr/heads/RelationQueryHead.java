@@ -64,9 +64,9 @@ public final class RelationQueryHead extends BaseHead {
         boolean predicateOnly = (subjectBinding == null || subjectBinding.isBlank())
                 && (objectBinding == null || objectBinding.isBlank());
 
-        String expectedType = query.expectedType();
-        KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
+        String expectedType = canonicalExpectedType(ontology, query.expectedType());
+        KnowledgeBase graph = context.graph();
         WorkingMemory memory = context.workingMemory();
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         SymbolId subject = subjectBinding == null || subjectBinding.isBlank() ? null : new SymbolId(subjectBinding);
@@ -413,6 +413,41 @@ public final class RelationQueryHead extends BaseHead {
             return false;
         }
         return false;
+    }
+
+    private String canonicalExpectedType(OntologyService ontology, String expectedType) {
+        if (expectedType == null || expectedType.isBlank()) {
+            return expectedType;
+        }
+        if (isIri(expectedType)) {
+            return expectedType;
+        }
+        String stripped = stripPrefix(expectedType);
+        if (stripped.isBlank()) {
+            return expectedType;
+        }
+        String normalized = normalizeLabelToToken(stripped);
+        if ("entity".equals(normalized) || "concept".equals(normalized) || "thing".equals(normalized)) {
+            return null;
+        }
+        Set<String> iris = ontology.getEntityIrisByLabel(normalized);
+        if (iris.isEmpty()) {
+            return expectedType;
+        }
+        String synset = selectWordNetSynset(iris);
+        if (synset != null) {
+            return synset;
+        }
+        return iris.stream().sorted().findFirst().orElse(expectedType);
+    }
+
+    private String selectWordNetSynset(Set<String> iris) {
+        for (String iri : iris) {
+            if (iri != null && iri.startsWith("https://en-word.net/id/")) {
+                return iri;
+            }
+        }
+        return null;
     }
 
     private boolean isPersonLikeExpectedType(OntologyService ontology, String expectedType) {

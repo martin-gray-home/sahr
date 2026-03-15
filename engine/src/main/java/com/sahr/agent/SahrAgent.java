@@ -246,6 +246,7 @@ public final class SahrAgent {
                 this.predicateExplainer,
                 this.aliasBridge,
                 this.annotationResolver,
+                this.semanticNormalizer,
                 new AnswerComposer.Support() {
                     @Override
                     public String localName(String predicate) {

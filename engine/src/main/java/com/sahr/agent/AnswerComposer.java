@@ -7,6 +7,8 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.RuleAssertion;
 import com.sahr.core.SymbolId;
+import com.sahr.ontology.SemanticNodeNormalizer;
+import com.sahr.ontology.SemanticTypeCompatibilityService;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -46,6 +48,8 @@ final class AnswerComposer {
     private final PredicateExplainer predicateExplainer;
     private final AliasBridge aliasBridge;
     private final OntologyAnnotationResolver annotationResolver;
+    private final SemanticNodeNormalizer semanticNormalizer;
+    private final SemanticTypeCompatibilityService compatibility;
     private final Support support;
     private final Object indexLock = new Object();
     private long indexVersion = -1;
@@ -75,6 +79,7 @@ final class AnswerComposer {
                    PredicateExplainer predicateExplainer,
                    AliasBridge aliasBridge,
                    OntologyAnnotationResolver annotationResolver,
+                   SemanticNodeNormalizer semanticNormalizer,
                    Support support) {
         this.graph = graph;
         this.ontology = ontology;
@@ -85,6 +90,8 @@ final class AnswerComposer {
         this.predicateExplainer = predicateExplainer;
         this.aliasBridge = aliasBridge;
         this.annotationResolver = annotationResolver;
+        this.semanticNormalizer = semanticNormalizer;
+        this.compatibility = new SemanticTypeCompatibilityService(ontology);
         this.support = support;
     }
 
@@ -773,11 +780,20 @@ final class AnswerComposer {
         if (raw == null || raw.isBlank()) {
             return null;
         }
-        String trimmed = raw.trim();
-        if (trimmed.startsWith("entity:")) {
-            trimmed = trimmed.substring("entity:".length());
-        } else if (trimmed.startsWith("concept:")) {
-            trimmed = trimmed.substring("concept:".length());
+        String canonical = canonicalExpectedType(raw);
+        if (canonical == null || canonical.isBlank()) {
+            return null;
+        }
+        if (isIri(canonical)) {
+            String label = labelForIri(canonical);
+            if (label.isBlank()) {
+                return null;
+            }
+            return annotationResolver.normalizeLabelToToken(label);
+        }
+        String trimmed = stripPrefix(canonical).trim();
+        if (trimmed.isBlank()) {
+            return null;
         }
         return annotationResolver.normalizeLabelToToken(trimmed);
     }
@@ -1359,7 +1375,8 @@ final class AnswerComposer {
         if (expected == null || expected.isBlank()) {
             expected = goal.entityType();
         }
-        if (expected == null || expected.isBlank()) {
+        String canonicalExpected = canonicalExpectedType(expected);
+        if (canonicalExpected == null || canonicalExpected.isBlank()) {
             return true;
         }
         EntityNode entity = graph.findEntity(candidate).orElse(null);
@@ -1370,15 +1387,15 @@ final class AnswerComposer {
         if (types == null || types.isEmpty()) {
             return true;
         }
-        String normalizedExpected = support.normalizeTypeToken(expected);
+        String normalizedExpected = support.normalizeTypeToken(canonicalExpected);
         for (String type : types) {
-            if (type.equals(expected)) {
+            if (type.equals(canonicalExpected)) {
                 return true;
             }
             if (support.normalizeTypeToken(type).equals(normalizedExpected)) {
                 return true;
             }
-            if (ontology.isSubclassOf(type, expected)) {
+            if (isIri(type) && isIri(canonicalExpected) && compatibility.isCompatible(type, canonicalExpected)) {
                 return true;
             }
         }
@@ -2775,8 +2792,9 @@ final class AnswerComposer {
         if (values == null || values.isEmpty()) {
             return "No candidates produced.";
         }
+        java.util.LinkedHashSet<String> uniqueValues = new java.util.LinkedHashSet<>(values);
         java.util.List<String> rendered = new java.util.ArrayList<>();
-        for (String value : values) {
+        for (String value : uniqueValues) {
             rendered.add(displayValue(value));
         }
         String list = String.join(", ", rendered);
@@ -2817,10 +2835,11 @@ final class AnswerComposer {
         if (candidate == null || candidate.isBlank()) {
             candidate = goal.entityType();
         }
-        if (candidate == null || candidate.isBlank()) {
+        String canonical = canonicalExpectedType(candidate);
+        if (canonical == null || canonical.isBlank()) {
             return null;
         }
-        String label = isIri(candidate) ? labelForIri(candidate) : displayValue(candidate);
+        String label = isIri(canonical) ? labelForIri(canonical) : displayValue(canonical);
         if (label.isBlank()) {
             return null;
         }
@@ -2848,17 +2867,11 @@ final class AnswerComposer {
     }
 
     private boolean isPersonLikeExpectedType(String expectedType) {
-        if (!isIri(expectedType)) {
+        String canonical = canonicalExpectedType(expectedType);
+        if (!isIri(canonical)) {
             return false;
         }
-        Set<String> labels = annotationResolver.labelsForIri(expectedType);
-        for (String label : labels) {
-            String normalized = annotationResolver.normalizeLabelToToken(label);
-            if (WORDNET_PERSON_LABELS.contains(normalized)) {
-                return true;
-            }
-        }
-        return false;
+        return compatibility.isCompatible(canonical, WORDNET_PERSON_SYNSET);
     }
 
     private boolean isPersonLikeValue(String value) {
@@ -2871,18 +2884,66 @@ final class AnswerComposer {
             return false;
         }
         for (String type : entity.conceptTypes()) {
-            if (!isIri(type)) {
-                continue;
-            }
-            Set<String> labels = annotationResolver.labelsForIri(type);
-            for (String label : labels) {
-                String normalized = annotationResolver.normalizeLabelToToken(label);
-                if (WORDNET_PERSON_LABELS.contains(normalized)) {
-                    return true;
-                }
+            if (isIri(type) && compatibility.isCompatible(type, WORDNET_PERSON_SYNSET)) {
+                return true;
             }
         }
         return false;
+    }
+
+    private String canonicalExpectedType(String expectedType) {
+        if (expectedType == null || expectedType.isBlank()) {
+            return null;
+        }
+        if (isIri(expectedType)) {
+            return expectedType;
+        }
+        String stripped = stripPrefix(expectedType);
+        if (stripped.isBlank()) {
+            return null;
+        }
+        String normalized = annotationResolver.normalizeLabelToToken(stripped);
+        if (isGenericExpectedType(normalized)) {
+            return null;
+        }
+        Set<String> iris = ontology.getEntityIrisByLabel(normalized);
+        if (!iris.isEmpty()) {
+            String synset = selectWordNetSynset(iris);
+            if (synset != null) {
+                return synset;
+            }
+            return iris.stream().sorted().findFirst().orElse(normalized);
+        }
+        return semanticNormalizer.canonicalType(normalized).orElse(expectedType);
+    }
+
+    private String stripPrefix(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.startsWith("concept:")) {
+            return value.substring("concept:".length());
+        }
+        if (value.startsWith("entity:")) {
+            return value.substring("entity:".length());
+        }
+        return value;
+    }
+
+    private boolean isGenericExpectedType(String normalized) {
+        if (normalized == null || normalized.isBlank()) {
+            return true;
+        }
+        return "entity".equals(normalized) || "concept".equals(normalized) || "thing".equals(normalized);
+    }
+
+    private String selectWordNetSynset(Set<String> iris) {
+        for (String iri : iris) {
+            if (iri != null && iri.startsWith("https://en-word.net/id/")) {
+                return iri;
+            }
+        }
+        return null;
     }
 
     private String labelForIri(String iri) {
@@ -2924,6 +2985,7 @@ final class AnswerComposer {
         return value != null && (value.startsWith("http://") || value.startsWith("https://"));
     }
 
+    private static final String WORDNET_PERSON_SYNSET = "https://en-word.net/id/oewn-00007846-n";
     private static final List<String> WORDNET_PERSON_LABELS = List.of(
             "person",
             "people",
