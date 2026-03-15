@@ -1,6 +1,8 @@
 package com.sahr.core;
 
 import java.util.HashSet;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Set;
 
 public final class HeadOntology {
@@ -26,6 +28,27 @@ public final class HeadOntology {
         return expanded;
     }
 
+    public static Set<String> expandFamilyTransitive(OntologyService ontology, String familyIri) {
+        Set<String> expanded = new HashSet<>();
+        if (familyIri == null || familyIri.isBlank()) {
+            return expanded;
+        }
+        Deque<String> queue = new ArrayDeque<>();
+        queue.add(familyIri);
+        while (!queue.isEmpty()) {
+            String current = queue.removeFirst();
+            if (!expanded.add(current)) {
+                continue;
+            }
+            for (String sub : ontology.getSubproperties(current)) {
+                if (!expanded.contains(sub)) {
+                    queue.addLast(sub);
+                }
+            }
+        }
+        return expanded;
+    }
+
     public static Set<String> expandFamilyWithInverses(OntologyService ontology, String familyIri) {
         Set<String> expanded = expandFamily(ontology, familyIri);
         if (expanded.isEmpty()) {
@@ -37,6 +60,19 @@ public final class HeadOntology {
                 expanded.add(inverse);
                 expanded.addAll(ontology.getSubproperties(inverse));
             });
+        }
+        return expanded;
+    }
+
+    public static Set<String> expandFamilyWithInversesTransitive(OntologyService ontology, String familyIri) {
+        Set<String> expanded = expandFamilyTransitive(ontology, familyIri);
+        if (expanded.isEmpty()) {
+            return expanded;
+        }
+        Set<String> snapshot = new HashSet<>(expanded);
+        for (String predicate : snapshot) {
+            ontology.getInverseProperty(predicate).ifPresent(inverse ->
+                    expanded.addAll(expandFamilyTransitive(ontology, inverse)));
         }
         return expanded;
     }

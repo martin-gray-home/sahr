@@ -41,6 +41,7 @@ import edu.stanford.nlp.process.Morphology;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -553,6 +554,66 @@ public final class SahrAgent {
                 || Boolean.getBoolean("sahr.diagnostic.repl")
                 || Boolean.parseBoolean(System.getenv().getOrDefault("SAHR_DIAGNOSTIC_FULL", "false"))
                 || Boolean.parseBoolean(System.getenv().getOrDefault("SAHR_DIAGNOSTIC_REPL", "false"));
+    }
+
+    private void logWhereDecision(QueryGoal query, ReasoningCandidate winner) {
+        if (!diagnosticsEnabled()) {
+            return;
+        }
+        if (query == null || query.type() != QueryGoal.Type.WHERE) {
+            return;
+        }
+        if (winner == null || !CandidateType.ANSWER.equals(winner.type())) {
+            return;
+        }
+        Map<String, Double> breakdown = winner.scoreBreakdown();
+        if (breakdown == null || breakdown.isEmpty()) {
+            return;
+        }
+        boolean hasWhereKey = breakdown.keySet().stream().anyMatch(key -> key.startsWith("where_"));
+        if (!hasWhereKey) {
+            return;
+        }
+
+        String path = "unknown";
+        if (breakdown.containsKey("where_path_direct")) {
+            path = "direct";
+        } else if (breakdown.containsKey("where_path_chain")) {
+            path = "chain";
+        } else if (breakdown.containsKey("where_path_colocation")) {
+            path = "colocation";
+        }
+
+        String family = "unknown";
+        if (breakdown.containsKey("where_family_surface")) {
+            family = "surface-contact";
+        } else if (breakdown.containsKey("where_family_containment")) {
+            family = "containment";
+        } else if (breakdown.containsKey("where_family_location")) {
+            family = "location-transfer";
+        } else if (breakdown.containsKey("where_family_colocation")) {
+            family = "colocation";
+        }
+
+        double chainLength = breakdown.getOrDefault("where_chain_length", 0.0);
+        double depthPenalty = breakdown.getOrDefault("depth_penalty", 0.0);
+        double colocationPenalty = breakdown.getOrDefault("colocation_penalty", 0.0);
+        double suppressedChain = breakdown.getOrDefault("where_suppressed_chain", 0.0);
+        double suppressedColocation = breakdown.getOrDefault("where_suppressed_colocation", 0.0);
+
+        String message = "where_decision path=" + path
+                + " family=" + family
+                + " chain_len=" + formatWhereMetric(chainLength)
+                + " depth_penalty=" + formatWhereMetric(depthPenalty)
+                + " colocation_penalty=" + formatWhereMetric(colocationPenalty)
+                + " suppressed_chain=" + formatWhereMetric(suppressedChain)
+                + " suppressed_colocation=" + formatWhereMetric(suppressedColocation)
+                + " winner=" + (winner.payload() == null ? "null" : winner.payload());
+        logger.info(message);
+    }
+
+    private String formatWhereMetric(double value) {
+        return String.format(java.util.Locale.ROOT, "%.3f", value);
     }
 
     private record QueryCandidate(String source, String producedBy, double score, QueryGoal goal) {
@@ -1536,6 +1597,7 @@ public final class SahrAgent {
         trace.addEntry(new ReasoningTraceEntry(query, candidates, winner));
         logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                 + " score=" + winner.score());
+        logWhereDecision(query, winner);
         if (CandidateType.SUBGOAL.equals(winner.type()) && winner.payload() instanceof QueryGoal) {
             QueryGoal subgoal = (QueryGoal) winner.payload();
             return handleWithSubgoals(subgoal, null, true, null, features);
@@ -1678,6 +1740,7 @@ public final class SahrAgent {
             trace.addEntry(new ReasoningTraceEntry(current, candidates, winner));
             logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                     + " score=" + winner.score());
+            logWhereDecision(current, winner);
 
             if (CandidateType.SUBGOAL.equals(winner.type()) && winner.payload() instanceof QueryGoal) {
                 QueryGoal subgoal = (QueryGoal) winner.payload();
@@ -2234,11 +2297,24 @@ public final class SahrAgent {
         if (goal == null || goal.type() != QueryGoal.Type.WHERE) {
             return null;
         }
-        java.util.Set<String> locationPredicates = com.sahr.core.HeadOntology.expandFamily(ontology, com.sahr.core.HeadOntology.LOCATION_TRANSFER);
-        if (locationPredicates.isEmpty()) {
+        java.util.Set<String> surfacePredicates = com.sahr.core.HeadOntology.expandFamilyWithInversesTransitive(
+                ontology, com.sahr.core.HeadOntology.SURFACE_CONTACT);
+        java.util.Set<String> containmentPredicates = com.sahr.core.HeadOntology.expandFamilyWithInversesTransitive(
+                ontology, com.sahr.core.HeadOntology.CONTAINMENT);
+        java.util.Set<String> locationPredicates = com.sahr.core.HeadOntology.expandFamilyWithInversesTransitive(
+                ontology, com.sahr.core.HeadOntology.LOCATION_TRANSFER);
+        if (surfacePredicates.isEmpty() && containmentPredicates.isEmpty() && locationPredicates.isEmpty()) {
             return null;
         }
+        java.util.Set<String> surfaceNames = new java.util.HashSet<>();
+        java.util.Set<String> containmentNames = new java.util.HashSet<>();
         java.util.Set<String> locationNames = new java.util.HashSet<>();
+        for (String predicate : surfacePredicates) {
+            surfaceNames.add(localName(predicate));
+        }
+        for (String predicate : containmentPredicates) {
+            containmentNames.add(localName(predicate));
+        }
         for (String predicate : locationPredicates) {
             locationNames.add(localName(predicate));
         }
@@ -2246,18 +2322,51 @@ public final class SahrAgent {
         String normalizedRequested = normalizeTypeToken(requestedType);
         String canonicalRequested = canonicalRequestedType(requestedType);
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
+        RelationAssertion best = null;
+        int bestRank = Integer.MAX_VALUE;
+        double bestConfidence = -1.0;
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String predicateName = localName(assertion.predicate());
-            if (!locationPredicates.contains(assertion.predicate()) && !locationNames.contains(predicateName)) {
+            int rank = rankDirectWherePredicate(assertion.predicate(), predicateName,
+                    surfacePredicates, containmentPredicates, locationPredicates,
+                    surfaceNames, containmentNames, locationNames);
+            if (rank == Integer.MAX_VALUE) {
                 continue;
             }
             if (!matchesRequestedType(assertion.subject(), normalizedRequested, requestedType,
                     canonicalRequested, compatibility)) {
                 continue;
             }
-            return assertion.subject().value() + " " + predicateName + " " + assertion.object().value();
+            if (rank < bestRank || (rank == bestRank && assertion.confidence() > bestConfidence)) {
+                best = assertion;
+                bestRank = rank;
+                bestConfidence = assertion.confidence();
+            }
         }
-        return null;
+        if (best == null) {
+            return null;
+        }
+        return best.subject().value() + " " + localName(best.predicate()) + " " + best.object().value();
+    }
+
+    private int rankDirectWherePredicate(String predicate,
+                                         String predicateName,
+                                         java.util.Set<String> surfacePredicates,
+                                         java.util.Set<String> containmentPredicates,
+                                         java.util.Set<String> locationPredicates,
+                                         java.util.Set<String> surfaceNames,
+                                         java.util.Set<String> containmentNames,
+                                         java.util.Set<String> locationNames) {
+        if (surfacePredicates.contains(predicate) || surfaceNames.contains(predicateName)) {
+            return 0;
+        }
+        if (containmentPredicates.contains(predicate) || containmentNames.contains(predicateName)) {
+            return 1;
+        }
+        if (locationPredicates.contains(predicate) || locationNames.contains(predicateName)) {
+            return 2;
+        }
+        return Integer.MAX_VALUE;
     }
 
     private boolean matchesRequestedType(SymbolId subject,

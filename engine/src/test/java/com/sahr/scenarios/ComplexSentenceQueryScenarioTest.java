@@ -22,29 +22,27 @@ class ComplexSentenceQueryScenarioTest {
                 "Assertion recorded.");
 
         assertAnyOf(agent.handle("Where is the dog"),
-                "entity:dog in entity:room",
-                "entity:dog in entity:box");
+                "entity:dog in entity:box",
+                "entity:red_dog in entity:box");
         assertAnyOf(agent.handle("Where is the box"),
                 "entity:box in entity:room");
         assertAnyOf(agent.handle("Where is the cat"),
-                "entity:cat in entity:room",
                 "entity:cat in entity:box",
-                "entity:cat in entity:table",
-                "entity:black_cat in entity:room",
+                "entity:cat under entity:table",
                 "entity:black_cat in entity:box",
-                "entity:black_cat in entity:table",
+                "entity:black_cat under entity:table",
                 "No candidates produced.");
         assertAnyOf(agent.handle("Where is the table"),
-                "entity:table in entity:room");
+                "entity:table in entity:room",
+                "entity:table in entity:box");
         assertAnyOf(agent.handle("Where is the woman"),
-                "entity:woman in entity:room",
-                "entity:woman in entity:chair");
+                "entity:woman on entity:chair",
+                "entity:woman in entity:room");
         assertAnyOf(agent.handle("Where is the man"),
-                "entity:man in entity:room",
-                "entity:man in entity:chair");
+                "entity:man in entity:room");
         assertAnyOf(agent.handle("Where is the hat"),
-                "entity:hat in entity:room",
-                "entity:hat in entity:chair");
+                "entity:hat on entity:man",
+                "entity:hat in entity:room");
 
         assertAnyOf(agent.handle("Who is with the dog"),
                 "entity:cat",

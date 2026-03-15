@@ -47,6 +47,7 @@ class GraphRetrievalHeadTest {
         ));
 
         assertTrue(candidates.stream().anyMatch(candidate ->
-                "entity:apple locatedIn entity:kitchen".equals(candidate.payload())));
+                "entity:apple inside entity:basket".equals(candidate.payload())
+                        || "entity:apple in entity:basket".equals(candidate.payload())));
     }
 }

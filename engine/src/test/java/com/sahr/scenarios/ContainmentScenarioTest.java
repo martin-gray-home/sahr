@@ -15,6 +15,6 @@ class ContainmentScenarioTest {
 
         assertEquals("Assertion recorded.", agent.handle("The apple is inside the basket"));
         assertEquals("Assertion recorded.", agent.handle("The basket is in the kitchen"));
-        assertEquals("entity:apple in entity:kitchen", agent.handle("Where is the apple"));
+        assertEquals("entity:apple in entity:basket", agent.handle("Where is the apple"));
     }
 }

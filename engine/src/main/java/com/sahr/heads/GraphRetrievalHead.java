@@ -58,15 +58,73 @@ public final class GraphRetrievalHead extends BaseHead {
         WorkingMemory memory = context.workingMemory();
         java.util.Optional<SymbolId> requestedEntity = resolveEntityFromQuery(query, graph);
 
-        java.util.Set<String> locationPredicates = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
-        if (locationPredicates.isEmpty()) {
+        java.util.Set<String> surfacePredicates = HeadOntology.expandFamilyWithInversesTransitive(
+                ontology, HeadOntology.SURFACE_CONTACT);
+        java.util.Set<String> containmentPredicates = HeadOntology.expandFamilyWithInversesTransitive(
+                ontology, HeadOntology.CONTAINMENT);
+        java.util.Set<String> locationPredicates = HeadOntology.expandFamilyWithInversesTransitive(
+                ontology, HeadOntology.LOCATION_TRANSFER);
+        java.util.Set<String> directPredicates = new java.util.HashSet<>();
+        directPredicates.addAll(surfacePredicates);
+        directPredicates.addAll(containmentPredicates);
+        directPredicates.addAll(locationPredicates);
+        if (locationPredicates.isEmpty() && directPredicates.isEmpty()) {
             return List.of();
         }
         List<ReasoningCandidate> candidates = new ArrayList<>();
+        List<Map<String, Double>> breakdowns = new ArrayList<>();
         Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph, locationPredicates);
         java.util.Set<String> emitted = new java.util.HashSet<>();
         List<RelationAssertion> locationAssertions = collectLocationAssertions(graph, locationPredicates);
         java.util.Set<String> expandedCoLocation = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION);
+        int suppressedChain = 0;
+        int suppressedColocation = 0;
+
+        List<RelationAssertion> directAssertions = collectDirectAssertions(graph, directPredicates);
+        java.util.Set<SymbolId> directSubjects = new java.util.HashSet<>();
+        for (RelationAssertion assertion : directAssertions) {
+            if (!matchesType(graph, ontology, compatibility, assertion,
+                    requestedType, canonicalRequestedType, requestedEntity)) {
+                continue;
+            }
+            directSubjects.add(assertion.subject());
+            String key = assertion.subject().value() + "|" + assertion.predicate() + "|" + assertion.object().value();
+            if (!emitted.add(key)) {
+                continue;
+            }
+
+            double queryMatch = 1.0;
+            double entityMatch = 1.0;
+            double ontologySupport = requestedType == null ? 0.5 : 1.0;
+            double graphConfidence = assertion.confidence();
+            double memoryFocus = memory.isActiveEntity(assertion.subject()) ? 1.0 : 0.7;
+            double score = normalize(queryMatch, entityMatch, ontologySupport, graphConfidence, memoryFocus);
+
+            Map<String, Double> breakdown = new HashMap<>();
+            breakdown.put("query_match", queryMatch);
+            breakdown.put("entity_type_match", entityMatch);
+            breakdown.put("ontology_support", ontologySupport);
+            breakdown.put("graph_confidence", graphConfidence);
+            breakdown.put("working_memory_focus", memoryFocus);
+            breakdown.put("where_path_direct", 1.0);
+            breakdown.put("where_chain_length", 1.0);
+            annotateFamilyBreakdown(breakdown, assertion.predicate(), surfacePredicates,
+                    containmentPredicates, locationPredicates, expandedCoLocation);
+
+            String answer = assertion.subject() + " " + displayPredicate(assertion.predicate()) + " " + assertion.object();
+
+            candidates.add(new ReasoningCandidate(
+                    CandidateType.ANSWER,
+                    answer,
+                    score,
+                    getName(),
+                    List.of(assertion.toString()),
+                    breakdown,
+                    1
+            ));
+            breakdowns.add(breakdown);
+        }
+
         for (String predicate : locationPredicates) {
             for (RelationAssertion assertion : graph.findByPredicate(predicate)) {
                 boolean typeMatch = matchesType(graph, ontology, compatibility, assertion,
@@ -74,10 +132,14 @@ public final class GraphRetrievalHead extends BaseHead {
                 if (!typeMatch) {
                     continue;
                 }
+                if (directSubjects.contains(assertion.subject())) {
+                    suppressedChain++;
+                    continue;
+                }
                 List<RelationAssertion> path = new ArrayList<>();
                 path.add(assertion);
                 SymbolId terminal = followLocationChain(assertion.object(), adjacency, path);
-                String key = assertion.subject().value() + "|" + terminal.value();
+                String key = assertion.subject().value() + "|chain|" + terminal.value();
                 if (!emitted.add(key)) {
                     continue;
                 }
@@ -87,17 +149,22 @@ public final class GraphRetrievalHead extends BaseHead {
                 double ontologySupport = requestedType == null ? 0.5 : 1.0;
                 double graphConfidence = averageConfidence(path);
                 double memoryFocus = memory.isActiveEntity(assertion.subject()) ? 1.0 : 0.6;
-                double depthBoost = Math.max(0.0, 0.05 * (path.size() - 1));
+                double depthPenalty = Math.max(0.0, 0.05 * (path.size() - 1));
+                double depthAdjusted = Math.max(0.0, graphConfidence - depthPenalty);
                 double score = normalize(queryMatch, entityMatch, ontologySupport,
-                        Math.min(1.0, graphConfidence + depthBoost), memoryFocus);
+                        depthAdjusted, memoryFocus);
 
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("query_match", queryMatch);
                 breakdown.put("entity_type_match", entityMatch);
                 breakdown.put("ontology_support", ontologySupport);
                 breakdown.put("graph_confidence", graphConfidence);
-                breakdown.put("depth_boost", depthBoost);
+                breakdown.put("depth_penalty", depthPenalty);
                 breakdown.put("working_memory_focus", memoryFocus);
+                breakdown.put("where_path_chain", 1.0);
+                breakdown.put("where_chain_length", (double) path.size());
+                annotateFamilyBreakdown(breakdown, path.get(path.size() - 1).predicate(), surfacePredicates,
+                        containmentPredicates, locationPredicates, expandedCoLocation);
 
                 String answer = assertion.subject() + " " + displayPredicate(path.get(path.size() - 1).predicate()) + " " + terminal;
 
@@ -110,6 +177,7 @@ public final class GraphRetrievalHead extends BaseHead {
                         breakdown,
                         path.size()
                 ));
+                breakdowns.add(breakdown);
             }
         }
 
@@ -127,11 +195,15 @@ public final class GraphRetrievalHead extends BaseHead {
                 if (inferredSubject == null) {
                     continue;
                 }
+                if (directSubjects.contains(inferredSubject)) {
+                    suppressedColocation++;
+                    continue;
+                }
                 if (!matchesType(graph, ontology, compatibility, inferredSubject,
                         requestedType, canonicalRequestedType, requestedEntity)) {
                     continue;
                 }
-                String key = inferredSubject.value() + "|" + location.object().value();
+                String key = inferredSubject.value() + "|colocated|" + location.object().value();
                 if (!emitted.add(key)) {
                     continue;
                 }
@@ -141,14 +213,21 @@ public final class GraphRetrievalHead extends BaseHead {
                 double ontologySupport = requestedType == null ? 0.5 : 1.0;
                 double graphConfidence = averageConfidence(relation.confidence(), location.confidence());
                 double memoryFocus = memory.isActiveEntity(inferredSubject) ? 1.0 : 0.6;
-                double score = normalize(queryMatch, entityMatch, ontologySupport, graphConfidence, memoryFocus);
+                double colocationPenalty = 0.1;
+                double score = normalize(queryMatch, entityMatch, ontologySupport,
+                        Math.max(0.0, graphConfidence - colocationPenalty), memoryFocus);
 
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("query_match", queryMatch);
                 breakdown.put("entity_type_match", entityMatch);
                 breakdown.put("ontology_support", ontologySupport);
                 breakdown.put("graph_confidence", graphConfidence);
+                breakdown.put("colocation_penalty", colocationPenalty);
                 breakdown.put("working_memory_focus", memoryFocus);
+                breakdown.put("where_path_colocation", 1.0);
+                breakdown.put("where_chain_length", 1.0);
+                annotateFamilyBreakdown(breakdown, location.predicate(), surfacePredicates,
+                        containmentPredicates, locationPredicates, expandedCoLocation);
 
                 String answer = inferredSubject + " " + displayPredicate(location.predicate()) + " " + location.object();
                 candidates.add(new ReasoningCandidate(
@@ -160,10 +239,53 @@ public final class GraphRetrievalHead extends BaseHead {
                         breakdown,
                         1
                 ));
+                breakdowns.add(breakdown);
+            }
+        }
+
+        if (suppressedChain > 0 || suppressedColocation > 0) {
+            for (Map<String, Double> breakdown : breakdowns) {
+                if (suppressedChain > 0) {
+                    breakdown.putIfAbsent("where_suppressed_chain", (double) suppressedChain);
+                }
+                if (suppressedColocation > 0) {
+                    breakdown.putIfAbsent("where_suppressed_colocation", (double) suppressedColocation);
+                }
             }
         }
 
         return candidates;
+    }
+
+    private List<RelationAssertion> collectDirectAssertions(KnowledgeBase graph, java.util.Set<String> predicates) {
+        List<RelationAssertion> assertions = new ArrayList<>();
+        for (String predicate : predicates) {
+            assertions.addAll(graph.findByPredicate(predicate));
+        }
+        return assertions;
+    }
+
+    private void annotateFamilyBreakdown(Map<String, Double> breakdown,
+                                         String predicate,
+                                         java.util.Set<String> surfacePredicates,
+                                         java.util.Set<String> containmentPredicates,
+                                         java.util.Set<String> locationPredicates,
+                                         java.util.Set<String> coLocationPredicates) {
+        if (predicate == null) {
+            return;
+        }
+        if (surfacePredicates.contains(predicate)) {
+            breakdown.put("where_family_surface", 1.0);
+        }
+        if (containmentPredicates.contains(predicate)) {
+            breakdown.put("where_family_containment", 1.0);
+        }
+        if (locationPredicates.contains(predicate)) {
+            breakdown.put("where_family_location", 1.0);
+        }
+        if (coLocationPredicates.contains(predicate)) {
+            breakdown.put("where_family_colocation", 1.0);
+        }
     }
 
     private Map<SymbolId, List<RelationAssertion>> buildAdjacency(KnowledgeBase graph, java.util.Set<String> locationPredicates) {
