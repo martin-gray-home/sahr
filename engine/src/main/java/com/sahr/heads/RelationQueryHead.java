@@ -419,6 +419,9 @@ public final class RelationQueryHead extends BaseHead {
         if (expectedType == null || expectedType.isBlank() || !isIri(expectedType)) {
             return false;
         }
+        if (WORDNET_PERSON_SYNSET.equals(expectedType)) {
+            return true;
+        }
         for (String label : ontology.getLabels(expectedType)) {
             String normalized = normalizeLabelToToken(label);
             if (PERSON_LIKE_TOKENS.contains(normalized)) {
@@ -448,6 +451,8 @@ public final class RelationQueryHead extends BaseHead {
             "boy",
             "girl"
     );
+
+    private static final String WORDNET_PERSON_SYNSET = "https://en-word.net/id/oewn-00007846-n";
 
     private List<PredicateMatch> expandPredicateMatches(String predicate, OntologyService ontology) {
         List<PredicateMatch> expanded = new ArrayList<>();

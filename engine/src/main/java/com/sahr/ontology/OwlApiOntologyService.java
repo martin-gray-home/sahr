@@ -245,6 +245,16 @@ public final class OwlApiOntologyService implements OntologyService {
                 results.add(axiom.getObject().asOWLNamedIndividual().getIRI().toString());
             }
         }
+        OWLAnnotationProperty annotationProperty = manager.getOWLDataFactory()
+                .getOWLAnnotationProperty(IRI.create(propertyIri));
+        for (OWLAnnotationAssertionAxiom axiom : ontology.getAnnotationAssertionAxioms(subject.getIRI())) {
+            if (!axiom.getProperty().equals(annotationProperty)) {
+                continue;
+            }
+            if (axiom.getValue().isIRI()) {
+                results.add(axiom.getValue().asIRI().get().toString());
+            }
+        }
         return results;
     }
 

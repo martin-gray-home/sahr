@@ -780,11 +780,11 @@ public final class SahrAgent {
         if (answers == null || answers.isEmpty() || goal == null) {
             return java.util.List.of();
         }
-        if (!prefersPersonLike(goal.expectedType())) {
+        String expectedType = canonicalExpectedType(goal.expectedType());
+        if (!prefersPersonLike(expectedType)) {
             return java.util.List.of();
         }
-        boolean strictPersonLike = WORDNET_PERSON_SYNSET.equals(goal.expectedType());
-        java.util.Set<String> expectedIris = resolveExpectedTypeIris(goal.expectedType());
+        java.util.Set<String> expectedIris = resolveExpectedTypeIris(expectedType);
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         java.util.List<ReasoningCandidate> ontologyMatches = new java.util.ArrayList<>();
         java.util.List<ReasoningCandidate> fallbackMatches = new java.util.ArrayList<>();
@@ -803,7 +803,7 @@ public final class SahrAgent {
             java.util.Set<String> types = entity.conceptTypes();
             if (matchesExpectedIris(types, expectedIris)
                     || matchesPersonLikeType(types)
-                    || (!strictPersonLike && compatibility.hasCompatibleType(types, goal.expectedType()))) {
+                    || compatibility.hasCompatibleType(types, expectedType)) {
                 ontologyMatches.add(candidate);
                 continue;
             }
@@ -825,11 +825,11 @@ public final class SahrAgent {
         if (values == null || values.isEmpty() || goal == null) {
             return java.util.List.of();
         }
-        if (!prefersPersonLike(goal.expectedType())) {
+        String expectedType = canonicalExpectedType(goal.expectedType());
+        if (!prefersPersonLike(expectedType)) {
             return java.util.List.of();
         }
-        boolean strictPersonLike = WORDNET_PERSON_SYNSET.equals(goal.expectedType());
-        java.util.Set<String> expectedIris = resolveExpectedTypeIris(goal.expectedType());
+        java.util.Set<String> expectedIris = resolveExpectedTypeIris(expectedType);
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         java.util.List<String> ontologyMatches = new java.util.ArrayList<>();
         java.util.List<String> fallbackMatches = new java.util.ArrayList<>();
@@ -848,7 +848,7 @@ public final class SahrAgent {
             java.util.Set<String> types = entity.conceptTypes();
             if (matchesExpectedIris(types, expectedIris)
                     || matchesPersonLikeType(types)
-                    || (!strictPersonLike && compatibility.hasCompatibleType(types, goal.expectedType()))) {
+                    || compatibility.hasCompatibleType(types, expectedType)) {
                 ontologyMatches.add(value);
                 continue;
             }
@@ -867,37 +867,47 @@ public final class SahrAgent {
     }
 
     private boolean prefersPersonLike(String expectedType) {
-        if (expectedType == null || expectedType.isBlank()) {
+        String normalized = canonicalExpectedType(expectedType);
+        if (normalized == null || normalized.isBlank()) {
             return false;
         }
-        if (isIri(expectedType)) {
-            if (WORDNET_PERSON_SYNSET.equals(expectedType)) {
+        if (isIri(normalized)) {
+            if (WORDNET_PERSON_SYNSET.equals(normalized)) {
                 return true;
             }
-            for (String label : annotationResolver.labelsForIri(expectedType)) {
-                String normalized = annotationResolver.normalizeLabelToToken(label);
-                if (PERSON_LIKE_TOKENS.contains(normalized)) {
+            for (String label : annotationResolver.labelsForIri(normalized)) {
+                String token = annotationResolver.normalizeLabelToToken(label);
+                if (PERSON_LIKE_TOKENS.contains(token)) {
                     return true;
                 }
             }
             return false;
         }
-        String normalized = annotationResolver.normalizeLabelToToken(stripPrefix(expectedType));
-        return PERSON_LIKE_TOKENS.contains(normalized);
+        String token = annotationResolver.normalizeLabelToToken(stripPrefix(normalized));
+        return PERSON_LIKE_TOKENS.contains(token);
     }
 
     private java.util.Set<String> resolveExpectedTypeIris(String expectedType) {
+        String normalized = canonicalExpectedType(expectedType);
+        if (normalized == null || normalized.isBlank()) {
+            return java.util.Set.of();
+        }
+        if (isIri(normalized)) {
+            return java.util.Set.of(normalized);
+        }
+        String token = annotationResolver.normalizeLabelToToken(stripPrefix(normalized));
+        if (token.isBlank()) {
+            return java.util.Set.of();
+        }
+        return annotationResolver.entityIrisByLabel(token);
+    }
+
+    private String canonicalExpectedType(String expectedType) {
         if (expectedType == null || expectedType.isBlank()) {
-            return java.util.Set.of();
+            return expectedType;
         }
-        if (isIri(expectedType)) {
-            return java.util.Set.of(expectedType);
-        }
-        String normalized = annotationResolver.normalizeLabelToToken(stripPrefix(expectedType));
-        if (normalized.isBlank()) {
-            return java.util.Set.of();
-        }
-        return annotationResolver.entityIrisByLabel(normalized);
+        Optional<String> canonical = semanticNormalizer.canonicalType(expectedType);
+        return canonical.orElse(expectedType);
     }
 
     private boolean matchesExpectedIris(java.util.Set<String> types, java.util.Set<String> expectedIris) {
