@@ -531,13 +531,15 @@ public final class SahrAgent {
         String subject = goal == null ? null : goal.subject();
         String object = goal == null ? null : goal.object();
         String type = goal == null ? null : goal.type().name();
+        String expectedType = goal == null ? null : goal.expectedType();
         logger.info(() -> "query_candidate source=" + source
                 + " producedBy=" + producedBy
                 + " score=" + scoreText
                 + " type=" + type
                 + " predicate=" + predicate
                 + " subject=" + subject
-                + " object=" + object);
+                + " object=" + object
+                + " expectedType=" + expectedType);
     }
 
     private boolean diagnosticsEnabled() {
@@ -790,7 +792,12 @@ public final class SahrAgent {
                 continue;
             }
             java.util.Set<String> types = entity.conceptTypes();
-            if (matchesExpectedIris(types, expectedIris)) {
+            if (matchesExpectedIris(types, expectedIris) || matchesPersonLikeType(types)) {
+                ontologyMatches.add(candidate);
+                continue;
+            }
+            if ((types == null || types.isEmpty() || !containsIri(types))
+                    && matchesPersonLikeSurface(entity.id(), expectedIris)) {
                 ontologyMatches.add(candidate);
                 continue;
             }
@@ -824,7 +831,12 @@ public final class SahrAgent {
                 continue;
             }
             java.util.Set<String> types = entity.conceptTypes();
-            if (matchesExpectedIris(types, expectedIris)) {
+            if (matchesExpectedIris(types, expectedIris) || matchesPersonLikeType(types)) {
+                ontologyMatches.add(value);
+                continue;
+            }
+            if ((types == null || types.isEmpty() || !containsIri(types))
+                    && matchesPersonLikeSurface(entity.id(), expectedIris)) {
                 ontologyMatches.add(value);
                 continue;
             }
@@ -840,6 +852,15 @@ public final class SahrAgent {
 
     private boolean prefersPersonLike(String expectedType) {
         if (expectedType == null || expectedType.isBlank()) {
+            return false;
+        }
+        if (isIri(expectedType)) {
+            for (String label : annotationResolver.labelsForIri(expectedType)) {
+                String normalized = annotationResolver.normalizeLabelToToken(label);
+                if (PERSON_LIKE_TOKENS.contains(normalized)) {
+                    return true;
+                }
+            }
             return false;
         }
         String normalized = annotationResolver.normalizeLabelToToken(stripPrefix(expectedType));
@@ -875,6 +896,50 @@ public final class SahrAgent {
                 if (ontology.isSubclassOf(type, expected)) {
                     return true;
                 }
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesPersonLikeType(java.util.Set<String> types) {
+        if (types == null || types.isEmpty()) {
+            return false;
+        }
+        for (String type : types) {
+            if (!isIri(type)) {
+                continue;
+            }
+            if (isPersonLikeIri(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesPersonLikeSurface(SymbolId id, java.util.Set<String> expectedIris) {
+        if (id == null) {
+            return false;
+        }
+        String raw = stripPrefix(id.value());
+        if (raw.isBlank()) {
+            return false;
+        }
+        Optional<String> mapped = termMapper.mapToken(raw);
+        if (mapped.isEmpty()) {
+            return false;
+        }
+        String iri = mapped.get();
+        if (matchesExpectedIris(java.util.Set.of(iri), expectedIris)) {
+            return true;
+        }
+        return isPersonLikeIri(iri);
+    }
+
+    private boolean isPersonLikeIri(String iri) {
+        for (String label : annotationResolver.labelsForIri(iri)) {
+            String normalized = annotationResolver.normalizeLabelToToken(label);
+            if (PERSON_LIKE_TOKENS.contains(normalized)) {
+                return true;
             }
         }
         return false;
@@ -2516,11 +2581,20 @@ public final class SahrAgent {
     }
 
     private void upsertEntity(SymbolId id, Set<String> types) {
-        graph.findEntity(id).orElseGet(() -> {
+        graph.findEntity(id).ifPresentOrElse(existing -> {
+            if (types == null || types.isEmpty()) {
+                return;
+            }
+            Set<String> merged = new HashSet<>(existing.conceptTypes());
+            if (merged.addAll(types)) {
+                EntityNode updated = new EntityNode(existing.id(), existing.surfaceForm(), merged);
+                graph.addEntity(updated);
+                answerComposer.noteEntity(updated);
+            }
+        }, () -> {
             EntityNode entity = new EntityNode(id, id.value(), types);
             graph.addEntity(entity);
             answerComposer.noteEntity(entity);
-            return entity;
         });
         workingMemory.addActiveEntity(id);
     }
@@ -2710,12 +2784,22 @@ public final class SahrAgent {
         if (subject == null) {
             return fallback;
         }
-        boolean wantsConcept = fallback != null && fallback.stream().anyMatch(type ->
-                type.startsWith("concept:") || type.startsWith("http://") || type.startsWith("https://"));
+        Set<String> types = new HashSet<>();
+        if (fallback != null && !fallback.isEmpty()) {
+            types.addAll(fallback);
+        }
         String raw = stripPrefix(subject.value());
         if (raw.isBlank()) {
-            return fallback;
+            return types.isEmpty() ? fallback : types;
         }
-        return wantsConcept ? Set.of("concept:" + raw) : Set.of(raw);
+        Optional<String> mapped = termMapper.mapToken(raw);
+        if (mapped.isPresent()) {
+            types.add(mapped.get());
+        } else if (types.isEmpty()) {
+            boolean wantsConcept = fallback != null && fallback.stream().anyMatch(type ->
+                    type.startsWith("concept:") || type.startsWith("http://") || type.startsWith("https://"));
+            types.add(wantsConcept ? "concept:" + raw : raw);
+        }
+        return types;
     }
 }

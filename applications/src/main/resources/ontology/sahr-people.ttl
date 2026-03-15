@@ -1,0 +1,47 @@
+@prefix sahrp: <https://sahr.ai/ontology/people#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix wnid: <https://en-word.net/id/> .
+
+<https://sahr.ai/ontology/people>
+    a owl:Ontology ;
+    rdfs:label "SAHR People Vocabulary" .
+
+sahrp:Person a owl:Class ;
+    rdfs:label "person" ;
+    rdfs:label "people" ;
+    rdfs:label "human" ;
+    rdfs:label "agent" ;
+    owl:equivalentClass wnid:oewn-00007846-n ;
+    skos:exactMatch wnid:oewn-00007846-n .
+
+sahrp:Man a owl:Class ;
+    rdfs:label "man" ;
+    rdfs:subClassOf sahrp:Person ;
+    owl:equivalentClass wnid:oewn-10306910-n ;
+    skos:exactMatch wnid:oewn-10306910-n .
+
+sahrp:Woman a owl:Class ;
+    rdfs:label "woman" ;
+    rdfs:subClassOf sahrp:Person ;
+    owl:equivalentClass wnid:oewn-10807146-n ;
+    skos:exactMatch wnid:oewn-10807146-n .
+
+sahrp:Boy a owl:Class ;
+    rdfs:label "boy" ;
+    rdfs:subClassOf sahrp:Person ;
+    owl:equivalentClass wnid:oewn-10305010-n ;
+    skos:exactMatch wnid:oewn-10305010-n .
+
+sahrp:Girl a owl:Class ;
+    rdfs:label "girl" ;
+    rdfs:subClassOf sahrp:Person ;
+    owl:equivalentClass wnid:oewn-10104064-n ;
+    skos:exactMatch wnid:oewn-10104064-n .
+
+wnid:oewn-00007846-n a owl:Class .
+wnid:oewn-10306910-n a owl:Class .
+wnid:oewn-10807146-n a owl:Class .
+wnid:oewn-10305010-n a owl:Class .
+wnid:oewn-10104064-n a owl:Class .

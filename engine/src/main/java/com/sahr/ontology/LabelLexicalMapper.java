@@ -58,13 +58,33 @@ public final class LabelLexicalMapper implements TermMapper {
                 String label = ((OWLLiteral) value).getLiteral();
                 String key = normalize(label);
                 axiom.getSubject().asIRI().ifPresent(subjectIri -> {
-                    labelToEntityIri.putIfAbsent(key, subjectIri.toString());
-                    if (ontology.containsObjectPropertyInSignature(subjectIri)) {
+                    boolean isObjectProperty = ontology.containsObjectPropertyInSignature(subjectIri);
+                    if (!isObjectProperty) {
+                        String iri = subjectIri.toString();
+                        labelToEntityIri.merge(key, iri, this::preferEntityIri);
+                    }
+                    if (isObjectProperty) {
                         labelToPropertyIri.putIfAbsent(key, subjectIri.toString());
                     }
                 });
             }
         }
+    }
+
+    private String preferEntityIri(String existing, String candidate) {
+        if (existing == null) {
+            return candidate;
+        }
+        boolean existingPreferred = isPreferredEntity(existing);
+        boolean candidatePreferred = isPreferredEntity(candidate);
+        if (!existingPreferred && candidatePreferred) {
+            return candidate;
+        }
+        return existing;
+    }
+
+    private boolean isPreferredEntity(String iri) {
+        return iri != null && iri.startsWith("https://sahr.ai/");
     }
 
     private void indexDataProperties(OWLOntology ontology) {

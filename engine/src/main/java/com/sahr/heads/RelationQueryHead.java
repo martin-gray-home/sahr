@@ -397,8 +397,45 @@ public final class RelationQueryHead extends BaseHead {
         }
         // If we only have non-IRI concept tags, avoid hard filtering; let attention scoring rank.
         boolean hasIriType = entity.get().conceptTypes().stream().anyMatch(this::isIri);
+        if (isPersonLikeExpectedType(ontology, expectedType)) {
+            return false;
+        }
         return !hasIriType;
     }
+
+    private boolean isPersonLikeExpectedType(OntologyService ontology, String expectedType) {
+        if (expectedType == null || expectedType.isBlank() || !isIri(expectedType)) {
+            return false;
+        }
+        for (String label : ontology.getLabels(expectedType)) {
+            String normalized = normalizeLabelToToken(label);
+            if (PERSON_LIKE_TOKENS.contains(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeLabelToToken(String label) {
+        if (label == null) {
+            return "";
+        }
+        String normalized = label.trim().toLowerCase(java.util.Locale.ROOT);
+        normalized = normalized.replaceAll("[^a-z0-9]+", "_");
+        normalized = normalized.replaceAll("^_+", "").replaceAll("_+$", "");
+        return normalized;
+    }
+
+    private static final java.util.Set<String> PERSON_LIKE_TOKENS = java.util.Set.of(
+            "person",
+            "people",
+            "human",
+            "agent",
+            "man",
+            "woman",
+            "boy",
+            "girl"
+    );
 
     private List<PredicateMatch> expandPredicateMatches(String predicate, OntologyService ontology) {
         List<PredicateMatch> expanded = new ArrayList<>();
