@@ -26,7 +26,7 @@ class TermMapperProbeTest {
         List<String> resources = resolveOntologyResources(properties);
         TermMapper mapper = buildTermMapper(properties, resources);
         String[] tokens = {"man", "woman", "boy", "girl", "person", "people", "human", "agent", "hat",
-                "house", "chair", "table", "room", "floor", "box", "bed"};
+                "house", "chair", "table", "room", "floor", "box", "bed", "door", "window", "ceiling", "wall"};
         for (String token : tokens) {
             System.out.println(token + " -> " + mapper.mapToken(token));
         }
