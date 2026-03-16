@@ -112,10 +112,11 @@ public final class CommandProcessor {
                 candidate.producedBy()
         );
         String policy = policyLabel(candidate.scoreBreakdown()).map(label -> " policy=" + label).orElse("");
+        String policyRule = policyRuleLabel(candidate.scoreBreakdown()).map(label -> " policy_rule=" + label).orElse("");
         if (!verbose) {
-            return base + scores + policy;
+            return base + scores + policy + policyRule;
         }
-        return base + scores + policy;
+        return base + scores + policy + policyRule;
     }
 
     private Optional<String> policyLabel(Map<String, Double> breakdown) {
@@ -139,6 +140,22 @@ public final class CommandProcessor {
             return Optional.of("DISABLED");
         }
         return Optional.of("CUSTOM");
+    }
+
+    private Optional<String> policyRuleLabel(Map<String, Double> breakdown) {
+        if (breakdown == null || breakdown.isEmpty()) {
+            return Optional.empty();
+        }
+        if (breakdown.containsKey("policy_rule_inverse")) {
+            return Optional.of("INVERSE");
+        }
+        if (breakdown.containsKey("policy_rule_symmetric")) {
+            return Optional.of("SYMMETRIC");
+        }
+        if (breakdown.containsKey("policy_rule_transitive")) {
+            return Optional.of("TRANSITIVE");
+        }
+        return Optional.empty();
     }
 
     private String formatQuery(QueryGoal query) {

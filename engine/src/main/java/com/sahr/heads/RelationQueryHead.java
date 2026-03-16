@@ -139,6 +139,7 @@ public final class RelationQueryHead extends BaseHead {
                 predicateMatch.policyStrengthScore().ifPresent(value -> {
                     breakdown.put("policy_strength", value);
                     breakdown.put("policy_applied", 1.0);
+                    addPolicyRuleBreakdown(breakdown, predicateMatch.type());
                 });
 
                 candidates.add(new ReasoningCandidate(
@@ -258,6 +259,7 @@ public final class RelationQueryHead extends BaseHead {
                 predicateMatch.policyStrengthScore().ifPresent(value -> {
                     breakdown.put("policy_strength", value);
                     breakdown.put("policy_applied", 1.0);
+                    addPolicyRuleBreakdown(breakdown, predicateMatch.type());
                 });
 
                 candidates.add(new ReasoningCandidate(
@@ -581,7 +583,8 @@ public final class RelationQueryHead extends BaseHead {
                 boolean objectMatch = predicateMatch.matchesObject(assertion, object);
                 if (subjectMatch && objectMatch) {
                     return List.of(buildYesAnswer(query, assertion, predicateMatch.isInverse(),
-                            subject, object, predicateMatch.policyStrengthScore().orElse(null)));
+                            subject, object, predicateMatch.type(),
+                            predicateMatch.policyStrengthScore().orElse(null)));
                 }
             }
         }
@@ -593,6 +596,7 @@ public final class RelationQueryHead extends BaseHead {
                                               boolean inverseMatch,
                                               SymbolId subject,
                                               SymbolId object,
+                                              MatchType matchType,
                                               Double policyStrength) {
         String subjectText = query.subjectText() != null ? query.subjectText() : subjectFromAssertion(assertion);
         String objectText = query.objectText() != null ? query.objectText() : objectFromAssertion(assertion);
@@ -614,6 +618,7 @@ public final class RelationQueryHead extends BaseHead {
         if (policyStrength != null) {
             breakdown.put("policy_strength", policyStrength);
             breakdown.put("policy_applied", 1.0);
+            addPolicyRuleBreakdown(breakdown, matchType);
         }
         double score = normalize(1.0, assertion.confidence());
 
@@ -698,6 +703,14 @@ public final class RelationQueryHead extends BaseHead {
                 return java.util.Optional.empty();
             }
             return java.util.Optional.of(queryMatchScore());
+        }
+    }
+
+    private void addPolicyRuleBreakdown(Map<String, Double> breakdown, MatchType type) {
+        if (type == MatchType.INVERSE) {
+            breakdown.put("policy_rule_inverse", 1.0);
+        } else if (type == MatchType.SYMMETRIC) {
+            breakdown.put("policy_rule_symmetric", 1.0);
         }
     }
 
