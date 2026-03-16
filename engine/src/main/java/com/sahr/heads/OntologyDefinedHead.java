@@ -7,6 +7,8 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.SymbolId;
+import com.sahr.ontology.SemanticNodeNormalizer;
+import com.sahr.ontology.SemanticTypeCompatibilityService;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -52,7 +54,7 @@ public final class OntologyDefinedHead extends BaseHead {
                 if (assertions.isEmpty()) {
                     continue;
                 }
-                candidates.addAll(evaluatePattern(definition, assertions, seen));
+                candidates.addAll(evaluatePattern(definition, assertions, seen, context));
                 continue;
             }
             OntologyHeadExecutor executor = executors.get(definition.executorType());
@@ -70,10 +72,15 @@ public final class OntologyDefinedHead extends BaseHead {
 
     private List<ReasoningCandidate> evaluatePattern(OntologyHeadDefinition definition,
                                                      List<RelationAssertion> assertions,
-                                                     Set<String> seen) {
+                                                     Set<String> seen,
+                                                     HeadContext context) {
         List<ReasoningCandidate> candidates = new ArrayList<>();
+        Map<String, Set<String>> requiredTypes = parseRequiredTypeParams(definition);
         List<PatternBinding> bindings = matchPatterns(definition.patterns(), assertions);
         for (PatternBinding binding : bindings) {
+            if (!requiredTypes.isEmpty() && !matchesRequiredTypes(binding, requiredTypes, context)) {
+                continue;
+            }
             RelationAssertion inferred = buildAssertion(definition, binding);
             if (inferred == null) {
                 continue;
@@ -100,6 +107,117 @@ public final class OntologyDefinedHead extends BaseHead {
         }
         return candidates;
     }
+
+    private Map<String, Set<String>> parseRequiredTypeParams(OntologyHeadDefinition definition) {
+        Map<String, Set<String>> required = new HashMap<>();
+        if (definition.executorParams() == null || definition.executorParams().isEmpty()) {
+            return required;
+        }
+        for (Map.Entry<String, String> entry : definition.executorParams().entrySet()) {
+            String key = entry.getKey();
+            if (key == null || !key.startsWith("requireType.")) {
+                continue;
+            }
+            String varName = key.substring("requireType.".length());
+            if (varName.isBlank()) {
+                continue;
+            }
+            Set<String> expected = splitExpectedTypes(entry.getValue());
+            if (!expected.isEmpty()) {
+                required.put(varName, expected);
+            }
+        }
+        return required;
+    }
+
+    private Set<String> splitExpectedTypes(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Set.of();
+        }
+        Set<String> values = new HashSet<>();
+        for (String token : raw.split("[,\\s]+")) {
+            if (!token.isBlank()) {
+                values.add(token.trim());
+            }
+        }
+        return values;
+    }
+
+    private boolean matchesRequiredTypes(PatternBinding binding,
+                                         Map<String, Set<String>> requiredTypes,
+                                         HeadContext context) {
+        if (requiredTypes.isEmpty()) {
+            return true;
+        }
+        KnowledgeBase graph = context.graph();
+        SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(context.ontology());
+        SemanticNodeNormalizer normalizer = context.semanticNormalizer().orElse(null);
+        for (Map.Entry<String, Set<String>> entry : requiredTypes.entrySet()) {
+            String bound = binding.values.get(entry.getKey());
+            if (bound == null || bound.isBlank()) {
+                return false;
+            }
+            Set<String> actualTypes = resolveCanonicalTypes(graph, bound, normalizer);
+            if (actualTypes.isEmpty()) {
+                return false;
+            }
+            boolean matched = false;
+            for (String expectedRaw : entry.getValue()) {
+                String expected = normalizeExpectedType(expectedRaw, normalizer);
+                if (!isIri(expected)) {
+                    continue;
+                }
+                if (compatibility.hasCompatibleType(actualTypes, expected)) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Set<String> resolveCanonicalTypes(KnowledgeBase graph,
+                                              String entityId,
+                                              SemanticNodeNormalizer normalizer) {
+        return graph.findEntity(new SymbolId(entityId))
+                .map(entity -> normalizeTypes(entity.conceptTypes(), normalizer))
+                .orElseGet(Set::of);
+    }
+
+    private Set<String> normalizeTypes(Set<String> rawTypes, SemanticNodeNormalizer normalizer) {
+        if (rawTypes == null || rawTypes.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> normalized = new HashSet<>();
+        for (String raw : rawTypes) {
+            if (normalizer != null) {
+                normalizer.canonicalType(raw).ifPresent(value -> {
+                    if (isIri(value)) {
+                        normalized.add(value);
+                    }
+                });
+                continue;
+            }
+            if (isIri(raw)) {
+                normalized.add(raw);
+            }
+        }
+        return normalized;
+    }
+
+    private String normalizeExpectedType(String raw, SemanticNodeNormalizer normalizer) {
+        if (raw == null || raw.isBlank()) {
+            return raw;
+        }
+        if (normalizer != null) {
+            return normalizer.canonicalType(raw).orElse(raw);
+        }
+        return raw;
+    }
+
 
     private RelationAssertion buildAssertion(OntologyHeadDefinition definition, PatternBinding binding) {
         OntologyHeadDefinition.TriplePattern action = definition.action();

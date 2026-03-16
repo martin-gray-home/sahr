@@ -139,6 +139,14 @@ headr:paramGraphRetrievalDepth a headr:ExecutorParam ;
     headr:paramKey "maxLocationDepth" ;
     headr:paramValue "6" .
 
+headr:paramWithLocationRequireVarA a headr:ExecutorParam ;
+    headr:paramKey "requireType.a" ;
+    headr:paramValue "https://en-word.net/id/oewn-00007846-n" .
+
+headr:paramWithLocationRequireVarB a headr:ExecutorParam ;
+    headr:paramKey "requireType.b" ;
+    headr:paramValue "https://en-word.net/id/oewn-00007846-n" .
+
 headr:paramIntentQuestionIntent a headr:ExecutorParam ;
     headr:paramKey "intent" ;
     headr:paramValue "question" .
@@ -374,6 +382,8 @@ headr:WithLocationTransferHead a headr:ReasoningHead ;
     headr:name "with-location-transfer" ;
     headr:hasPattern headr:patternWithLocationTransfer ;
     headr:hasAction headr:actionWithLocationTransfer ;
+    headr:hasExecutorParam headr:paramWithLocationRequireVarA ;
+    headr:hasExecutorParam headr:paramWithLocationRequireVarB ;
     headr:hasScorePolicy headr:scoreColocation .
 
 headr:tpColocationReverse a headr:TriplePattern ;
@@ -393,6 +403,8 @@ headr:WithLocationReverseHead a headr:ReasoningHead ;
     headr:name "with-location-reverse" ;
     headr:hasPattern headr:patternWithLocationReverse ;
     headr:hasAction headr:actionWithLocationReverse ;
+    headr:hasExecutorParam headr:paramWithLocationRequireVarA ;
+    headr:hasExecutorParam headr:paramWithLocationRequireVarB ;
     headr:hasScorePolicy headr:scoreColocation .
 
 headr:tpWearLeft a headr:TriplePattern ;
@@ -986,4 +998,5 @@ headr:WearToOnHead a headr:ReasoningHead ;
     headr:name "wear-to-on" ;
     headr:hasPattern headr:patternWearToOn ;
     headr:hasAction headr:actionWearToOn ;
+    headr:enabled false ;
     headr:hasScorePolicy headr:scoreSurface .

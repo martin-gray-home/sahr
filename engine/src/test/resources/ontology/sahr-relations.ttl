@@ -109,13 +109,12 @@ sahr:have a owl:ObjectProperty ;
 
 sahr:wear a owl:ObjectProperty ;
     rdfs:label "wear" ;
-    rdfs:subPropertyOf sahr:on ;
     rdfs:subPropertyOf sahr:colocation .
 
 sahr:wornBy a owl:ObjectProperty ;
     rdfs:label "worn by" ;
     owl:inverseOf sahr:wear ;
-    rdfs:subPropertyOf sahr:on .
+    rdfs:subPropertyOf sahr:colocation .
 
 sahr:with a owl:ObjectProperty ;
     rdfs:label "with" ;

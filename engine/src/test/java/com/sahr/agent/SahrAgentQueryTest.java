@@ -55,7 +55,7 @@ class SahrAgentQueryTest {
         SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
 
         assertEquals("Assertion recorded.", agent.handle("The man is wearing a hat"));
-        assertEquals("Yes, the hat is on the man", agent.handle("Is the hat on the man"));
+        assertEquals("Unknown.", agent.handle("Is the hat on the man"));
     }
 
     @Test
