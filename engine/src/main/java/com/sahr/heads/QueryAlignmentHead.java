@@ -5,11 +5,14 @@ import com.sahr.core.EntityNode;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
+import com.sahr.core.PropertyPolicyProvider;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
+import com.sahr.semantic.model.InferencePolicy;
+import com.sahr.semantic.model.InferencePolicyStrength;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,6 +58,10 @@ public final class QueryAlignmentHead extends BaseHead {
             double queryMatch = 0.9;
             double entityMatch = 1.0;
             double ontologySupport = expectedRange == null ? 0.5 : 0.8;
+            PolicySignal policySignal = policySignal(ontology, assertion.predicate());
+            if (policySignal != null) {
+                ontologySupport *= policySignal.score();
+            }
             double graphConfidence = assertion.confidence();
             double score = normalize(queryMatch, entityMatch, ontologySupport, graphConfidence);
 
@@ -63,6 +70,11 @@ public final class QueryAlignmentHead extends BaseHead {
             breakdown.put("entity_type_match", entityMatch);
             breakdown.put("ontology_support", ontologySupport);
             breakdown.put("graph_confidence", graphConfidence);
+            if (policySignal != null) {
+                breakdown.put("policy_strength", policySignal.score());
+                breakdown.put("policy_applied", 1.0);
+                breakdown.put(policySignal.ruleKey(), 1.0);
+            }
 
             String answer = assertion.subject() + " " + displayPredicate(assertion.predicate()) + " " + assertion.object();
 
@@ -140,6 +152,50 @@ public final class QueryAlignmentHead extends BaseHead {
             return synset;
         }
         return iris.stream().sorted().findFirst().orElse(requestedType);
+    }
+
+    private PolicySignal policySignal(OntologyService ontology, String predicate) {
+        if (!(ontology instanceof PropertyPolicyProvider provider)) {
+            return null;
+        }
+        PolicySignal best = null;
+        best = pickBest(best, policySignalFor(provider.inversePolicy(predicate), "policy_rule_inverse"));
+        best = pickBest(best, policySignalFor(provider.symmetricPolicy(predicate), "policy_rule_symmetric"));
+        best = pickBest(best, policySignalFor(provider.transitivePolicy(predicate), "policy_rule_transitive"));
+        return best;
+    }
+
+    private PolicySignal policySignalFor(java.util.Optional<InferencePolicy> policy, String ruleKey) {
+        if (policy == null || policy.isEmpty()) {
+            return null;
+        }
+        InferencePolicy value = policy.get();
+        if (!value.enabled() || value.strength() == InferencePolicyStrength.DISABLED) {
+            return null;
+        }
+        return new PolicySignal(ruleKey, policyScore(value.strength()));
+    }
+
+    private PolicySignal pickBest(PolicySignal current, PolicySignal candidate) {
+        if (candidate == null) {
+            return current;
+        }
+        if (current == null) {
+            return candidate;
+        }
+        return candidate.score() > current.score() ? candidate : current;
+    }
+
+    private double policyScore(InferencePolicyStrength strength) {
+        return switch (strength) {
+            case HARD -> 1.0;
+            case SOFT -> 0.9;
+            case RANKING_HINT -> 0.6;
+            case DISABLED -> 0.0;
+        };
+    }
+
+    private record PolicySignal(String ruleKey, double score) {
     }
 
     private String canonicalExpectedRange(OntologyService ontology,
