@@ -31,7 +31,7 @@ class SemanticAlignmentCompilerTest {
                 List.of(source)
         );
 
-        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of());
+        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of(), List.of());
         SemanticAlignmentCompiler compiler = new NoopSemanticAlignmentCompiler();
 
         AlignmentOutput output = compiler.compile(input);
@@ -60,7 +60,7 @@ class SemanticAlignmentCompilerTest {
                 List.of(source)
         );
 
-        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of());
+        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of(), List.of());
         SemanticAlignmentCompiler compiler = OntologyBackedSemanticAlignmentCompiler.loadDefault();
 
         AlignmentOutput output = compiler.compile(input);
@@ -90,7 +90,7 @@ class SemanticAlignmentCompilerTest {
                 List.of(source)
         );
 
-        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of());
+        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of(), List.of());
         SemanticAlignmentCompiler compiler = OntologyBackedSemanticAlignmentCompiler.loadDefault();
 
         AlignmentOutput output = compiler.compile(input);
@@ -118,7 +118,7 @@ class SemanticAlignmentCompilerTest {
                 List.of(source)
         );
 
-        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of());
+        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of(), List.of());
         SemanticAlignmentCompiler compiler = OntologyBackedSemanticAlignmentCompiler.loadDefault();
 
         AlignmentOutput output = compiler.compile(input);
@@ -161,7 +161,7 @@ class SemanticAlignmentCompilerTest {
                 List.of(artifactSource)
         );
 
-        AlignmentInput input = new AlignmentInput(List.of(thingNode, artifactNode), List.of(), List.of());
+        AlignmentInput input = new AlignmentInput(List.of(thingNode, artifactNode), List.of(), List.of(), List.of());
         SemanticAlignmentCompiler compiler = OntologyBackedSemanticAlignmentCompiler.loadDefault();
 
         AlignmentOutput output = compiler.compile(input);
@@ -191,7 +191,7 @@ class SemanticAlignmentCompilerTest {
                 List.of(source)
         );
 
-        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of());
+        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of(), List.of());
         SemanticAlignmentCompiler compiler = OntologyBackedSemanticAlignmentCompiler.loadDefault();
 
         AlignmentOutput output = compiler.compile(input);

@@ -34,6 +34,7 @@ public final class NoopSemanticAlignmentCompiler implements SemanticAlignmentCom
                 input.importedNodes(),
                 input.triggers(),
                 input.constraints(),
+                input.propertySemantics(),
                 report
         );
     }

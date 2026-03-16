@@ -2,6 +2,7 @@ package com.sahr.semantic.importer;
 
 import com.sahr.semantic.alignment.AlignmentInput;
 import com.sahr.semantic.model.AlignmentConfidence;
+import com.sahr.semantic.model.PropertySemantics;
 import com.sahr.semantic.model.SemanticNode;
 import com.sahr.semantic.model.SemanticNodeType;
 import com.sahr.semantic.model.SemanticSourceReference;
@@ -12,6 +13,7 @@ import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLObjectProperty;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
+import org.semanticweb.owlapi.model.AxiomType;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,6 +39,7 @@ public final class OwlSemanticImporter {
         List<SemanticNode> nodes = new ArrayList<>();
         int missingClassLabels = 0;
         int missingPropertyLabels = 0;
+        List<PropertySemantics> propertySemantics = new ArrayList<>();
 
         for (OWLClass cls : ontology.getClassesInSignature()) {
             if (cls.isOWLThing() || cls.isOWLNothing()) {
@@ -56,6 +59,9 @@ public final class OwlSemanticImporter {
         }
 
         for (OWLObjectProperty property : ontology.getObjectPropertiesInSignature()) {
+            if (property.isOWLTopObjectProperty() || property.isOWLBottomObjectProperty()) {
+                continue;
+            }
             LabelResult label = labels.resolve(property.getIRI());
             if (label.fallbackUsed) {
                 missingPropertyLabels++;
@@ -67,14 +73,17 @@ public final class OwlSemanticImporter {
                     sourceName,
                     SemanticNodeType.RELATION
             ));
+            propertySemantics.add(buildPropertySemantics(ontology, property, label.label, sourceName));
         }
 
-        AlignmentInput input = new AlignmentInput(nodes, List.of(), List.of());
+        AlignmentInput input = new AlignmentInput(nodes, List.of(), List.of(), propertySemantics);
         OwlImportReport report = new OwlImportReport(
                 (int) ontology.getClassesInSignature().stream()
                         .filter(cls -> !cls.isOWLThing() && !cls.isOWLNothing())
                         .count(),
-                ontology.getObjectPropertiesInSignature().size(),
+                (int) ontology.getObjectPropertiesInSignature().stream()
+                        .filter(prop -> !prop.isOWLTopObjectProperty() && !prop.isOWLBottomObjectProperty())
+                        .count(),
                 missingClassLabels,
                 missingPropertyLabels
         );
@@ -99,6 +108,57 @@ public final class OwlSemanticImporter {
                 type,
                 AlignmentConfidence.UNRESOLVED,
                 List.of(),
+                List.of(source)
+        );
+    }
+
+    private PropertySemantics buildPropertySemantics(OWLOntology ontology,
+                                                     OWLObjectProperty property,
+                                                     String label,
+                                                     String sourceName) {
+        List<String> domains = ontology.getObjectPropertyDomainAxioms(property).stream()
+                .map(ax -> ax.getDomain())
+                .filter(domain -> !domain.isAnonymous())
+                .map(domain -> domain.asOWLClass().getIRI().toString())
+                .distinct()
+                .toList();
+
+        List<String> ranges = ontology.getObjectPropertyRangeAxioms(property).stream()
+                .map(ax -> ax.getRange())
+                .filter(range -> !range.isAnonymous())
+                .map(range -> range.asOWLClass().getIRI().toString())
+                .distinct()
+                .toList();
+
+        List<String> inverseIris = ontology.getAxioms(AxiomType.INVERSE_OBJECT_PROPERTIES).stream()
+                .filter(ax -> ax.getProperties().contains(property))
+                .flatMap(ax -> ax.getProperties().stream())
+                .filter(expr -> !expr.isAnonymous())
+                .map(expr -> expr.asOWLObjectProperty().getIRI().toString())
+                .filter(iri -> !iri.equals(property.getIRI().toString()))
+                .distinct()
+                .toList();
+
+        boolean symmetric = ontology.getAxioms(AxiomType.SYMMETRIC_OBJECT_PROPERTY).stream()
+                .anyMatch(ax -> ax.getProperty().equals(property));
+
+        boolean transitive = ontology.getAxioms(AxiomType.TRANSITIVE_OBJECT_PROPERTY).stream()
+                .anyMatch(ax -> ax.getProperty().equals(property));
+
+        SemanticSourceReference source = new SemanticSourceReference(
+                sourceName,
+                property.getIRI().toString(),
+                label,
+                1.0
+        );
+
+        return new PropertySemantics(
+                property.getIRI().toString(),
+                domains,
+                ranges,
+                inverseIris,
+                symmetric,
+                transitive,
                 List.of(source)
         );
     }

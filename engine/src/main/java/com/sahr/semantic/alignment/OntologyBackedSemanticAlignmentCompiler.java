@@ -5,6 +5,7 @@ import com.sahr.semantic.model.AlignmentRecord;
 import com.sahr.semantic.model.InferencePolicy;
 import com.sahr.semantic.model.InferencePolicyStrength;
 import com.sahr.semantic.model.LexicalTrigger;
+import com.sahr.semantic.model.PropertySemantics;
 import com.sahr.semantic.model.SelectionalConstraint;
 import com.sahr.semantic.model.SemanticNode;
 import com.sahr.semantic.model.SemanticSourceReference;
@@ -36,6 +37,7 @@ public final class OntologyBackedSemanticAlignmentCompiler implements SemanticAl
         List<SemanticNode> canonicalNodes = new ArrayList<>();
         List<LexicalTrigger> canonicalTriggers = new ArrayList<>(input.triggers());
         List<SelectionalConstraint> canonicalConstraints = new ArrayList<>(input.constraints());
+        List<PropertySemantics> propertySemantics = new ArrayList<>(input.propertySemantics());
         List<AlignmentAuditEntry> entries = new ArrayList<>();
 
         for (SemanticNode node : input.importedNodes()) {
@@ -81,7 +83,7 @@ public final class OntologyBackedSemanticAlignmentCompiler implements SemanticAl
         AlignmentSummary summary = AlignmentSummary.fromEntries(entries);
         AlignmentReport report = new AlignmentReport(entries, summary);
 
-        return new AlignmentOutput(canonicalNodes, canonicalTriggers, canonicalConstraints, report);
+        return new AlignmentOutput(canonicalNodes, canonicalTriggers, canonicalConstraints, propertySemantics, report);
     }
 
     private AlignmentMatch bestMatchFor(List<SemanticSourceReference> sources) {
