@@ -7,8 +7,11 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.SymbolId;
+import com.sahr.core.PropertyPolicyProvider;
 import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
+import com.sahr.semantic.model.InferencePolicy;
+import com.sahr.semantic.model.InferencePolicyStrength;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -95,6 +98,7 @@ public final class OntologyDefinedHead extends BaseHead {
             breakdown.put("base_weight", definition.baseWeight());
             breakdown.put("evidence_confidence", evidenceScore);
             breakdown.put("ontology_support", 1.0);
+            addPolicyBreakdown(breakdown, context, inferred.predicate());
             candidates.add(new ReasoningCandidate(
                     CandidateType.ASSERTION,
                     inferred,
@@ -468,6 +472,7 @@ public final class OntologyDefinedHead extends BaseHead {
                     .map(rule -> {
                         Map<String, Double> breakdown = new HashMap<>();
                         breakdown.put("rule_confidence", rule.confidence());
+                        addPolicyBreakdown(breakdown, context, rule.consequent().predicate());
                         double score = Math.min(1.0, rule.confidence());
                         return List.of(new ReasoningCandidate(
                                 CandidateType.ASSERTION,
@@ -514,6 +519,7 @@ public final class OntologyDefinedHead extends BaseHead {
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("rule_confidence", rule.confidence());
                 breakdown.put("evidence_confidence", antecedent.confidence());
+                addPolicyBreakdown(breakdown, context, consequent.predicate());
                 double score = Math.min(1.0, (rule.confidence() + antecedent.confidence()) / 2.0);
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ASSERTION,
@@ -527,6 +533,58 @@ public final class OntologyDefinedHead extends BaseHead {
             }
             return candidates;
         }
+    }
+
+    private static void addPolicyBreakdown(Map<String, Double> breakdown, HeadContext context, String predicate) {
+        if (context == null || predicate == null) {
+            return;
+        }
+        if (!(context.ontology() instanceof PropertyPolicyProvider provider)) {
+            return;
+        }
+        PolicySignal best = null;
+        best = pickBest(best, policySignalFor(provider.inversePolicy(predicate), "policy_rule_inverse"));
+        best = pickBest(best, policySignalFor(provider.symmetricPolicy(predicate), "policy_rule_symmetric"));
+        best = pickBest(best, policySignalFor(provider.transitivePolicy(predicate), "policy_rule_transitive"));
+        if (best == null) {
+            return;
+        }
+        breakdown.put("policy_strength", best.score());
+        breakdown.put("policy_applied", 1.0);
+        breakdown.put(best.ruleKey(), 1.0);
+    }
+
+    private static PolicySignal policySignalFor(java.util.Optional<InferencePolicy> policy, String ruleKey) {
+        if (policy == null || policy.isEmpty()) {
+            return null;
+        }
+        InferencePolicy value = policy.get();
+        if (!value.enabled() || value.strength() == InferencePolicyStrength.DISABLED) {
+            return null;
+        }
+        return new PolicySignal(ruleKey, policyScore(value.strength()));
+    }
+
+    private static PolicySignal pickBest(PolicySignal current, PolicySignal candidate) {
+        if (candidate == null) {
+            return current;
+        }
+        if (current == null) {
+            return candidate;
+        }
+        return candidate.score() > current.score() ? candidate : current;
+    }
+
+    private static double policyScore(InferencePolicyStrength strength) {
+        return switch (strength) {
+            case HARD -> 1.0;
+            case SOFT -> 0.9;
+            case RANKING_HINT -> 0.6;
+            case DISABLED -> 0.0;
+        };
+    }
+
+    private record PolicySignal(String ruleKey, double score) {
     }
 
     private static final class IntentClassifierExecutor implements OntologyHeadExecutor {
