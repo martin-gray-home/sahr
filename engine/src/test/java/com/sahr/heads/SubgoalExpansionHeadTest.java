@@ -3,84 +3,40 @@ package com.sahr.heads;
 import com.sahr.core.HeadContext;
 import com.sahr.core.InMemoryKnowledgeBase;
 import com.sahr.core.OntologyService;
+import com.sahr.core.PropertyPolicyProvider;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
-import com.sahr.core.WorkingMemory;
-import com.sahr.core.PropertyPolicyProvider;
 import com.sahr.ontology.InMemoryOntologyService;
 import com.sahr.semantic.model.InferencePolicy;
 import com.sahr.semantic.model.InferencePolicyStrength;
+import com.sahr.support.HeadOntologyTestSupport;
 import org.junit.jupiter.api.Test;
+
 import java.util.List;
 import java.util.Optional;
-import com.sahr.support.HeadOntologyTestSupport;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class GraphRetrievalHeadTest {
-    @Test
-    void resolvesNestedLocationChain() {
-        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
-        GraphRetrievalHead head = new GraphRetrievalHead();
-
-        graph.addAssertion(new RelationAssertion(
-                new SymbolId("entity:apple"),
-                "inside",
-                new SymbolId("entity:basket"),
-                0.9
-        ));
-        graph.addAssertion(new RelationAssertion(
-                new SymbolId("entity:basket"),
-                "locatedIn",
-                new SymbolId("entity:kitchen"),
-                0.9
-        ));
-        graph.addEntity(new com.sahr.core.EntityNode(
-                new SymbolId("entity:apple"),
-                "apple",
-                java.util.Set.of("concept:apple")
-        ));
-
-        List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
-                QueryGoal.where("concept:apple", "concept:location"),
-                graph,
-                ontology,
-                new WorkingMemory()
-        ));
-
-        assertTrue(candidates.stream().anyMatch(candidate ->
-                "entity:apple inside entity:basket".equals(candidate.payload())
-                        || "entity:apple in entity:basket".equals(candidate.payload())));
-    }
+class SubgoalExpansionHeadTest {
 
     @Test
-    void appliesInversePolicyBreakdownForWhere() {
+    void emitsPolicyBreakdownWhenInversePolicyPresent() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
         OntologyService ontology = new PolicyStubOntology(baseOntology);
-        GraphRetrievalHead head = new GraphRetrievalHead();
+        SubgoalExpansionHead head = new SubgoalExpansionHead();
 
-        graph.addAssertion(new RelationAssertion(
-                new SymbolId("entity:apple"),
-                "inside",
-                new SymbolId("entity:basket"),
-                0.9
-        ));
-        graph.addEntity(new com.sahr.core.EntityNode(
-                new SymbolId("entity:apple"),
-                "apple",
-                java.util.Set.of("concept:apple")
-        ));
+        SymbolId man = new SymbolId("entity:man");
+        SymbolId woman = new SymbolId("entity:woman");
+        graph.addEntity(new com.sahr.core.EntityNode(man, "man", Set.of("concept:person")));
+        graph.addEntity(new com.sahr.core.EntityNode(woman, "woman", Set.of("concept:person")));
+        graph.addAssertion(new RelationAssertion(man, "with", woman, 0.9));
 
-        List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
-                QueryGoal.where("concept:apple", "concept:location"),
-                graph,
-                ontology,
-                new WorkingMemory()
-        ));
+        QueryGoal query = QueryGoal.where("concept:person", "concept:location");
+        List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(query, graph, ontology));
 
         assertTrue(candidates.stream().anyMatch(candidate ->
                 candidate.scoreBreakdown() != null
@@ -115,37 +71,37 @@ class GraphRetrievalHeadTest {
         }
 
         @Override
-        public java.util.Set<String> getSuperclasses(String concept) {
+        public Set<String> getSuperclasses(String concept) {
             return delegate.getSuperclasses(concept);
         }
 
         @Override
-        public java.util.Set<String> getSubclasses(String concept) {
+        public Set<String> getSubclasses(String concept) {
             return delegate.getSubclasses(concept);
         }
 
         @Override
-        public java.util.Set<String> getSubproperties(String property) {
+        public Set<String> getSubproperties(String property) {
             return delegate.getSubproperties(property);
         }
 
         @Override
-        public java.util.Set<String> getObjectPropertyRanges(String property) {
+        public Set<String> getObjectPropertyRanges(String property) {
             return delegate.getObjectPropertyRanges(property);
         }
 
         @Override
-        public java.util.Set<String> getObjectPropertiesByLabel(String label) {
+        public Set<String> getObjectPropertiesByLabel(String label) {
             return delegate.getObjectPropertiesByLabel(label);
         }
 
         @Override
-        public java.util.Set<String> getEntityIrisByLabel(String label) {
+        public Set<String> getEntityIrisByLabel(String label) {
             return delegate.getEntityIrisByLabel(label);
         }
 
         @Override
-        public java.util.Set<String> getLabels(String iri) {
+        public Set<String> getLabels(String iri) {
             return delegate.getLabels(iri);
         }
 
@@ -155,12 +111,12 @@ class GraphRetrievalHeadTest {
         }
 
         @Override
-        public java.util.Set<String> getEntitiesWithAnnotation(String annotationIri, String value) {
+        public Set<String> getEntitiesWithAnnotation(String annotationIri, String value) {
             return delegate.getEntitiesWithAnnotation(annotationIri, value);
         }
 
         @Override
-        public java.util.Set<String> getObjectPropertyTargets(String subjectIri, String propertyIri) {
+        public Set<String> getObjectPropertyTargets(String subjectIri, String propertyIri) {
             return delegate.getObjectPropertyTargets(subjectIri, propertyIri);
         }
 

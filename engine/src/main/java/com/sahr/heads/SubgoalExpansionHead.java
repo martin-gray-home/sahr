@@ -6,10 +6,12 @@ import com.sahr.core.HeadOntology;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
+import com.sahr.core.PropertyPolicyProvider;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
+import com.sahr.semantic.model.InferencePolicyStrength;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,6 +50,7 @@ public final class SubgoalExpansionHead extends BaseHead {
         if (coLocationPredicates.isEmpty()) {
             return List.of();
         }
+        boolean inversePolicyApplied = inversePolicyApplied(ontology, coLocationPredicates);
         List<EntityNode> targets = findEntitiesByType(graph, ontology, requestedType);
         if (targets.isEmpty()) {
             return List.of();
@@ -85,6 +88,7 @@ public final class SubgoalExpansionHead extends BaseHead {
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("graph_confidence", assertion.confidence());
                 breakdown.put("ontology_support", 0.6);
+                annotatePolicyBreakdown(breakdown, ontology, assertion.predicate(), inversePolicyApplied);
                 double score = normalize(breakdown.values());
 
                 candidates.add(new ReasoningCandidate(
@@ -100,6 +104,46 @@ public final class SubgoalExpansionHead extends BaseHead {
         }
 
         return candidates;
+    }
+
+    private void annotatePolicyBreakdown(Map<String, Double> breakdown,
+                                         OntologyService ontology,
+                                         String predicate,
+                                         boolean inversePolicyApplied) {
+        if (!(ontology instanceof PropertyPolicyProvider provider)) {
+            return;
+        }
+        if (inversePolicyApplied) {
+            InferencePolicyStrength strength = provider.inversePolicy(predicate)
+                    .map(com.sahr.semantic.model.InferencePolicy::strength)
+                    .orElse(null);
+            if (strength != null) {
+                breakdown.put("policy_strength", policyScore(strength));
+                breakdown.put("policy_applied", 1.0);
+                breakdown.put("policy_rule_inverse", 1.0);
+            }
+        }
+    }
+
+    private boolean inversePolicyApplied(OntologyService ontology, Set<String> predicates) {
+        if (!(ontology instanceof PropertyPolicyProvider provider)) {
+            return false;
+        }
+        for (String predicate : predicates) {
+            if (provider.inversePolicy(predicate).isPresent()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private double policyScore(InferencePolicyStrength strength) {
+        return switch (strength) {
+            case HARD -> 1.0;
+            case SOFT -> 0.9;
+            case RANKING_HINT -> 0.6;
+            case DISABLED -> 0.0;
+        };
     }
 
     private List<EntityNode> findEntitiesByType(KnowledgeBase graph, OntologyService ontology, String requestedType) {

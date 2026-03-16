@@ -6,6 +6,7 @@ import com.sahr.core.HeadOntology;
 import com.sahr.core.HeadContext;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
+import com.sahr.core.PropertyPolicyProvider;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
@@ -13,6 +14,7 @@ import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
 import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
+import com.sahr.semantic.model.InferencePolicyStrength;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -64,6 +66,9 @@ public final class GraphRetrievalHead extends BaseHead {
                 ontology, HeadOntology.CONTAINMENT);
         java.util.Set<String> locationPredicates = HeadOntology.expandFamilyWithInversesTransitive(
                 ontology, HeadOntology.LOCATION_TRANSFER);
+        boolean inversePolicyApplied = inversePolicyApplied(ontology, surfacePredicates)
+                || inversePolicyApplied(ontology, containmentPredicates)
+                || inversePolicyApplied(ontology, locationPredicates);
         java.util.Set<String> directPredicates = new java.util.HashSet<>();
         directPredicates.addAll(surfacePredicates);
         directPredicates.addAll(containmentPredicates);
@@ -110,6 +115,7 @@ public final class GraphRetrievalHead extends BaseHead {
             breakdown.put("where_chain_length", 1.0);
             annotateFamilyBreakdown(breakdown, assertion.predicate(), surfacePredicates,
                     containmentPredicates, locationPredicates, expandedCoLocation);
+            annotatePolicyBreakdown(breakdown, ontology, assertion.predicate(), inversePolicyApplied);
 
             String answer = assertion.subject() + " " + displayPredicate(assertion.predicate()) + " " + assertion.object();
 
@@ -125,8 +131,7 @@ public final class GraphRetrievalHead extends BaseHead {
             breakdowns.add(breakdown);
         }
 
-        for (String predicate : locationPredicates) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicate)) {
+        for (RelationAssertion assertion : locationAssertions) {
                 boolean typeMatch = matchesType(graph, ontology, compatibility, assertion,
                         requestedType, canonicalRequestedType, requestedEntity);
                 if (!typeMatch) {
@@ -165,6 +170,7 @@ public final class GraphRetrievalHead extends BaseHead {
                 breakdown.put("where_chain_length", (double) path.size());
                 annotateFamilyBreakdown(breakdown, path.get(path.size() - 1).predicate(), surfacePredicates,
                         containmentPredicates, locationPredicates, expandedCoLocation);
+                annotatePolicyBreakdown(breakdown, ontology, path.get(path.size() - 1).predicate(), inversePolicyApplied);
 
                 String answer = assertion.subject() + " " + displayPredicate(path.get(path.size() - 1).predicate()) + " " + terminal;
 
@@ -178,7 +184,6 @@ public final class GraphRetrievalHead extends BaseHead {
                         path.size()
                 ));
                 breakdowns.add(breakdown);
-            }
         }
 
         for (RelationAssertion relation : graph.getAllAssertions()) {
@@ -228,6 +233,7 @@ public final class GraphRetrievalHead extends BaseHead {
                 breakdown.put("where_chain_length", 1.0);
                 annotateFamilyBreakdown(breakdown, location.predicate(), surfacePredicates,
                         containmentPredicates, locationPredicates, expandedCoLocation);
+                annotatePolicyBreakdown(breakdown, ontology, location.predicate(), inversePolicyApplied);
 
                 String answer = inferredSubject + " " + displayPredicate(location.predicate()) + " " + location.object();
                 candidates.add(new ReasoningCandidate(
@@ -286,6 +292,46 @@ public final class GraphRetrievalHead extends BaseHead {
         if (coLocationPredicates.contains(predicate)) {
             breakdown.put("where_family_colocation", 1.0);
         }
+    }
+
+    private void annotatePolicyBreakdown(Map<String, Double> breakdown,
+                                         OntologyService ontology,
+                                         String predicate,
+                                         boolean inversePolicyApplied) {
+        if (!(ontology instanceof PropertyPolicyProvider provider)) {
+            return;
+        }
+        if (inversePolicyApplied) {
+            InferencePolicyStrength strength = provider.inversePolicy(predicate)
+                    .map(com.sahr.semantic.model.InferencePolicy::strength)
+                    .orElse(null);
+            if (strength != null) {
+                breakdown.put("policy_strength", policyScore(strength));
+                breakdown.put("policy_applied", 1.0);
+                breakdown.put("policy_rule_inverse", 1.0);
+            }
+        }
+    }
+
+    private boolean inversePolicyApplied(OntologyService ontology, java.util.Set<String> predicates) {
+        if (!(ontology instanceof PropertyPolicyProvider provider)) {
+            return false;
+        }
+        for (String predicate : predicates) {
+            if (provider.inversePolicy(predicate).isPresent()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private double policyScore(InferencePolicyStrength strength) {
+        return switch (strength) {
+            case HARD -> 1.0;
+            case SOFT -> 0.9;
+            case RANKING_HINT -> 0.6;
+            case DISABLED -> 0.0;
+        };
     }
 
     private Map<SymbolId, List<RelationAssertion>> buildAdjacency(KnowledgeBase graph, java.util.Set<String> locationPredicates) {
