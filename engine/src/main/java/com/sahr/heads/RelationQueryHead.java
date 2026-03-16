@@ -13,6 +13,8 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
+import com.sahr.semantic.model.InferencePolicy;
+import com.sahr.semantic.model.InferencePolicyStrength;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -492,22 +494,28 @@ public final class RelationQueryHead extends BaseHead {
 
     private List<PredicateMatch> expandPredicateMatches(String predicate, OntologyService ontology) {
         List<PredicateMatch> expanded = new ArrayList<>();
-        expanded.add(new PredicateMatch(predicate, MatchType.DIRECT));
-        if (isSymmetricAllowed(ontology, predicate)) {
-            expanded.add(new PredicateMatch(predicate, MatchType.SYMMETRIC));
+        expanded.add(new PredicateMatch(predicate, MatchType.DIRECT, null));
+        InferencePolicy symmetricPolicy = policyForSymmetric(ontology, predicate);
+        if (symmetricPolicy != null && symmetricPolicy.strength() != InferencePolicyStrength.DISABLED) {
+            expanded.add(new PredicateMatch(predicate, MatchType.SYMMETRIC, symmetricPolicy.strength()));
+        } else if (isSymmetricAllowed(ontology, predicate)) {
+            expanded.add(new PredicateMatch(predicate, MatchType.SYMMETRIC, null));
         }
         List<String> aliases = predicateAliases.getOrDefault(predicate, List.of());
         for (String alias : aliases) {
-            expanded.add(new PredicateMatch(alias, MatchType.DIRECT));
+            expanded.add(new PredicateMatch(alias, MatchType.DIRECT, null));
         }
         if (isIri(predicate)) {
             for (String subproperty : ontology.getSubproperties(predicate)) {
-                expanded.add(new PredicateMatch(subproperty, MatchType.DIRECT));
+                expanded.add(new PredicateMatch(subproperty, MatchType.DIRECT, null));
             }
+            InferencePolicy inversePolicy = policyForInverse(ontology, predicate);
             inverseProperty(ontology, predicate).ifPresent(inv -> {
-                expanded.add(new PredicateMatch(inv, MatchType.INVERSE));
+                expanded.add(new PredicateMatch(inv, MatchType.INVERSE,
+                        inversePolicy == null ? null : inversePolicy.strength()));
                 for (String subproperty : ontology.getSubproperties(inv)) {
-                    expanded.add(new PredicateMatch(subproperty, MatchType.INVERSE));
+                    expanded.add(new PredicateMatch(subproperty, MatchType.INVERSE,
+                            inversePolicy == null ? null : inversePolicy.strength()));
                 }
             });
             return expanded;
@@ -515,7 +523,7 @@ public final class RelationQueryHead extends BaseHead {
         java.util.Set<String> locationFamily = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
         if (locationFamily.contains(predicate)) {
             for (String relation : locationFamily) {
-                expanded.add(new PredicateMatch(relation, MatchType.DIRECT));
+                expanded.add(new PredicateMatch(relation, MatchType.DIRECT, null));
             }
         }
         return expanded;
@@ -533,6 +541,20 @@ public final class RelationQueryHead extends BaseHead {
             return provider.inverseProperty(predicate);
         }
         return ontology.getInverseProperty(predicate);
+    }
+
+    private InferencePolicy policyForSymmetric(OntologyService ontology, String predicate) {
+        if (ontology instanceof PropertyPolicyProvider provider) {
+            return provider.symmetricPolicy(predicate).orElse(null);
+        }
+        return null;
+    }
+
+    private InferencePolicy policyForInverse(OntologyService ontology, String predicate) {
+        if (ontology instanceof PropertyPolicyProvider provider) {
+            return provider.inversePolicy(predicate).orElse(null);
+        }
+        return null;
     }
 
     private List<ReasoningCandidate> evaluateYesNo(QueryGoal query,
@@ -628,7 +650,7 @@ public final class RelationQueryHead extends BaseHead {
         INVERSE
     }
 
-    private record PredicateMatch(String predicate, MatchType type) {
+    private record PredicateMatch(String predicate, MatchType type, InferencePolicyStrength policyStrength) {
         boolean matchesSubject(RelationAssertion assertion, SymbolId subject) {
             return isSwapped() ? assertion.object().equals(subject) : assertion.subject().equals(subject);
         }
@@ -646,7 +668,15 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         double queryMatchScore() {
-            return type == MatchType.INVERSE ? 0.9 : 1.0;
+            if (policyStrength == null) {
+                return type == MatchType.INVERSE ? 0.9 : 1.0;
+            }
+            return switch (policyStrength) {
+                case HARD -> 1.0;
+                case SOFT -> 0.9;
+                case RANKING_HINT -> 0.6;
+                case DISABLED -> 0.0;
+            };
         }
     }
 
