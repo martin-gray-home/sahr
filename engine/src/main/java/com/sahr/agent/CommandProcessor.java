@@ -111,10 +111,34 @@ public final class CommandProcessor {
                 candidate.inferenceDepth(),
                 candidate.producedBy()
         );
+        String policy = policyLabel(candidate.scoreBreakdown()).map(label -> " policy=" + label).orElse("");
         if (!verbose) {
-            return base + scores;
+            return base + scores + policy;
         }
-        return base + scores;
+        return base + scores + policy;
+    }
+
+    private Optional<String> policyLabel(Map<String, Double> breakdown) {
+        if (breakdown == null || breakdown.isEmpty()) {
+            return Optional.empty();
+        }
+        Double strength = breakdown.get("policy_strength");
+        if (strength == null) {
+            return Optional.empty();
+        }
+        if (strength >= 0.95) {
+            return Optional.of("HARD");
+        }
+        if (strength >= 0.85) {
+            return Optional.of("SOFT");
+        }
+        if (strength >= 0.55) {
+            return Optional.of("RANKING_HINT");
+        }
+        if (strength == 0.0) {
+            return Optional.of("DISABLED");
+        }
+        return Optional.of("CUSTOM");
     }
 
     private String formatQuery(QueryGoal query) {

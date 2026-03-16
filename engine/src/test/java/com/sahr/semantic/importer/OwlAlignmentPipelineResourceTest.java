@@ -43,6 +43,8 @@ class OwlAlignmentPipelineResourceTest {
 
         List<PropertyPolicyDecision> decisions = result.propertyPolicyDecisions();
         assertEquals(2, decisions.size());
+        assertEquals(3, result.propertyPolicyReport().countsByStrength()
+                .get(com.sahr.semantic.model.InferencePolicyStrength.SOFT));
         Optional<PropertyPolicyDecision> nearDecision = decisions.stream()
                 .filter(decision -> decision.propertyIri().equals("https://sahr.ai/ontology/relations#near"))
                 .findFirst();

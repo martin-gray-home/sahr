@@ -136,6 +136,10 @@ public final class RelationQueryHead extends BaseHead {
                 breakdown.put("entity_type_match", typeMatch);
                 breakdown.put("graph_confidence", graphConfidence);
                 breakdown.put("working_memory_focus", memoryFocus);
+                predicateMatch.policyStrengthScore().ifPresent(value -> {
+                    breakdown.put("policy_strength", value);
+                    breakdown.put("policy_applied", 1.0);
+                });
 
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ANSWER,
@@ -240,7 +244,7 @@ public final class RelationQueryHead extends BaseHead {
                     continue;
                 }
 
-                double queryMatch = 0.85;
+                double queryMatch = predicateMatch.policyStrengthScore().orElse(0.85);
                 double typeMatch = expectedType == null ? 0.5 : 1.0;
                 double graphConfidence = assertion.confidence();
                 double memoryFocus = memoryFocus(memory, anchor, null, answer);
@@ -251,6 +255,10 @@ public final class RelationQueryHead extends BaseHead {
                 breakdown.put("entity_type_match", typeMatch);
                 breakdown.put("graph_confidence", graphConfidence);
                 breakdown.put("working_memory_focus", memoryFocus);
+                predicateMatch.policyStrengthScore().ifPresent(value -> {
+                    breakdown.put("policy_strength", value);
+                    breakdown.put("policy_applied", 1.0);
+                });
 
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ANSWER,
@@ -572,7 +580,8 @@ public final class RelationQueryHead extends BaseHead {
                 boolean subjectMatch = predicateMatch.matchesSubject(assertion, subject);
                 boolean objectMatch = predicateMatch.matchesObject(assertion, object);
                 if (subjectMatch && objectMatch) {
-                    return List.of(buildYesAnswer(query, assertion, predicateMatch.isInverse(), subject, object));
+                    return List.of(buildYesAnswer(query, assertion, predicateMatch.isInverse(),
+                            subject, object, predicateMatch.policyStrengthScore().orElse(null)));
                 }
             }
         }
@@ -583,7 +592,8 @@ public final class RelationQueryHead extends BaseHead {
                                               RelationAssertion assertion,
                                               boolean inverseMatch,
                                               SymbolId subject,
-                                              SymbolId object) {
+                                              SymbolId object,
+                                              Double policyStrength) {
         String subjectText = query.subjectText() != null ? query.subjectText() : subjectFromAssertion(assertion);
         String objectText = query.objectText() != null ? query.objectText() : objectFromAssertion(assertion);
         String predicateText = query.predicateText() != null ? query.predicateText() : predicateFromAssertion(assertion);
@@ -601,6 +611,10 @@ public final class RelationQueryHead extends BaseHead {
         Map<String, Double> breakdown = new HashMap<>();
         breakdown.put("query_match", 1.0);
         breakdown.put("graph_confidence", assertion.confidence());
+        if (policyStrength != null) {
+            breakdown.put("policy_strength", policyStrength);
+            breakdown.put("policy_applied", 1.0);
+        }
         double score = normalize(1.0, assertion.confidence());
 
         return new ReasoningCandidate(
@@ -677,6 +691,13 @@ public final class RelationQueryHead extends BaseHead {
                 case RANKING_HINT -> 0.6;
                 case DISABLED -> 0.0;
             };
+        }
+
+        java.util.Optional<Double> policyStrengthScore() {
+            if (policyStrength == null) {
+                return java.util.Optional.empty();
+            }
+            return java.util.Optional.of(queryMatchScore());
         }
     }
 
