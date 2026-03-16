@@ -6,6 +6,8 @@ import com.sahr.semantic.alignment.AlignmentInput;
 import com.sahr.semantic.alignment.AlignmentOutput;
 import com.sahr.semantic.alignment.OntologyBackedSemanticAlignmentCompiler;
 import com.sahr.semantic.alignment.SemanticAlignmentCompiler;
+import com.sahr.semantic.policy.PropertyPolicyDecision;
+import com.sahr.semantic.policy.PropertyPolicyEvaluator;
 import org.semanticweb.owlapi.model.OWLOntology;
 
 import java.nio.file.Path;
@@ -16,10 +18,12 @@ import java.util.Objects;
 public final class OwlAlignmentPipeline {
     private final OwlSemanticImporter importer;
     private final SemanticAlignmentCompiler compiler;
+    private final PropertyPolicyEvaluator policyEvaluator;
 
     public OwlAlignmentPipeline(OwlSemanticImporter importer, SemanticAlignmentCompiler compiler) {
         this.importer = Objects.requireNonNull(importer, "importer");
         this.compiler = Objects.requireNonNull(compiler, "compiler");
+        this.policyEvaluator = new PropertyPolicyEvaluator();
     }
 
     public static OwlAlignmentPipeline defaultPipeline() {
@@ -33,7 +37,8 @@ public final class OwlAlignmentPipeline {
         OwlImportResult imported = importer.importOntology(ontology, sourceName);
         AlignmentInput input = imported.input();
         AlignmentOutput aligned = compiler.compile(input);
-        return new OwlAlignmentResult(aligned, imported.report());
+        List<PropertyPolicyDecision> decisions = policyEvaluator.evaluate(aligned);
+        return new OwlAlignmentResult(aligned, imported.report(), decisions);
     }
 
     public OwlAlignmentResult runFromClasspath(List<String> resources, String sourceName) {

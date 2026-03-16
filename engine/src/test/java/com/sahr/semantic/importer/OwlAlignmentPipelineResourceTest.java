@@ -4,7 +4,6 @@ import com.sahr.semantic.alignment.AlignmentOutput;
 import com.sahr.semantic.model.AlignmentConfidence;
 import com.sahr.semantic.model.SemanticNode;
 import com.sahr.semantic.policy.PropertyPolicyDecision;
-import com.sahr.semantic.policy.PropertyPolicyEvaluator;
 import com.sahr.semantic.policy.PropertyPolicyType;
 import org.junit.jupiter.api.Test;
 
@@ -42,8 +41,7 @@ class OwlAlignmentPipelineResourceTest {
         assertEquals("proximity", nearNode.get().familyId());
         assertEquals(AlignmentConfidence.STRONG, nearNode.get().confidence());
 
-        PropertyPolicyEvaluator evaluator = new PropertyPolicyEvaluator();
-        List<PropertyPolicyDecision> decisions = evaluator.evaluate(output);
+        List<PropertyPolicyDecision> decisions = result.propertyPolicyDecisions();
         assertEquals(2, decisions.size());
         Optional<PropertyPolicyDecision> nearDecision = decisions.stream()
                 .filter(decision -> decision.propertyIri().equals("https://sahr.ai/ontology/relations#near"))
