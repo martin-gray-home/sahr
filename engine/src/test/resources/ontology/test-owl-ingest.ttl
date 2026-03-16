@@ -1,0 +1,14 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://example.org/ingest-test>
+    a owl:Ontology ;
+    rdfs:label "OWL Ingest Test Ontology" .
+
+<https://en-word.net/id/oewn-00007846-n>
+    a owl:Class ;
+    rdfs:label "person" .
+
+<https://sahr.ai/ontology/relations#near>
+    a owl:ObjectProperty ;
+    rdfs:label "near" .
