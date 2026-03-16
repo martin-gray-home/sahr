@@ -3,6 +3,9 @@ package com.sahr.semantic.importer;
 import com.sahr.semantic.alignment.AlignmentOutput;
 import com.sahr.semantic.model.AlignmentConfidence;
 import com.sahr.semantic.model.SemanticNode;
+import com.sahr.semantic.policy.PropertyPolicyDecision;
+import com.sahr.semantic.policy.PropertyPolicyEvaluator;
+import com.sahr.semantic.policy.PropertyPolicyType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -22,7 +25,7 @@ class OwlAlignmentPipelineResourceTest {
         );
 
         assertEquals(1, result.report().classCount());
-        assertEquals(1, result.report().objectPropertyCount());
+        assertEquals(2, result.report().objectPropertyCount());
 
         AlignmentOutput output = result.alignment();
         Optional<SemanticNode> personNode = output.canonicalNodes().stream()
@@ -38,5 +41,21 @@ class OwlAlignmentPipelineResourceTest {
         assertTrue(nearNode.isPresent());
         assertEquals("proximity", nearNode.get().familyId());
         assertEquals(AlignmentConfidence.STRONG, nearNode.get().confidence());
+
+        PropertyPolicyEvaluator evaluator = new PropertyPolicyEvaluator();
+        List<PropertyPolicyDecision> decisions = evaluator.evaluate(output);
+        assertEquals(2, decisions.size());
+        Optional<PropertyPolicyDecision> nearDecision = decisions.stream()
+                .filter(decision -> decision.propertyIri().equals("https://sahr.ai/ontology/relations#near"))
+                .findFirst();
+        assertTrue(nearDecision.isPresent());
+        assertEquals(AlignmentConfidence.STRONG, nearDecision.get().confidence());
+        assertEquals(3, nearDecision.get().rules().size());
+        assertTrue(nearDecision.get().rules().stream()
+                .anyMatch(rule -> rule.type() == PropertyPolicyType.SYMMETRIC));
+        assertTrue(nearDecision.get().rules().stream()
+                .anyMatch(rule -> rule.type() == PropertyPolicyType.TRANSITIVE));
+        assertTrue(nearDecision.get().rules().stream()
+                .anyMatch(rule -> rule.type() == PropertyPolicyType.INVERSE));
     }
 }

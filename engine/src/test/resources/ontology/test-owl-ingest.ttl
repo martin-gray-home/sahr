@@ -10,5 +10,10 @@
     rdfs:label "person" .
 
 <https://sahr.ai/ontology/relations#near>
-    a owl:ObjectProperty ;
+    a owl:ObjectProperty, owl:SymmetricProperty, owl:TransitiveProperty ;
+    owl:inverseOf <https://sahr.ai/ontology/relations#nearInverse> ;
     rdfs:label "near" .
+
+<https://sahr.ai/ontology/relations#nearInverse>
+    a owl:ObjectProperty ;
+    rdfs:label "near inverse" .

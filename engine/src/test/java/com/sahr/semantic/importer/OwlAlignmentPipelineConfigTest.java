@@ -22,7 +22,7 @@ class OwlAlignmentPipelineConfigTest {
         AlignmentOutput output = result.alignment();
 
         assertEquals(1, result.report().classCount());
-        assertEquals(1, result.report().objectPropertyCount());
+        assertEquals(2, result.report().objectPropertyCount());
 
         Optional<SemanticNode> personNode = output.canonicalNodes().stream()
                 .filter(node -> node.sources().get(0).sourceId().equals("https://en-word.net/id/oewn-00007846-n"))
