@@ -616,6 +616,16 @@ public final class SahrAgent {
         return String.format(java.util.Locale.ROOT, "%.3f", value);
     }
 
+    private void logAssertionAdded(String source, RelationAssertion assertion, String producedBy) {
+        if (!diagnosticsEnabled() || assertion == null) {
+            return;
+        }
+        String origin = producedBy == null ? "unknown" : producedBy;
+        logger.info(() -> "assertion_added source=" + source
+                + " producedBy=" + origin
+                + " assertion=" + assertion);
+    }
+
     private record QueryCandidate(String source, String producedBy, double score, QueryGoal goal) {
     }
 
@@ -1460,6 +1470,9 @@ public final class SahrAgent {
                 upsertEntityType(assertion.subject(), assertion.object().value());
             }
             if (added) {
+                logAssertionAdded("ingest", assertion, "statement");
+            }
+            if (added) {
                 runPropagationClosure();
             }
             logger.fine(() -> "Applied assertion payload: " + payload);
@@ -1494,6 +1507,9 @@ public final class SahrAgent {
                 );
                 boolean added = addAssertionIfNew(assertion);
                 addedAny = addedAny || added;
+                if (added) {
+                    logAssertionAdded("ingest", assertion, "statement");
+                }
                 if (PREDICATE_TYPE.equals(statement.predicate())) {
                     upsertEntityType(subject, statement.object().value());
                 }
@@ -2851,6 +2867,7 @@ public final class SahrAgent {
                 if (addAssertionIfNew(assertion)) {
                     addedThisRound++;
                     totalAdded++;
+                    logAssertionAdded("propagation", assertion, candidate.producedBy());
                 }
             }
             if (addedThisRound == 0) {
