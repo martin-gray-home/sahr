@@ -98,4 +98,105 @@ class SemanticAlignmentCompilerTest {
         assertEquals("person-like", output.canonicalNodes().get(0).familyId());
         assertEquals(AlignmentConfidence.STRONG, output.canonicalNodes().get(0).confidence());
     }
+
+    @Test
+    void alignsWordNetContainerToCanonicalConceptFamily() {
+        SemanticSourceReference source = new SemanticSourceReference(
+                "WordNet",
+                "https://en-word.net/id/oewn-03099154-n",
+                "container",
+                0.9
+        );
+
+        SemanticNode node = new SemanticNode(
+                "concept:container",
+                "container",
+                "unknown",
+                SemanticNodeType.CONCEPT,
+                AlignmentConfidence.UNRESOLVED,
+                List.of(),
+                List.of(source)
+        );
+
+        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of());
+        SemanticAlignmentCompiler compiler = OntologyBackedSemanticAlignmentCompiler.loadDefault();
+
+        AlignmentOutput output = compiler.compile(input);
+
+        assertEquals("container-like", output.canonicalNodes().get(0).familyId());
+        assertEquals(AlignmentConfidence.STRONG, output.canonicalNodes().get(0).confidence());
+    }
+
+    @Test
+    void alignsWordNetThingAndArtifactToObjectLike() {
+        SemanticSourceReference thingSource = new SemanticSourceReference(
+                "WordNet",
+                "https://en-word.net/id/oewn-00002452-n",
+                "thing",
+                0.9
+        );
+        SemanticSourceReference artifactSource = new SemanticSourceReference(
+                "WordNet",
+                "https://en-word.net/id/oewn-00022119-n",
+                "artifact",
+                0.9
+        );
+
+        SemanticNode thingNode = new SemanticNode(
+                "concept:thing",
+                "thing",
+                "unknown",
+                SemanticNodeType.CONCEPT,
+                AlignmentConfidence.UNRESOLVED,
+                List.of(),
+                List.of(thingSource)
+        );
+        SemanticNode artifactNode = new SemanticNode(
+                "concept:artifact",
+                "artifact",
+                "unknown",
+                SemanticNodeType.CONCEPT,
+                AlignmentConfidence.UNRESOLVED,
+                List.of(),
+                List.of(artifactSource)
+        );
+
+        AlignmentInput input = new AlignmentInput(List.of(thingNode, artifactNode), List.of(), List.of());
+        SemanticAlignmentCompiler compiler = OntologyBackedSemanticAlignmentCompiler.loadDefault();
+
+        AlignmentOutput output = compiler.compile(input);
+
+        assertEquals("object-like", output.canonicalNodes().get(0).familyId());
+        assertEquals(AlignmentConfidence.STRONG, output.canonicalNodes().get(0).confidence());
+        assertEquals("object-like", output.canonicalNodes().get(1).familyId());
+        assertEquals(AlignmentConfidence.STRONG, output.canonicalNodes().get(1).confidence());
+    }
+
+    @Test
+    void alignsSahrRelationsToCanonicalFamilies() {
+        SemanticSourceReference source = new SemanticSourceReference(
+                "sahr-relations",
+                "https://sahr.ai/ontology/relations#near",
+                "near",
+                1.0
+        );
+
+        SemanticNode node = new SemanticNode(
+                "relation:near",
+                "near",
+                "unknown",
+                SemanticNodeType.RELATION,
+                AlignmentConfidence.UNRESOLVED,
+                List.of(),
+                List.of(source)
+        );
+
+        AlignmentInput input = new AlignmentInput(List.of(node), List.of(), List.of());
+        SemanticAlignmentCompiler compiler = OntologyBackedSemanticAlignmentCompiler.loadDefault();
+
+        AlignmentOutput output = compiler.compile(input);
+
+        assertEquals("proximity", output.canonicalNodes().get(0).familyId());
+        assertEquals(AlignmentConfidence.STRONG, output.canonicalNodes().get(0).confidence());
+    }
 }

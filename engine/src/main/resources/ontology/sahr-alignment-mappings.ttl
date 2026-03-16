@@ -89,6 +89,176 @@ rel:locationTransferRelation
     ann:alignmentConfidence "weak" ;
     ann:alignmentRationale "SAHR relations location transfer" .
 
+rel:locatedIn
+    ann:alignedFamily sahr:containment ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations located in" .
+
+rel:inside
+    ann:alignedFamily sahr:containment ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations inside" .
+
+rel:in
+    ann:alignedFamily sahr:containment ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations in" .
+
+rel:at
+    ann:alignedFamily sahr:motion ;
+    ann:alignmentConfidence "weak" ;
+    ann:alignmentRationale "SAHR relations at" .
+
+rel:beside
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations beside" .
+
+rel:alongside
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations alongside" .
+
+rel:nextTo
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations next to" .
+
+rel:above
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations above" .
+
+rel:below
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations below" .
+
+rel:under
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations under" .
+
+rel:opposite
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations opposite" .
+
+rel:partOf
+    ann:alignedFamily sahr:partWhole ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations part of" .
+
+rel:hold
+    ann:alignedFamily sahr:wearingCarryingHolding ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations hold" .
+
+rel:carry
+    ann:alignedFamily sahr:wearingCarryingHolding ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations carry" .
+
+rel:wear
+    ann:alignedFamily sahr:wearingCarryingHolding ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations wear" .
+
+rel:wornBy
+    ann:alignedFamily sahr:wearingCarryingHolding ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations worn by" .
+
+rel:possess
+    ann:alignedFamily sahr:possession ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations possess" .
+
+rel:have
+    ann:alignedFamily sahr:possession ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations have" .
+
+rel:with
+    ann:alignedFamily sahr:companionshipAssociation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations with" .
+
+rel:hasAttribute
+    ann:alignedFamily sahr:attributeRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations has attribute" .
+
+rel:poweredBy
+    ann:alignedFamily sahr:dependencyPower ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations powered by" .
+
+rel:chargedBy
+    ann:alignedFamily sahr:dependencyPower ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations charged by" .
+
+rel:control
+    ann:alignedFamily sahr:dependencyPower ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations control" .
+
+rel:indicate
+    ann:alignedFamily sahr:communication ;
+    ann:alignmentConfidence "weak" ;
+    ann:alignmentRationale "SAHR relations indicate" .
+
+rel:restore
+    ann:alignedFamily sahr:causalRelation ;
+    ann:alignmentConfidence "weak" ;
+    ann:alignmentRationale "SAHR relations restore" .
+
+rel:backupFor
+    ann:alignedFamily sahr:dependencyPower ;
+    ann:alignmentConfidence "weak" ;
+    ann:alignmentRationale "SAHR relations backup for" .
+
+rel:fail
+    ann:alignedFamily sahr:causalRelation ;
+    ann:alignmentConfidence "weak" ;
+    ann:alignmentRationale "SAHR relations fail" .
+
+rel:causalRelation
+    ann:alignedFamily sahr:causalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations causal relation" .
+
+rel:cause
+    ann:alignedFamily sahr:causalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations cause" .
+
+rel:causedBy
+    ann:alignedFamily sahr:causalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations caused by" .
+
+rel:temporalRelation
+    ann:alignedFamily sahr:temporalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations temporal relation" .
+
+rel:before
+    ann:alignedFamily sahr:temporalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations before" .
+
+rel:after
+    ann:alignedFamily sahr:temporalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations after" .
+
+rel:during
+    ann:alignedFamily sahr:temporalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations during" .
+
 wnid:oewn-00007846-n
     ann:alignedFamily sahr:personLike ;
     ann:alignmentConfidence "strong" ;
@@ -108,3 +278,38 @@ wnid:oewn-04112987-n
     ann:alignedFamily sahr:roomLike ;
     ann:alignmentConfidence "strong" ;
     ann:alignmentRationale "WordNet room" .
+
+wnid:oewn-03099154-n
+    ann:alignedFamily sahr:containerLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet container" .
+
+wnid:oewn-03423924-n
+    ann:alignedFamily sahr:garmentLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet garment" .
+
+wnid:oewn-00002684-n
+    ann:alignedFamily sahr:objectLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet object" .
+
+wnid:oewn-00002452-n
+    ann:alignedFamily sahr:objectLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet thing" .
+
+wnid:oewn-00022119-n
+    ann:alignedFamily sahr:objectLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet artifact" .
+
+wnid:oewn-02691302-n
+    ann:alignedFamily sahr:supportSurfaceLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet surface" .
+
+wnid:oewn-00015568-n
+    ann:alignedFamily sahr:animate ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet animal" .
