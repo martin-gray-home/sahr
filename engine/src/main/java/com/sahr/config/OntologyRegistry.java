@@ -10,6 +10,10 @@ import com.sahr.ontology.OntologyAnnotationValidator;
 import com.sahr.ontology.OwlApiOntologyService;
 import com.sahr.ontology.VectorLexicalMapper;
 import com.sahr.ontology.OnnxTextVectorizer;
+import com.sahr.semantic.importer.OwlAlignmentPipeline;
+import com.sahr.semantic.importer.OwlAlignmentResult;
+import com.sahr.semantic.policy.PolicyAwareOntologyService;
+import com.sahr.semantic.policy.PropertyPolicyRegistry;
 import org.semanticweb.owlapi.model.OWLOntology;
 
 import java.util.ArrayList;
@@ -36,8 +40,12 @@ public final class OntologyRegistry {
         OWLOntology ontology = OntologyLoader.loadFromClasspath(resources);
         new OntologyAnnotationValidator(ontology).validate();
         OntologyService delegate = new OwlApiOntologyService(ontology);
+        OwlAlignmentPipeline pipeline = OwlAlignmentPipeline.defaultPipeline();
+        OwlAlignmentResult aligned = pipeline.run(ontology, "runtime-ontology");
+        PropertyPolicyRegistry policyRegistry = PropertyPolicyRegistry.fromDecisions(aligned.propertyPolicyDecisions());
+        OntologyService policyAware = new PolicyAwareOntologyService(delegate, policyRegistry);
         logger.info("Ontology loaded. Building cached view.");
-        OntologyService cached = new CachedOntologyService(delegate);
+        OntologyService cached = new CachedOntologyService(policyAware);
         TermMapper mapper = buildTermMapper(config, ontology);
         return new OntologyContext(cached, mapper, ontology);
     }

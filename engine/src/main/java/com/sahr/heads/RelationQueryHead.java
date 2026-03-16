@@ -6,6 +6,7 @@ import com.sahr.core.HeadContext;
 import com.sahr.core.HeadOntology;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
+import com.sahr.core.PropertyPolicyProvider;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
@@ -146,7 +147,7 @@ public final class RelationQueryHead extends BaseHead {
             }
         }
 
-        if (candidates.isEmpty() && subject == null && object != null && ontology.isSymmetricProperty(predicate)) {
+        if (candidates.isEmpty() && subject == null && object != null && isSymmetricAllowed(ontology, predicate)) {
             candidates.addAll(evaluateSymmetricFallback(graph, ontology, compatibility, memory, object, predicate, expectedType));
         }
 
@@ -492,7 +493,7 @@ public final class RelationQueryHead extends BaseHead {
     private List<PredicateMatch> expandPredicateMatches(String predicate, OntologyService ontology) {
         List<PredicateMatch> expanded = new ArrayList<>();
         expanded.add(new PredicateMatch(predicate, MatchType.DIRECT));
-        if (ontology.isSymmetricProperty(predicate)) {
+        if (isSymmetricAllowed(ontology, predicate)) {
             expanded.add(new PredicateMatch(predicate, MatchType.SYMMETRIC));
         }
         List<String> aliases = predicateAliases.getOrDefault(predicate, List.of());
@@ -503,7 +504,7 @@ public final class RelationQueryHead extends BaseHead {
             for (String subproperty : ontology.getSubproperties(predicate)) {
                 expanded.add(new PredicateMatch(subproperty, MatchType.DIRECT));
             }
-            ontology.getInverseProperty(predicate).ifPresent(inv -> {
+            inverseProperty(ontology, predicate).ifPresent(inv -> {
                 expanded.add(new PredicateMatch(inv, MatchType.INVERSE));
                 for (String subproperty : ontology.getSubproperties(inv)) {
                     expanded.add(new PredicateMatch(subproperty, MatchType.INVERSE));
@@ -518,6 +519,20 @@ public final class RelationQueryHead extends BaseHead {
             }
         }
         return expanded;
+    }
+
+    private boolean isSymmetricAllowed(OntologyService ontology, String predicate) {
+        if (ontology instanceof PropertyPolicyProvider provider) {
+            return provider.symmetricPolicy(predicate).isPresent();
+        }
+        return ontology.isSymmetricProperty(predicate);
+    }
+
+    private Optional<String> inverseProperty(OntologyService ontology, String predicate) {
+        if (ontology instanceof PropertyPolicyProvider provider) {
+            return provider.inverseProperty(predicate);
+        }
+        return ontology.getInverseProperty(predicate);
     }
 
     private List<ReasoningCandidate> evaluateYesNo(QueryGoal query,

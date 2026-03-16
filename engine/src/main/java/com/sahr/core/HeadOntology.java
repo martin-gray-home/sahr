@@ -3,6 +3,7 @@ package com.sahr.core;
 import java.util.HashSet;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Optional;
 import java.util.Set;
 
 public final class HeadOntology {
@@ -56,7 +57,7 @@ public final class HeadOntology {
         }
         Set<String> snapshot = new HashSet<>(expanded);
         for (String predicate : snapshot) {
-            ontology.getInverseProperty(predicate).ifPresent(inverse -> {
+            inverseProperty(ontology, predicate).ifPresent(inverse -> {
                 expanded.add(inverse);
                 expanded.addAll(ontology.getSubproperties(inverse));
             });
@@ -71,9 +72,16 @@ public final class HeadOntology {
         }
         Set<String> snapshot = new HashSet<>(expanded);
         for (String predicate : snapshot) {
-            ontology.getInverseProperty(predicate).ifPresent(inverse ->
+            inverseProperty(ontology, predicate).ifPresent(inverse ->
                     expanded.addAll(expandFamilyTransitive(ontology, inverse)));
         }
         return expanded;
+    }
+
+    private static Optional<String> inverseProperty(OntologyService ontology, String predicate) {
+        if (ontology instanceof PropertyPolicyProvider provider) {
+            return provider.inverseProperty(predicate);
+        }
+        return ontology.getInverseProperty(predicate);
     }
 }

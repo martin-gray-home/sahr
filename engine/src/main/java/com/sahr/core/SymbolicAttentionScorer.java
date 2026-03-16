@@ -158,13 +158,20 @@ public final class SymbolicAttentionScorer {
             if (ontology.getSubproperties(query.predicate()).contains(predicate)) {
                 return 1.0;
             }
-            Optional<String> inverse = ontology.getInverseProperty(query.predicate());
+            Optional<String> inverse = inverseProperty(ontology, query.predicate());
             if (inverse.isPresent() && (inverse.get().equals(predicate)
                     || ontology.getSubproperties(inverse.get()).contains(predicate))) {
                 return 1.0;
             }
         }
         return DEFAULT_RELATION_MATCH;
+    }
+
+    private Optional<String> inverseProperty(OntologyService ontology, String predicate) {
+        if (ontology instanceof PropertyPolicyProvider provider) {
+            return provider.inverseProperty(predicate);
+        }
+        return ontology.getInverseProperty(predicate);
     }
 
     private double matchExpectedType(KnowledgeBase graph, OntologyService ontology, ReasoningCandidate candidate, String expectedType) {
