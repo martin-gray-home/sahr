@@ -1,0 +1,110 @@
+@prefix sahr: <https://sahr.ai/ontology/canonical#> .
+@prefix ann: <https://sahr.ai/ontology/annotations#> .
+@prefix head: <https://sahr.ai/ontology/head#> .
+@prefix rel: <https://sahr.ai/ontology/relations#> .
+@prefix wnid: <https://en-word.net/id/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://sahr.ai/ontology/alignment-mappings>
+    a owl:Ontology ;
+    rdfs:label "SAHR Alignment Mappings" .
+
+ann:alignedFamily a owl:AnnotationProperty .
+ann:alignmentConfidence a owl:AnnotationProperty .
+ann:alignmentRationale a owl:AnnotationProperty .
+
+head:containment
+    ann:alignedFamily sahr:containment ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "head ontology containment" .
+
+head:surfaceContact
+    ann:alignedFamily sahr:supportContact ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "head ontology surface contact" .
+
+head:colocation
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "head ontology colocation" .
+
+head:locationTransfer
+    ann:alignedFamily sahr:motion ;
+    ann:alignmentConfidence "weak" ;
+    ann:alignmentRationale "head ontology location transfer" .
+
+head:dependencyChain
+    ann:alignedFamily sahr:dependencyPower ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "head ontology dependency chain" .
+
+head:attributeRelation
+    ann:alignedFamily sahr:attributeRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "head ontology attribute relation" .
+
+head:temporalRelation
+    ann:alignedFamily sahr:temporalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "head ontology temporal relation" .
+
+head:causalRelation
+    ann:alignedFamily sahr:causalRelation ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "head ontology causal relation" .
+
+rel:containment
+    ann:alignedFamily sahr:containment ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations containment" .
+
+rel:surfaceContact
+    ann:alignedFamily sahr:supportContact ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations surface contact" .
+
+rel:on
+    ann:alignedFamily sahr:supportContact ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations on" .
+
+rel:proximity
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations proximity" .
+
+rel:near
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations near" .
+
+rel:colocation
+    ann:alignedFamily sahr:proximity ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "SAHR relations colocation" .
+
+rel:locationTransferRelation
+    ann:alignedFamily sahr:motion ;
+    ann:alignmentConfidence "weak" ;
+    ann:alignmentRationale "SAHR relations location transfer" .
+
+wnid:oewn-00007846-n
+    ann:alignedFamily sahr:personLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet person" .
+
+wnid:oewn-00027365-n
+    ann:alignedFamily sahr:locationLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet location" .
+
+wnid:oewn-02916498-n
+    ann:alignedFamily sahr:buildingLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet building" .
+
+wnid:oewn-04112987-n
+    ann:alignedFamily sahr:roomLike ;
+    ann:alignmentConfidence "strong" ;
+    ann:alignmentRationale "WordNet room" .

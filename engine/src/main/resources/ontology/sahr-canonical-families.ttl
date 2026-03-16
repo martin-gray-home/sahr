@@ -1,0 +1,195 @@
+@prefix sahr: <https://sahr.ai/ontology/canonical#> .
+@prefix ann: <https://sahr.ai/ontology/annotations#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://sahr.ai/ontology/canonical>
+    a owl:Ontology ;
+    rdfs:label "SAHR Canonical Semantic Families" .
+
+ann:familyId a owl:AnnotationProperty .
+
+sahr:ConceptFamily a owl:Class ;
+    rdfs:label "Concept Family" .
+
+sahr:RelationFamily a owl:Class ;
+    rdfs:label "Relation Family" .
+
+sahr:FrameFamily a owl:Class ;
+    rdfs:label "Frame Family" .
+
+sahr:RoleType a owl:Class ;
+    rdfs:label "Role Type" .
+
+sahr:personLike a sahr:ConceptFamily ;
+    ann:familyId "person-like" ;
+    rdfs:label "person-like" ;
+    rdfs:comment "human or human-equivalent agents" .
+
+sahr:animate a sahr:ConceptFamily ;
+    ann:familyId "animate" ;
+    rdfs:label "animate" .
+
+sahr:objectLike a sahr:ConceptFamily ;
+    ann:familyId "object-like" ;
+    rdfs:label "object-like" .
+
+sahr:locationLike a sahr:ConceptFamily ;
+    ann:familyId "location-like" ;
+    rdfs:label "location-like" .
+
+sahr:containerLike a sahr:ConceptFamily ;
+    ann:familyId "container-like" ;
+    rdfs:label "container-like" .
+
+sahr:garmentLike a sahr:ConceptFamily ;
+    ann:familyId "garment-like" ;
+    rdfs:label "garment-like" .
+
+sahr:supportSurfaceLike a sahr:ConceptFamily ;
+    ann:familyId "support-surface-like" ;
+    rdfs:label "support-surface-like" .
+
+sahr:roomLike a sahr:ConceptFamily ;
+    ann:familyId "room-like" ;
+    rdfs:label "room-like" .
+
+sahr:buildingLike a sahr:ConceptFamily ;
+    ann:familyId "building-like" ;
+    rdfs:label "building-like" .
+
+sahr:containment a sahr:RelationFamily ;
+    ann:familyId "containment" ;
+    rdfs:label "containment" .
+
+sahr:supportContact a sahr:RelationFamily ;
+    ann:familyId "support/contact" ;
+    rdfs:label "support/contact" .
+
+sahr:wearingCarryingHolding a sahr:RelationFamily ;
+    ann:familyId "wearing/carrying/holding" ;
+    rdfs:label "wearing/carrying/holding" .
+
+sahr:companionshipAssociation a sahr:RelationFamily ;
+    ann:familyId "companionship/association" ;
+    rdfs:label "companionship/association" .
+
+sahr:proximity a sahr:RelationFamily ;
+    ann:familyId "proximity" ;
+    rdfs:label "proximity" .
+
+sahr:partWhole a sahr:RelationFamily ;
+    ann:familyId "part-whole" ;
+    rdfs:label "part-whole" .
+
+sahr:possession a sahr:RelationFamily ;
+    ann:familyId "possession" ;
+    rdfs:label "possession" .
+
+sahr:transfer a sahr:RelationFamily ;
+    ann:familyId "transfer" ;
+    rdfs:label "transfer" .
+
+sahr:motion a sahr:RelationFamily ;
+    ann:familyId "motion" ;
+    rdfs:label "motion" .
+
+sahr:communication a sahr:RelationFamily ;
+    ann:familyId "communication" ;
+    rdfs:label "communication" .
+
+sahr:dependencyPower a sahr:RelationFamily ;
+    ann:familyId "dependency/power" ;
+    rdfs:label "dependency/power" .
+
+sahr:attributeRelation a sahr:RelationFamily ;
+    ann:familyId "attribute" ;
+    rdfs:label "attribute" .
+
+sahr:temporalRelation a sahr:RelationFamily ;
+    ann:familyId "temporal" ;
+    rdfs:label "temporal" .
+
+sahr:causalRelation a sahr:RelationFamily ;
+    ann:familyId "causal" ;
+    rdfs:label "causal" .
+
+sahr:relationQuery a sahr:FrameFamily ;
+    ann:familyId "relation-query" ;
+    rdfs:label "relation-query" .
+
+sahr:locationQuery a sahr:FrameFamily ;
+    ann:familyId "location-query" ;
+    rdfs:label "location-query" .
+
+sahr:attributeQuery a sahr:FrameFamily ;
+    ann:familyId "attribute-query" ;
+    rdfs:label "attribute-query" .
+
+sahr:countQuery a sahr:FrameFamily ;
+    ann:familyId "count-query" ;
+    rdfs:label "count-query" .
+
+sahr:yesnoQuery a sahr:FrameFamily ;
+    ann:familyId "yesno-query" ;
+    rdfs:label "yesno-query" .
+
+sahr:transitiveEventQuery a sahr:FrameFamily ;
+    ann:familyId "transitive-event-query" ;
+    rdfs:label "transitive-event-query" .
+
+sahr:ditransitiveTransferQuery a sahr:FrameFamily ;
+    ann:familyId "ditransitive-transfer-query" ;
+    rdfs:label "ditransitive-transfer-query" .
+
+sahr:ruleConditionQuery a sahr:FrameFamily ;
+    ann:familyId "rule/condition-query" ;
+    rdfs:label "rule/condition-query" .
+
+sahr:roleSubject a sahr:RoleType ;
+    ann:familyId "subject" ;
+    rdfs:label "subject" .
+
+sahr:roleObject a sahr:RoleType ;
+    ann:familyId "object" ;
+    rdfs:label "object" .
+
+sahr:roleAnchor a sahr:RoleType ;
+    ann:familyId "anchor" ;
+    rdfs:label "anchor" .
+
+sahr:roleUnknown a sahr:RoleType ;
+    ann:familyId "unknown" ;
+    rdfs:label "unknown" .
+
+sahr:roleAgent a sahr:RoleType ;
+    ann:familyId "agent" ;
+    rdfs:label "agent" .
+
+sahr:rolePatient a sahr:RoleType ;
+    ann:familyId "patient" ;
+    rdfs:label "patient" .
+
+sahr:roleTheme a sahr:RoleType ;
+    ann:familyId "theme" ;
+    rdfs:label "theme" .
+
+sahr:roleRecipient a sahr:RoleType ;
+    ann:familyId "recipient" ;
+    rdfs:label "recipient" .
+
+sahr:roleSource a sahr:RoleType ;
+    ann:familyId "source" ;
+    rdfs:label "source" .
+
+sahr:roleDestination a sahr:RoleType ;
+    ann:familyId "destination" ;
+    rdfs:label "destination" .
+
+sahr:roleLocation a sahr:RoleType ;
+    ann:familyId "location" ;
+    rdfs:label "location" .
+
+sahr:roleInstrument a sahr:RoleType ;
+    ann:familyId "instrument" ;
+    rdfs:label "instrument" .
