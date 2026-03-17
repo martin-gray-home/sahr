@@ -1,6 +1,7 @@
 package com.sahr.config;
 
 import com.sahr.core.SymbolicAttentionHead;
+import com.sahr.heads.AttributeQueryHead;
 import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.ontology.OntologyHeadCompiler;
 
@@ -34,6 +35,8 @@ public final class HeadRegistry {
                     throw new IllegalArgumentException("Ontology-defined heads require an ontology context.");
                 }
                 return new OntologyDefinedHead(OntologyHeadCompiler.compile(context.ontology()), config.predicateAliases());
+            case "attribute-query":
+                return new AttributeQueryHead();
             default:
                 throw new IllegalArgumentException("Unknown head id: " + id);
         }

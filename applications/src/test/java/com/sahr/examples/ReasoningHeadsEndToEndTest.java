@@ -24,7 +24,6 @@ import com.sahr.ontology.SemanticNodeNormalizer;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -211,11 +210,10 @@ class ReasoningHeadsEndToEndTest {
 
     @Test
     void attributeQueriesReturnAttributeValues() {
-        Assumptions.assumeTrue(attributeHeadEnabled(), "Attribute query head not enabled in runtime.");
         SahrAgent agent = newAgent();
-        agent.handle("The box is red.");
+        agent.handle("The red box is in the room.");
         String answer = agent.handle("What color is the box?");
-        assertTrue(answer.toLowerCase(Locale.ROOT).contains("red"));
+        assertTrue(answer.toLowerCase(Locale.ROOT).contains("red"), "Attribute answer was: " + answer);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -358,13 +356,6 @@ class ReasoningHeadsEndToEndTest {
         return entries.get(startIndex);
     }
 
-    private boolean attributeHeadEnabled() {
-        HeadContext context = new HeadContext(QueryGoal.attribute("entity:box", "color"),
-                new InMemoryKnowledgeBase(), ontologyContext.service(), null, null,
-                new WorkingMemory(), null, semanticNormalizer);
-        List<ReasoningCandidate> candidates = reasoner.reason(context);
-        return candidates.stream().anyMatch(candidate -> "attribute-query".equals(candidate.producedBy()));
-    }
 
     private static boolean containsAny(String value, String... options) {
         if (value == null) {
