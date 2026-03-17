@@ -583,6 +583,10 @@ Relationship rendering now uses an undirected shortest-path fallback
 over assertions and rdf:type bridges when a direct chain is not found,
 so “relationship between …” questions can surface containment or type
 links even if the direction is inverted.
+Direct relation matching now expands to include subproperties of the
+requested predicate (e.g., `on` is a subproperty of `above`), so
+relation queries can be driven by ontology hierarchy rather than
+hard-coded predicate lists.
 Explanation-chain construction and cause selection are now centralized
 in `ExplanationChainBuilder` to keep `SahrAgent` focused on orchestration
 and reduce method sprawl.

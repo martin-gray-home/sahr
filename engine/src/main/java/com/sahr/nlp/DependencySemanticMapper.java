@@ -22,6 +22,7 @@ public final class DependencySemanticMapper {
             "on",
             "under",
             "above",
+            "over",
             "below",
             "with",
             "near",

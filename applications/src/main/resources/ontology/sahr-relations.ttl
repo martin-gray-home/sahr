@@ -3,6 +3,7 @@
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix ann: <https://sahr.ai/ontology/annotations#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
 <https://sahr.ai/ontology/relations>
     a owl:Ontology ;
@@ -10,7 +11,8 @@
 
 sahr:on a owl:ObjectProperty ;
     rdfs:label "on" ;
-    rdfs:subPropertyOf sahr:surfaceContact .
+    rdfs:subPropertyOf sahr:surfaceContact ;
+    rdfs:subPropertyOf sahr:above .
 
 sahr:colocation a owl:ObjectProperty ;
     rdfs:label "co-location" ;
@@ -74,6 +76,7 @@ sahr:at a owl:ObjectProperty ;
 
 sahr:above a owl:ObjectProperty ;
     rdfs:label "above" ;
+    skos:altLabel "over" ;
     rdfs:subPropertyOf sahr:proximity .
 
 sahr:below a owl:ObjectProperty ;

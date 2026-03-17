@@ -2423,12 +2423,22 @@ public final class SahrAgent {
         if (predicate.isBlank()) {
             return java.util.List.of();
         }
+        java.util.Set<String> predicateMatches = new java.util.HashSet<>();
+        predicateMatches.add(predicate);
+        if (goal.predicate() != null && (goal.predicate().startsWith("http://") || goal.predicate().startsWith("https://"))) {
+            for (String subproperty : ontology.getSubproperties(goal.predicate())) {
+                String subLocal = localName(subproperty);
+                if (!subLocal.isBlank()) {
+                    predicateMatches.add(subLocal);
+                }
+            }
+        }
         SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
         SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
         java.util.List<String> matches = new java.util.ArrayList<>();
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String assertionPredicate = localName(assertion.predicate());
-            if (!predicate.equals(assertionPredicate)) {
+            if (!predicateMatches.contains(assertionPredicate)) {
                 continue;
             }
             if (subject != null && assertion.subject().equals(subject)) {
