@@ -85,6 +85,16 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesWhSubjectWithWildcardObject() {
+        QueryGoal query = parser.parse("Who is wearing something");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertNull(query.object());
+        assertEquals("wear", query.predicate());
+        assertEquals("person", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromWhSubjectNoObject() {
         QueryGoal query = parser.parse("Who was eating");
 
