@@ -33,6 +33,12 @@ tasks.named('processResources') {
     dependsOn(tasks.named('downloadRoOntology'))
 }
 
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    maxHeapSize = "4g"
+    jvmArgs "-Xms1g"
+}
+
 tasks.register("runDebug", JavaExec) {
     group = "application"
     description = "Run ChatApplication with debug logging enabled."

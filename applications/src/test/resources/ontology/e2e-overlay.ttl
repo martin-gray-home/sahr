@@ -1,0 +1,15 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sahr: <https://sahr.ai/ontology/relations#> .
+@prefix ex: <http://example.org/e2e#> .
+
+<http://example.org/e2e>
+    a owl:Ontology ;
+    rdfs:label "E2E Overlay Ontology" .
+
+ex:Location
+    a owl:Class ;
+    rdfs:label "location" .
+
+sahr:inside
+    rdfs:range ex:Location .
