@@ -1,5 +1,13 @@
 package com.sahr.agent;
 
+import com.sahr.core.AssertionFilter;
+import com.sahr.core.AssertionLayer;
+import com.sahr.core.AssertionMode;
+import com.sahr.core.AssertionProvenance;
+import com.sahr.core.AssertionRecord;
+import com.sahr.core.AssertionSource;
+import com.sahr.core.CandidateType;
+import com.sahr.core.ContradictionStatus;
 import com.sahr.core.EntityNode;
 import com.sahr.core.HeadContext;
 import com.sahr.core.IntentDecision;
@@ -15,7 +23,6 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.RuleAssertion;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
-import com.sahr.core.CandidateType;
 import com.sahr.core.GuardedKnowledgeBase;
 import com.sahr.core.WorkingMemory;
 import com.sahr.core.ReasoningPhase;
@@ -51,6 +58,7 @@ public final class SahrAgent {
     private static final Logger logger = Logger.getLogger(SahrAgent.class.getName());
     private static final Morphology PREDICATE_MORPHOLOGY = new Morphology();
     private static final String PREDICATE_TYPE = "rdf:type";
+    private static final String PREDICATE_SUBCLASS = "rdfs:subClassOf";
     private static final int MAX_PROPAGATION_ITERATIONS = 5;
     private static final int MAX_DERIVED_ASSERTIONS = 100;
     private static final int MAX_SUBGOAL_DEPTH = 3;
@@ -78,6 +86,7 @@ public final class SahrAgent {
     private final OntologyAnnotationResolver annotationResolver;
     private final AnswerComposer answerComposer;
     private final LanguageCandidateProducer languageCandidateProducer;
+    private final java.util.concurrent.atomic.AtomicLong assertionSequence = new java.util.concurrent.atomic.AtomicLong();
     private String lastInput;
 
     public SahrAgent(
@@ -1237,6 +1246,7 @@ public final class SahrAgent {
         Set<String> objectTypes = mapTypes(statement.objectTypes());
         SymbolId objectId = statement.object();
         SymbolId subjectId = statement.subject();
+        AssertionLayer layer = statement.layer();
         if (statement.objectIsConcept()) {
             Optional<String> mapped = termMapper.mapToken(stripPrefix(statement.object().value()));
             if (mapped.isPresent()) {
@@ -1263,7 +1273,17 @@ public final class SahrAgent {
             LossNormalization lossNormalization = normalizeLossSubject(subjectId, predicate);
             if (lossNormalization != null) {
                 subjectId = lossNormalization.normalized;
-                mappedExtras.add(lossNormalization.failureStatement);
+                mappedExtras.add(new Statement(
+                        lossNormalization.failureStatement.subject(),
+                        lossNormalization.failureStatement.object(),
+                        lossNormalization.failureStatement.predicate(),
+                        lossNormalization.failureStatement.subjectTypes(),
+                        lossNormalization.failureStatement.objectTypes(),
+                        lossNormalization.failureStatement.objectIsConcept(),
+                        lossNormalization.failureStatement.confidence(),
+                        List.of(),
+                        AssertionLayer.CANONICAL
+                ));
             }
         }
         if ("control".equals(localName(predicate)) && isBooleanFalse(objectId)) {
@@ -1275,7 +1295,8 @@ public final class SahrAgent {
                     java.util.Set.of("true"),
                     true,
                     statement.confidence(),
-                    List.of()
+                    List.of(),
+                    AssertionLayer.CANONICAL
             ));
         }
         if (predicateIri.isPresent() && !predicateIri.get().equals(predicate)) {
@@ -1287,9 +1308,13 @@ public final class SahrAgent {
                     objectTypes,
                     statement.objectIsConcept(),
                     statement.confidence(),
-                    List.of()
+                    List.of(),
+                    AssertionLayer.SURFACE
             ));
             predicate = predicateIri.get();
+            if (layer == AssertionLayer.SURFACE) {
+                layer = AssertionLayer.CANONICAL;
+            }
         }
 
         return new Statement(
@@ -1300,7 +1325,8 @@ public final class SahrAgent {
                 objectTypes,
                 statement.objectIsConcept(),
                 statement.confidence(),
-                mappedExtras
+                mappedExtras,
+                layer
         );
     }
 
@@ -1487,7 +1513,7 @@ public final class SahrAgent {
     private String applyCandidate(ReasoningCandidate winner) {
         switch (winner.type()) {
             case ASSERTION:
-                return applyAssertion(winner.payload());
+                return applyAssertion(winner);
             case ANSWER:
                 return winner.payload() == null ? "No payload." : winner.payload().toString();
             default:
@@ -1495,7 +1521,7 @@ public final class SahrAgent {
         }
     }
 
-    private ApplyResult applyAssertionResult(Object payload) {
+    private ApplyResult applyAssertionResult(Object payload, String producedBy) {
         if (payload instanceof RuleAssertion) {
             RuleAssertion rule = (RuleAssertion) payload;
             boolean added = addRuleIfNew(rule);
@@ -1505,12 +1531,20 @@ public final class SahrAgent {
         }
         if (payload instanceof RelationAssertion) {
             RelationAssertion assertion = (RelationAssertion) payload;
-            boolean added = addAssertionIfNew(assertion);
+            AssertionRecord record = buildAssertionRecord(
+                    assertion.subject(),
+                    assertion.predicate(),
+                    assertion.object(),
+                    assertion.confidence(),
+                    AssertionLayer.INFERRED,
+                    buildProvenance(AssertionSource.HEAD, producedBy, AssertionMode.DERIVED, null, List.of())
+            );
+            boolean added = addAssertionRecordIfNew(record);
             if (PREDICATE_TYPE.equals(assertion.predicate())) {
                 upsertEntityType(assertion.subject(), assertion.object().value());
             }
             if (added) {
-                logAssertionAdded("ingest", assertion, "statement");
+                logAssertionAdded("ingest", assertion, producedBy);
             }
             if (added) {
                 runPropagationClosure();
@@ -1521,45 +1555,11 @@ public final class SahrAgent {
         }
         if (payload instanceof StatementBatch) {
             StatementBatch batch = (StatementBatch) payload;
-            boolean anyAdded = false;
-            for (Statement statement : batch.statements()) {
-                ApplyResult result = applyAssertionResult(statement);
-                anyAdded = anyAdded || result.added;
-            }
-            return anyAdded ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
+            return ingestStatementBatch(batch, producedBy);
         }
         if (payload instanceof Statement) {
             Statement statement = (Statement) payload;
-            List<SymbolId> subjects = expandConjoinedSubjects(statement.subject());
-            for (SymbolId subject : subjects) {
-                upsertEntity(subject, subjectTypesFor(subject, statement.subjectTypes()));
-            }
-            if (!statement.objectIsConcept()) {
-                upsertEntity(statement.object(), statement.objectTypes());
-            }
-            boolean addedAny = false;
-            for (SymbolId subject : subjects) {
-                RelationAssertion assertion = new RelationAssertion(
-                        subject,
-                        statement.predicate(),
-                        statement.object(),
-                        statement.confidence()
-                );
-                boolean added = addAssertionIfNew(assertion);
-                addedAny = addedAny || added;
-                if (added) {
-                    logAssertionAdded("ingest", assertion, "statement");
-                }
-                if (PREDICATE_TYPE.equals(statement.predicate())) {
-                    upsertEntityType(subject, statement.object().value());
-                }
-            }
-            if (addedAny) {
-                runPropagationClosure();
-            }
-            logger.fine(() -> "Applied statement assertion: " + statement);
-            logIngested("statement", statement.predicate(), statement.subject().value(), statement.predicate(), statement.object().value());
-            return addedAny ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
+            return ingestStatementBatch(StatementBatch.from(statement), producedBy);
         }
         return ApplyResult.existing("Unknown assertion payload.");
     }
@@ -1579,8 +1579,180 @@ public final class SahrAgent {
         return value.replaceAll("\\s+", " ").trim();
     }
 
-    private String applyAssertion(Object payload) {
-        return applyAssertionResult(payload).message;
+    private String applyAssertion(ReasoningCandidate winner) {
+        String producedBy = winner == null ? "" : winner.producedBy();
+        return applyAssertionResult(winner.payload(), producedBy).message;
+    }
+
+    private ApplyResult ingestStatementBatch(StatementBatch batch, String producedBy) {
+        boolean addedAny = false;
+        List<AssertionRecord> records = new java.util.ArrayList<>();
+        for (Statement statement : batch.statements()) {
+            List<SymbolId> subjects = expandConjoinedSubjects(statement.subject());
+            for (SymbolId subject : subjects) {
+                upsertEntity(subject, subjectTypesFor(subject, statement.subjectTypes()));
+            }
+            if (!statement.objectIsConcept()) {
+                upsertEntity(statement.object(), statement.objectTypes());
+            }
+            AssertionLayer resolvedLayer = resolveLayer(statement);
+            AssertionMode mode = resolvedLayer == AssertionLayer.SURFACE ? AssertionMode.ASSERTED : AssertionMode.DERIVED;
+            for (SymbolId subject : subjects) {
+                AssertionRecord record = buildAssertionRecord(
+                        subject,
+                        statement.predicate(),
+                        statement.object(),
+                        statement.confidence(),
+                        resolvedLayer,
+                        buildProvenance(AssertionSource.USER, producedBy, mode, null, List.of())
+                );
+                records.add(record);
+            }
+        }
+
+        records = linkNormalization(records);
+
+        for (AssertionRecord record : records) {
+            boolean added = addAssertionRecordIfNew(record);
+            addedAny = addedAny || added;
+            if (added) {
+                RelationAssertion assertion = record.toRelationAssertion();
+                logAssertionAdded("ingest", assertion, producedBy);
+                if (PREDICATE_TYPE.equals(assertion.predicate())) {
+                    upsertEntityType(assertion.subject(), assertion.object().value());
+                }
+            }
+            logIngested("statement",
+                    record.predicate(),
+                    record.subject().value(),
+                    record.predicate(),
+                    record.object().value());
+        }
+
+        if (addedAny) {
+            runPropagationClosure();
+        }
+        int recordCount = records.size();
+        logger.fine(() -> "Applied statement batch assertions: " + recordCount);
+        return addedAny ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
+    }
+
+    private AssertionLayer resolveLayer(Statement statement) {
+        if (statement == null) {
+            return AssertionLayer.SURFACE;
+        }
+        AssertionLayer layer = statement.layer();
+        if (layer != AssertionLayer.SURFACE) {
+            return layer;
+        }
+        String predicate = statement.predicate();
+        if (predicate == null) {
+            return layer;
+        }
+        if (PREDICATE_TYPE.equals(predicate) || PREDICATE_SUBCLASS.equals(predicate)) {
+            return AssertionLayer.CANONICAL;
+        }
+        if (predicate.startsWith("http://") || predicate.startsWith("https://")) {
+            return AssertionLayer.CANONICAL;
+        }
+        return layer;
+    }
+
+    private List<AssertionRecord> linkNormalization(List<AssertionRecord> records) {
+        if (records == null || records.isEmpty()) {
+            return List.of();
+        }
+        java.util.Map<String, AssertionRecord> surfaceByKey = new java.util.HashMap<>();
+        java.util.Map<String, AssertionRecord> canonicalByKey = new java.util.HashMap<>();
+        for (AssertionRecord record : records) {
+            String key = normalizationKey(record);
+            if (record.layer() == AssertionLayer.SURFACE) {
+                surfaceByKey.putIfAbsent(key, record);
+            } else if (record.layer() == AssertionLayer.CANONICAL) {
+                canonicalByKey.putIfAbsent(key, record);
+            }
+        }
+
+        List<AssertionRecord> updated = new java.util.ArrayList<>(records.size());
+        for (AssertionRecord record : records) {
+            AssertionProvenance provenance = record.provenance();
+            if (provenance.normalizedFromId() != null) {
+                updated.add(record);
+                continue;
+            }
+            String key = normalizationKey(record);
+            if (record.layer() == AssertionLayer.CANONICAL) {
+                AssertionRecord surface = surfaceByKey.get(key);
+                if (surface != null) {
+                    updated.add(record.withProvenance(provenance.withNormalizedFromId(surface.id())));
+                    continue;
+                }
+            }
+            if (record.layer() == AssertionLayer.DERIVED_HELPER) {
+                AssertionRecord canonical = canonicalByKey.get(key);
+                if (canonical != null) {
+                    updated.add(record.withProvenance(provenance.withNormalizedFromId(canonical.id())));
+                    continue;
+                }
+                AssertionRecord surface = surfaceByKey.get(key);
+                if (surface != null) {
+                    updated.add(record.withProvenance(provenance.withNormalizedFromId(surface.id())));
+                    continue;
+                }
+            }
+            updated.add(record);
+        }
+        return updated;
+    }
+
+    private String normalizationKey(AssertionRecord record) {
+        return normalizeAssertionKeyPart(record.subject().value()) + "|" + normalizeAssertionKeyPart(record.object().value());
+    }
+
+    private String normalizeAssertionKeyPart(String value) {
+        if (value == null) {
+            return "";
+        }
+        String stripped = stripPrefix(value);
+        int hashIdx = stripped.lastIndexOf('#');
+        int slashIdx = stripped.lastIndexOf('/');
+        int idx = Math.max(hashIdx, slashIdx);
+        if (idx >= 0 && idx + 1 < stripped.length()) {
+            stripped = stripped.substring(idx + 1);
+        }
+        return stripped.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private AssertionRecord buildAssertionRecord(SymbolId subject,
+                                                 String predicate,
+                                                 SymbolId object,
+                                                 double confidence,
+                                                 AssertionLayer layer,
+                                                 AssertionProvenance provenance) {
+        return new AssertionRecord(nextAssertionId(), subject, predicate, object, confidence, layer, provenance);
+    }
+
+    private AssertionProvenance buildProvenance(AssertionSource source,
+                                                String producedBy,
+                                                AssertionMode mode,
+                                                String normalizedFromId,
+                                                List<String> supportingIds) {
+        long cycleIndex = trace.entries().size();
+        AssertionProvenance provenance = new AssertionProvenance(
+                source,
+                producedBy,
+                cycleIndex,
+                java.time.Instant.now(),
+                mode,
+                supportingIds,
+                normalizedFromId,
+                ContradictionStatus.UNKNOWN
+        );
+        return provenance;
+    }
+
+    private String nextAssertionId() {
+        return "assertion-" + assertionSequence.incrementAndGet();
     }
 
     private boolean isQuestion(QueryGoal query) {
@@ -1874,7 +2046,7 @@ public final class SahrAgent {
             }
 
             if (!question && CandidateType.ASSERTION.equals(winner.type())) {
-                ApplyResult result = applyAssertionResult(winner.payload());
+                ApplyResult result = applyAssertionResult(winner.payload(), winner.producedBy());
                 if (result.added) {
                     queue.addLast(root);
                 }
@@ -2648,7 +2820,15 @@ public final class SahrAgent {
                 new SymbolId(parts[2]),
                 0.8
         );
-        addAssertionIfNew(assertion);
+        AssertionRecord record = buildAssertionRecord(
+                assertion.subject(),
+                assertion.predicate(),
+                assertion.object(),
+                assertion.confidence(),
+                AssertionLayer.INFERRED,
+                buildProvenance(AssertionSource.HEAD, "answer", AssertionMode.DERIVED, null, List.of())
+        );
+        addAssertionRecordIfNew(record);
     }
 
     private void recordAnswerIfPossible(QueryGoal query, Object payload) {
@@ -2897,14 +3077,30 @@ public final class SahrAgent {
     }
 
     private boolean addAssertionIfNew(RelationAssertion assertion) {
-        boolean exists = graph.getAllAssertions().stream().anyMatch(existing ->
-                existing.subject().equals(assertion.subject())
-                        && existing.predicate().equals(assertion.predicate())
-                        && existing.object().equals(assertion.object()));
+        AssertionRecord record = buildAssertionRecord(
+                assertion.subject(),
+                assertion.predicate(),
+                assertion.object(),
+                assertion.confidence(),
+                AssertionLayer.INFERRED,
+                buildProvenance(AssertionSource.UNKNOWN, "legacy", AssertionMode.DERIVED, null, List.of())
+        );
+        return addAssertionRecordIfNew(record);
+    }
+
+    private boolean addAssertionRecordIfNew(AssertionRecord record) {
+        AssertionFilter filter = AssertionFilter.of(
+                record.subject(),
+                record.predicate(),
+                record.object(),
+                java.util.Set.of(record.layer())
+        );
+        boolean exists = !graph.findAssertionRecords(filter).isEmpty();
         if (exists) {
             return false;
         }
-        graph.addAssertion(assertion);
+        graph.addAssertionRecord(record);
+        RelationAssertion assertion = record.toRelationAssertion();
         answerComposer.noteAssertion(assertion);
         workingMemory.recordAssertion(assertion);
         workingMemory.addActiveEntity(assertion.subject());
@@ -2927,7 +3123,15 @@ public final class SahrAgent {
                     return;
                 }
                 RelationAssertion assertion = (RelationAssertion) candidate.payload();
-                if (addAssertionIfNew(assertion)) {
+                AssertionRecord record = buildAssertionRecord(
+                        assertion.subject(),
+                        assertion.predicate(),
+                        assertion.object(),
+                        assertion.confidence(),
+                        AssertionLayer.INFERRED,
+                        buildProvenance(AssertionSource.HEAD, candidate.producedBy(), AssertionMode.DERIVED, null, List.of())
+                );
+                if (addAssertionRecordIfNew(record)) {
                     addedThisRound++;
                     totalAdded++;
                     logAssertionAdded("propagation", assertion, candidate.producedBy());

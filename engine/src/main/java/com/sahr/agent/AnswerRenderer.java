@@ -102,6 +102,9 @@ final class AnswerRenderer {
                 return renderClause(subjectText, booleanValue ? "unstable" : "stable", new TemplateSpec("become"), booleanValue);
             }
             TemplateSpec fallback = templateForPredicate(displayPredicate(assertion.predicate()));
+            if (fallback == null) {
+                return formatFallbackRelation(subjectText, null, displayPredicate(assertion.predicate()));
+            }
             return renderClause(subjectText, null, fallback, booleanValue);
         }
         if ("rdf:type".equals(predicate) || "type".equals(predicate)) {
@@ -207,6 +210,9 @@ final class AnswerRenderer {
         String subjectText = displayValue(subject);
         String objectText = object == null ? null : displayValue(object);
         TemplateSpec spec = template == null ? templateForPredicate(displayPredicate(assertion.predicate())) : template;
+        if (spec == null) {
+            return formatFallbackRelation(subjectText, objectText, displayPredicate(assertion.predicate()));
+        }
         String normalizedObject = booleanValue != null ? null : objectText;
         return renderClause(subjectText, normalizedObject, spec, booleanValue);
     }
@@ -214,6 +220,9 @@ final class AnswerRenderer {
     private String renderClause(String subjectText, String objectText, TemplateSpec spec, Boolean booleanValue) {
         if (subjectText == null || subjectText.isBlank()) {
             return "unknown";
+        }
+        if (spec == null) {
+            return formatFallbackRelation(subjectText, objectText, "relation");
         }
         String verb = spec.verb;
         if (verb == null || verb.isBlank()) {

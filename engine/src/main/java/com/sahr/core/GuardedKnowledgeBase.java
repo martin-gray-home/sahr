@@ -26,6 +26,12 @@ public final class GuardedKnowledgeBase implements KnowledgeBase {
     }
 
     @Override
+    public void addAssertionRecord(AssertionRecord assertion) {
+        phases.assertUpdatePhase("addAssertionRecord");
+        delegate.addAssertionRecord(assertion);
+    }
+
+    @Override
     public void addRule(RuleAssertion rule) {
         phases.assertUpdatePhase("addRule");
         delegate.addRule(rule);
@@ -49,6 +55,16 @@ public final class GuardedKnowledgeBase implements KnowledgeBase {
     @Override
     public List<RelationAssertion> getAllAssertions() {
         return delegate.getAllAssertions();
+    }
+
+    @Override
+    public List<AssertionRecord> getAssertionRecords() {
+        return delegate.getAssertionRecords();
+    }
+
+    @Override
+    public List<AssertionRecord> findAssertionRecords(AssertionFilter filter) {
+        return delegate.findAssertionRecords(filter);
     }
 
     @Override

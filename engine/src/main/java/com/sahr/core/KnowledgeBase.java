@@ -8,6 +8,8 @@ public interface KnowledgeBase {
 
     void addAssertion(RelationAssertion assertion);
 
+    void addAssertionRecord(AssertionRecord assertion);
+
     void addRule(RuleAssertion rule);
 
     List<RelationAssertion> findBySubject(SymbolId subject);
@@ -17,6 +19,10 @@ public interface KnowledgeBase {
     List<RelationAssertion> findByObject(SymbolId object);
 
     List<RelationAssertion> getAllAssertions();
+
+    List<AssertionRecord> getAssertionRecords();
+
+    List<AssertionRecord> findAssertionRecords(AssertionFilter filter);
 
     List<RuleAssertion> getAllRules();
 

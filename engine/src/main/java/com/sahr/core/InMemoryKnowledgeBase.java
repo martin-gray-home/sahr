@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 
 public final class InMemoryKnowledgeBase implements KnowledgeBase {
     private final Map<SymbolId, EntityNode> entities = new ConcurrentHashMap<>();
-    private final List<RelationAssertion> assertions = new ArrayList<>();
+    private final List<AssertionRecord> assertionRecords = new ArrayList<>();
     private final List<RuleAssertion> rules = new ArrayList<>();
     private final AtomicLong version = new AtomicLong();
 
@@ -22,7 +22,31 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
 
     @Override
     public void addAssertion(RelationAssertion assertion) {
-        assertions.add(assertion);
+        long nextVersion = version.incrementAndGet();
+        AssertionRecord record = new AssertionRecord(
+                "legacy-" + nextVersion,
+                assertion.subject(),
+                assertion.predicate(),
+                assertion.object(),
+                assertion.confidence(),
+                AssertionLayer.INFERRED,
+                new AssertionProvenance(
+                        AssertionSource.UNKNOWN,
+                        "legacy",
+                        nextVersion,
+                        java.time.Instant.now(),
+                        AssertionMode.DERIVED,
+                        List.of(),
+                        null,
+                        ContradictionStatus.UNKNOWN
+                )
+        );
+        assertionRecords.add(record);
+    }
+
+    @Override
+    public void addAssertionRecord(AssertionRecord assertion) {
+        assertionRecords.add(assertion);
         version.incrementAndGet();
     }
 
@@ -34,28 +58,48 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
 
     @Override
     public List<RelationAssertion> findBySubject(SymbolId subject) {
-        return assertions.stream()
+        return assertionRecords.stream()
                 .filter(assertion -> assertion.subject().equals(subject))
+                .map(AssertionRecord::toRelationAssertion)
                 .collect(Collectors.toList());
     }
 
     @Override
     public List<RelationAssertion> findByPredicate(String predicate) {
-        return assertions.stream()
+        return assertionRecords.stream()
                 .filter(assertion -> assertion.predicate().equals(predicate))
+                .map(AssertionRecord::toRelationAssertion)
                 .collect(Collectors.toList());
     }
 
     @Override
     public List<RelationAssertion> findByObject(SymbolId object) {
-        return assertions.stream()
+        return assertionRecords.stream()
                 .filter(assertion -> assertion.object().equals(object))
+                .map(AssertionRecord::toRelationAssertion)
                 .collect(Collectors.toList());
     }
 
     @Override
     public List<RelationAssertion> getAllAssertions() {
-        return new ArrayList<>(assertions);
+        return assertionRecords.stream()
+                .map(AssertionRecord::toRelationAssertion)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AssertionRecord> getAssertionRecords() {
+        return new ArrayList<>(assertionRecords);
+    }
+
+    @Override
+    public List<AssertionRecord> findAssertionRecords(AssertionFilter filter) {
+        if (filter == null) {
+            return getAssertionRecords();
+        }
+        return assertionRecords.stream()
+                .filter(filter::matches)
+                .collect(Collectors.toList());
     }
 
     @Override

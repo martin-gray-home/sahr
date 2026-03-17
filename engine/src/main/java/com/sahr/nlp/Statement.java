@@ -1,5 +1,6 @@
 package com.sahr.nlp;
 
+import com.sahr.core.AssertionLayer;
 import com.sahr.core.SymbolId;
 
 import java.util.Collections;
@@ -16,6 +17,7 @@ public final class Statement {
     private final boolean objectIsConcept;
     private final double confidence;
     private final List<Statement> additionalStatements;
+    private final AssertionLayer layer;
 
     public Statement(SymbolId subject,
                      SymbolId object,
@@ -24,7 +26,7 @@ public final class Statement {
                      Set<String> objectTypes,
                      boolean objectIsConcept,
                      double confidence) {
-        this(subject, object, predicate, subjectTypes, objectTypes, objectIsConcept, confidence, List.of());
+        this(subject, object, predicate, subjectTypes, objectTypes, objectIsConcept, confidence, List.of(), AssertionLayer.SURFACE);
     }
 
     public Statement(SymbolId subject,
@@ -35,6 +37,18 @@ public final class Statement {
                      boolean objectIsConcept,
                      double confidence,
                      List<Statement> additionalStatements) {
+        this(subject, object, predicate, subjectTypes, objectTypes, objectIsConcept, confidence, additionalStatements, AssertionLayer.SURFACE);
+    }
+
+    public Statement(SymbolId subject,
+                     SymbolId object,
+                     String predicate,
+                     Set<String> subjectTypes,
+                     Set<String> objectTypes,
+                     boolean objectIsConcept,
+                     double confidence,
+                     List<Statement> additionalStatements,
+                     AssertionLayer layer) {
         this.subject = Objects.requireNonNull(subject, "subject");
         this.object = Objects.requireNonNull(object, "object");
         this.predicate = Objects.requireNonNull(predicate, "predicate");
@@ -44,6 +58,7 @@ public final class Statement {
         this.confidence = confidence;
         this.additionalStatements = Collections.unmodifiableList(
                 additionalStatements == null ? List.of() : additionalStatements);
+        this.layer = Objects.requireNonNull(layer, "layer");
     }
 
     public SymbolId subject() {
@@ -76,5 +91,9 @@ public final class Statement {
 
     public List<Statement> additionalStatements() {
         return additionalStatements;
+    }
+
+    public AssertionLayer layer() {
+        return layer;
     }
 }

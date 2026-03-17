@@ -59,7 +59,8 @@ Graph = runtime working memory
 
 SAHR performs reasoning using **generic attention heads**.
 
-Heads are not domain-specific rules.
+Heads are not domain-specific rules, but they can be **domain-configured strategies**
+driven by ontology annotations and relation families.
 
 They are **reasoning operators** that work with ontology semantics and
 apply **commonsense propagation** patterns where appropriate.
@@ -199,7 +200,7 @@ re-running interpretation heads.
 
 ---
 
-# Recent Updates (2026-03-13)
+# Implementation Notes: Recent Updates (2026-03-13)
 
 • Evidence-signal answers now treat “telemetry” as a valid cue alongside “signal,” so telemetry prompt variants map to evidence-signal selection.
 • Evidence-signal answers now fall back to ontology label matches in the input, allowing signal selection even when the chain lacks explicit precursor evidence.
@@ -223,7 +224,7 @@ re-running interpretation heads.
 • Engine tests now run with a larger heap (`4g`) to accommodate full ontology loading in the diagnostic dataset suite.
 • Resource-availability and dependency-contrast questions now detect resource mentions from ontology labels in the raw input, improving conditional dependency answers without hard-coded domain strings.
 
-# Recent Updates (2026-03-12)
+# Implementation Notes: Recent Updates (2026-03-12)
 
 Answer composition moved further out of `SahrAgent` and into `AnswerComposer`,
 with outcome/capability loss normalization now handled in one place. Chain
@@ -263,7 +264,7 @@ questions to avoid truncated telemetry-fit answers.
 List-style isolation is handled in the answer projection layer rather
 than by applying surface-string routing inside the agent loop.
 
-# Recent Updates (2026-03-12)
+# Implementation Notes: Recent Updates (2026-03-12)
 
 • Relationship-chain extraction now consults ontology labels when mapping question phrases to known entities, improving multi-entity relationship answers without hard-coded symbols.
 • Explanation chains include explicit recovery clauses when the prompt asks “how stability was restored,” even if the primary outcome is instability.
@@ -283,6 +284,49 @@ reasoning, while predicate lexemes such as “require(s)” map onto
 `poweredBy` through ontology labels. Surface assertions are preserved and
 canonical predicate assertions are emitted alongside them, so reasoning
 uses ontology-backed predicates without losing the original phrasing.
+
+Canonical Semantic Representation
+--------------------------------
+
+SAHR stores multiple layers of assertion meaning to keep semantics precise
+while preserving user surface text:
+
+• **Surface assertion**: the literal surface predicate extracted from input  
+• **Canonical semantic assertion**: ontology-aligned predicate/class form  
+• **Derived helper assertion**: convenience projections for QA (e.g., attribute views)  
+• **Inferred assertion**: facts produced by reasoning heads or rules  
+
+By default:
+
+• Parsing emits both surface + canonical forms when mappings exist.  
+• Helper assertions are derived (never primary truth).  
+• Inferred assertions are marked as derived and should not replace
+  asserted canonical facts unless explicitly promoted.
+
+Head access policy (soft by default, hard only for validation/contradiction):
+
+• Query heads prefer canonical + derived helper layers.  
+• Reasoning heads prefer canonical + inferred layers.  
+• Renderers may consult surface for phrasing hints.  
+• Validation/contradiction should inspect canonical only.
+
+Heads must state which layers they consume, and candidate outputs must
+record which layer(s) they relied on.
+
+Hybrid Boundaries
+----------------
+
+SAHR is ontology-grounded with bounded procedural scaffolding. The following
+elements are explicitly procedural by design:
+
+• parsing and lightweight linguistic heuristics  
+• shallow interpretation cues (WH/aux/modal/if/then)  
+• planner weak-token handling and routing biases  
+• fallback lexical mapping and alias bridging  
+• safe NLG fallback and tie-break rules  
+
+Ontology annotations and relation families **override or configure** these
+behaviors wherever available.
 
 Yes/No Questions
 ----------------
@@ -320,7 +364,8 @@ family membership instead of hardcoded predicate lists.
 OWL Usage Philosophy (Performance)
 ----------------------------------
 
-SAHR treats OWL as a **semantic index**, not a full theorem prover.
+SAHR is **not** a general OWL reasoner. It treats OWL as a **semantic index** and a
+runtime semantic service, not a full theorem prover.
 Runtime reasoning is performed by heads over the working graph; OWL is
 consulted for lightweight, cacheable lookups:
 
@@ -571,7 +616,8 @@ Supported annotations:
 - `ann:answerTemplate` (object properties)
   - Purpose: provide a semantic realisation template for SimpleNLG.
   - Value: `key:value` pairs (e.g., `verb:power;voice:passive;prep:by`).
-  - Fallback: predicate-driven SimpleNLG clause rendering.
+  - Fallback: predicate-driven SimpleNLG clause rendering, with a safe
+    "related to" clause if no template can be resolved.
 - `ann:answerTemplateTrue` / `ann:answerTemplateFalse` (object properties)
   - Purpose: boolean semantic templates for SimpleNLG.
   - Value: `key:value` pairs (e.g., `verb:fail;negated:true`).
@@ -705,7 +751,7 @@ This specification outlines how to build SAHR following the architectural north-
 • Transformer-style candidate generation and ranking  
 • Iterative reasoning cycles produce answers/actions  
 
-The engine should **derive reasoning behaviour from ontology semantics**, not hardcoded rules.
+The engine should **derive reasoning behaviour from ontology semantics**, with bounded procedural scaffolding for interpretation, planning, and execution. The ontology defines semantic structure and configurable reasoning behavior; procedural components provide the minimal scaffolding needed to make that behavior operational.
 
 ---
 
@@ -936,6 +982,42 @@ Example assertion:
 | Example Assertion |
 |---|
 | wife at table |
+
+Assertion Records and Layers
+----------------------------
+
+Runtime assertions are stored as **AssertionRecords** with explicit semantic layers and provenance.
+
+Assertion layers:
+• SURFACE  
+• CANONICAL  
+• DERIVED_HELPER  
+• INFERRED  
+
+Each record carries provenance:
+• source (user, tool, rule, head, imported)  
+• producedBy  
+• cycle index + timestamp  
+• mode (asserted vs derived)  
+• supporting assertion IDs  
+• normalized-from assertion ID  
+• contradiction status  
+
+This makes the canonical meaning, helper projections, and inferred facts
+distinguishable and traceable at the data-model level.
+
+Assertion Provenance (Core Model)
+---------------------------------
+
+Assertions should carry provenance at the data-model level, not only at the
+candidate level. Recommended fields:
+
+• source (user input, tool, rule, learned, imported)  
+• mode (asserted vs derived)  
+• timestamp / cycle index  
+• confidence  
+• supporting evidence IDs  
+• contradiction status  
 
 ---
 
@@ -1413,14 +1495,24 @@ This ensures identical reasoning results across runs.
 
 # 27. Provenance and Evidence
 
-Every candidate must include evidence supporting its proposal.
+Every candidate must include evidence supporting its proposal, and every
+assertion should carry provenance in the runtime graph.
 
-Evidence may include:
+Candidate evidence may include:
 
 • source graph assertions  
 • ontology relationships  
 • tool results  
 • earlier reasoning steps  
+
+Assertion provenance should include:
+
+• source (user input, tool, rule, learned, imported)  
+• mode (asserted vs derived)  
+• timestamp / cycle index  
+• confidence  
+• supporting evidence IDs  
+• contradiction status  
 
 Evidence enables the system to produce **explainable reasoning traces**.
 

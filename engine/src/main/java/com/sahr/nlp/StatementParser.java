@@ -10,6 +10,7 @@ import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations;
 import edu.stanford.nlp.semgraph.SemanticGraphEdge;
 import edu.stanford.nlp.util.CoreMap;
 
+import com.sahr.core.AssertionLayer;
 import com.sahr.core.SymbolId;
 
 import java.util.List;
@@ -511,7 +512,13 @@ public final class StatementParser {
             if (isUniversal) {
                 Statement subclass = buildConceptStatement(subjectToken, objectToken, PREDICATE_SUBCLASS, true);
                 if (isAdjectival) {
-                    Statement attribute = buildConceptStatement(subjectToken, objectToken, PREDICATE_ATTRIBUTE, false);
+                    Statement attribute = buildConceptStatement(
+                            subjectToken,
+                            objectToken,
+                            PREDICATE_ATTRIBUTE,
+                            false,
+                            AssertionLayer.DERIVED_HELPER
+                    );
                     statements.add(new Statement(
                             subclass.subject(),
                             subclass.object(),
@@ -520,7 +527,8 @@ public final class StatementParser {
                             subclass.objectTypes(),
                             subclass.objectIsConcept(),
                             subclass.confidence(),
-                            List.of(attribute)
+                            List.of(attribute),
+                            AssertionLayer.CANONICAL
                     ));
                 } else {
                     statements.add(subclass);
@@ -541,7 +549,13 @@ public final class StatementParser {
                 for (String objectEntry : objectTokens) {
                     statements.add(buildStatement(subjectEntry, objectEntry, predicateType, objectIsConcept));
                     if (emitAttributeProjection) {
-                        statements.add(buildStatement(subjectEntry, objectEntry, PREDICATE_ATTRIBUTE, false));
+                        statements.add(buildStatement(
+                                subjectEntry,
+                                objectEntry,
+                                PREDICATE_ATTRIBUTE,
+                                false,
+                                AssertionLayer.DERIVED_HELPER
+                        ));
                     }
                 }
             }
@@ -883,9 +897,21 @@ public final class StatementParser {
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
-            statements.add(buildStatement(subjectToken, objectToken, PREDICATE_ATTRIBUTE, false));
+            statements.add(buildStatement(
+                    subjectToken,
+                    objectToken,
+                    PREDICATE_ATTRIBUTE,
+                    false,
+                    AssertionLayer.DERIVED_HELPER
+            ));
             if (!baseSubject.isEmpty() && !baseSubject.equals(subjectToken)) {
-                statements.add(buildStatement(baseSubject, objectToken, PREDICATE_ATTRIBUTE, false));
+                statements.add(buildStatement(
+                        baseSubject,
+                        objectToken,
+                        PREDICATE_ATTRIBUTE,
+                        false,
+                        AssertionLayer.DERIVED_HELPER
+                ));
             }
         }
         return statements;
@@ -1348,6 +1374,14 @@ public final class StatementParser {
     }
 
     private Statement buildStatement(String subjectToken, String objectToken, String predicate, boolean objectIsConcept) {
+        return buildStatement(subjectToken, objectToken, predicate, objectIsConcept, AssertionLayer.SURFACE);
+    }
+
+    private Statement buildStatement(String subjectToken,
+                                     String objectToken,
+                                     String predicate,
+                                     boolean objectIsConcept,
+                                     AssertionLayer layer) {
         SymbolId subjectId = new SymbolId("entity:" + subjectToken);
         SymbolId objectId = new SymbolId((objectIsConcept ? "concept:" : "entity:") + objectToken);
 
@@ -1361,11 +1395,21 @@ public final class StatementParser {
                 subjectTypes,
                 objectTypes,
                 objectIsConcept,
-                0.9
+                0.9,
+                List.of(),
+                layer
         );
     }
 
     private Statement buildConceptStatement(String subjectToken, String objectToken, String predicate, boolean objectIsConcept) {
+        return buildConceptStatement(subjectToken, objectToken, predicate, objectIsConcept, AssertionLayer.SURFACE);
+    }
+
+    private Statement buildConceptStatement(String subjectToken,
+                                            String objectToken,
+                                            String predicate,
+                                            boolean objectIsConcept,
+                                            AssertionLayer layer) {
         SymbolId subjectId = new SymbolId("concept:" + subjectToken);
         SymbolId objectId = new SymbolId((objectIsConcept ? "concept:" : "entity:") + objectToken);
 
@@ -1379,7 +1423,9 @@ public final class StatementParser {
                 subjectTypes,
                 objectTypes,
                 objectIsConcept,
-                0.9
+                0.9,
+                List.of(),
+                layer
         );
     }
 
@@ -1394,6 +1440,15 @@ public final class StatementParser {
         @Override
         public Statement buildStatement(String subjectToken, String objectToken, String predicate, boolean objectIsConcept) {
             return StatementParser.this.buildStatement(subjectToken, objectToken, predicate, objectIsConcept);
+        }
+
+        @Override
+        public Statement buildStatement(String subjectToken,
+                                        String objectToken,
+                                        String predicate,
+                                        boolean objectIsConcept,
+                                        AssertionLayer layer) {
+            return StatementParser.this.buildStatement(subjectToken, objectToken, predicate, objectIsConcept, layer);
         }
 
         @Override

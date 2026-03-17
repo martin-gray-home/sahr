@@ -7,6 +7,7 @@ import edu.stanford.nlp.semgraph.SemanticGraphEdge;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import com.sahr.core.AssertionLayer;
 import java.util.Locale;
 import java.util.Set;
 
@@ -151,7 +152,7 @@ public final class DependencySemanticMapper {
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
-            out.add(helpers.buildStatement(subjectToken, objectToken, "hasAttribute", false));
+            out.add(helpers.buildStatement(subjectToken, objectToken, "hasAttribute", false, AssertionLayer.DERIVED_HELPER));
         }
     }
 
@@ -174,7 +175,7 @@ public final class DependencySemanticMapper {
             if (subjectToken.isEmpty() || objectToken.isEmpty()) {
                 continue;
             }
-            out.add(helpers.buildStatement(subjectToken, objectToken, "hasAttribute", false));
+            out.add(helpers.buildStatement(subjectToken, objectToken, "hasAttribute", false, AssertionLayer.DERIVED_HELPER));
         }
     }
 
