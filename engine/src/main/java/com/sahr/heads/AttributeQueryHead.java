@@ -49,6 +49,21 @@ public final class AttributeQueryHead extends BaseHead {
         boolean inversePolicyApplied = inversePolicyApplied(ontology, attributePredicates);
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
+        addAttributeCandidates(candidates, graph, subject, attributePredicates, ontology, memory, inversePolicyApplied);
+        if (candidates.isEmpty() && subject.value().startsWith("entity:")) {
+            SymbolId conceptSubject = new SymbolId("concept:" + subject.value().substring("entity:".length()));
+            addAttributeCandidates(candidates, graph, conceptSubject, attributePredicates, ontology, memory, inversePolicyApplied);
+        }
+        return candidates;
+    }
+
+    private void addAttributeCandidates(List<ReasoningCandidate> candidates,
+                                        KnowledgeBase graph,
+                                        SymbolId subject,
+                                        java.util.Set<String> attributePredicates,
+                                        OntologyService ontology,
+                                        WorkingMemory memory,
+                                        boolean inversePolicyApplied) {
         for (RelationAssertion assertion : graph.findBySubject(subject)) {
             if (!attributePredicates.contains(assertion.predicate())) {
                 continue;
@@ -73,7 +88,6 @@ public final class AttributeQueryHead extends BaseHead {
                     0
             ));
         }
-        return candidates;
     }
 
     private void annotatePolicyBreakdown(Map<String, Double> breakdown,

@@ -2782,6 +2782,9 @@ public final class SahrAgent {
     }
 
     private void upsertEntity(SymbolId id, Set<String> types) {
+        if (isConceptId(id)) {
+            return;
+        }
         graph.findEntity(id).ifPresentOrElse(existing -> {
             if (types == null || types.isEmpty()) {
                 return;
@@ -2801,6 +2804,9 @@ public final class SahrAgent {
     }
 
     private void upsertEntityType(SymbolId id, String typeValue) {
+        if (isConceptId(id)) {
+            return;
+        }
         String normalized = normalizeType(typeValue);
         if (normalized.isBlank()) {
             return;
@@ -2816,6 +2822,10 @@ public final class SahrAgent {
             graph.addEntity(created);
             answerComposer.noteEntity(created);
         });
+    }
+
+    private boolean isConceptId(SymbolId id) {
+        return id != null && id.value().startsWith("concept:");
     }
 
     private String normalizeType(String raw) {

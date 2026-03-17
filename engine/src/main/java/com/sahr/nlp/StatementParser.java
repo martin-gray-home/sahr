@@ -22,6 +22,7 @@ public final class StatementParser {
     private static final String PREDICATE_AT = "at";
     private static final String PREDICATE_IN = "locatedIn";
     private static final String PREDICATE_TYPE = "rdf:type";
+    private static final String PREDICATE_SUBCLASS = "rdfs:subClassOf";
     private static final String PREDICATE_ATTRIBUTE = "hasAttribute";
     private static final String PREDICATE_MANNER = "hasManner";
     private static final Set<String> PREPOSITION_PREDICATES = Set.of(
@@ -471,11 +472,17 @@ public final class StatementParser {
             }
             String predicateType = preposition != null ? mapPreposition(preposition, predicate.word()) : PREDICATE_TYPE;
             boolean objectIsConcept = PREDICATE_TYPE.equals(predicateType);
+            boolean isAdjectival = isAdjectivalCopula(predicate);
             boolean emitAttributeProjection = preposition == null
                     && objectIsConcept
-                    && isAdjectivalCopula(predicate);
+                    && isAdjectival;
+            boolean isUniversal = preposition == null
+                    && objectIsConcept
+                    && hasUniversalDeterminer(graph, subject);
 
-            String subjectToken = normalizeToken(composeCompoundToken(graph, subject));
+            String subjectToken = isUniversal
+                    ? normalizeUniversalSubject(graph, subject)
+                    : normalizeToken(composeCompoundToken(graph, subject));
             String baseSubjectToken = normalizeToken(subject.word());
             var conjuncts = collectConjuncts(graph, subject);
             if (!conjuncts.isEmpty()) {
@@ -499,6 +506,25 @@ public final class StatementParser {
                 continue;
             }
             if (preposition == null && hasDeterminer(graph, edge.getGovernor())) {
+                continue;
+            }
+            if (isUniversal) {
+                Statement subclass = buildConceptStatement(subjectToken, objectToken, PREDICATE_SUBCLASS, true);
+                if (isAdjectival) {
+                    Statement attribute = buildConceptStatement(subjectToken, objectToken, PREDICATE_ATTRIBUTE, false);
+                    statements.add(new Statement(
+                            subclass.subject(),
+                            subclass.object(),
+                            subclass.predicate(),
+                            subclass.subjectTypes(),
+                            subclass.objectTypes(),
+                            subclass.objectIsConcept(),
+                            subclass.confidence(),
+                            List.of(attribute)
+                    ));
+                } else {
+                    statements.add(subclass);
+                }
                 continue;
             }
             java.util.Set<String> subjectTokens = new java.util.LinkedHashSet<>();
@@ -539,6 +565,35 @@ public final class StatementParser {
         return PREPOSITION_PREDICATES.contains(word.toLowerCase(Locale.ROOT));
     }
 
+    private boolean hasUniversalDeterminer(SemanticGraph graph, CoreLabel subject) {
+        if (graph == null || subject == null) {
+            return false;
+        }
+        var node = graph.getNodeByIndexSafe(subject.index());
+        if (node == null) {
+            return false;
+        }
+        for (SemanticGraphEdge edge : graph.outgoingEdgeList(node)) {
+            if (!"det".equals(edge.getRelation().getShortName())) {
+                continue;
+            }
+            CoreLabel det = edge.getDependent().backingLabel();
+            if (det == null) {
+                continue;
+            }
+            String lemma = det.lemma();
+            String token = lemma == null || lemma.isBlank() ? det.word() : lemma;
+            if (token == null) {
+                continue;
+            }
+            String normalized = token.toLowerCase(Locale.ROOT);
+            if ("all".equals(normalized) || "every".equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean isAdjectivalCopula(CoreLabel predicate) {
         if (predicate == null) {
             return false;
@@ -551,6 +606,30 @@ public final class StatementParser {
             return true;
         }
         return "VBN".equals(tag) || "VBG".equals(tag);
+    }
+
+    private String normalizeUniversalSubject(SemanticGraph graph, CoreLabel subject) {
+        if (subject == null) {
+            return "";
+        }
+        String compound = composeCompoundToken(graph, subject);
+        if (compound == null || compound.isBlank()) {
+            return "";
+        }
+        String[] parts = compound.split("\\s+");
+        if (parts.length == 0) {
+            return "";
+        }
+        String head = parts[parts.length - 1];
+        String tag = subject.tag();
+        String pos = (tag == null || tag.isBlank()) ? "NN" : tag;
+        String lemma = MORPHOLOGY.lemma(head, pos);
+        if (lemma != null && !lemma.isBlank()) {
+            parts[parts.length - 1] = lemma;
+        } else if (head.endsWith("s") && head.length() > 1) {
+            parts[parts.length - 1] = head.substring(0, head.length() - 1);
+        }
+        return normalizeToken(String.join(" ", parts));
     }
 
     private PrepMatch findCopularPreposition(SemanticGraph graph,
@@ -1270,6 +1349,24 @@ public final class StatementParser {
 
     private Statement buildStatement(String subjectToken, String objectToken, String predicate, boolean objectIsConcept) {
         SymbolId subjectId = new SymbolId("entity:" + subjectToken);
+        SymbolId objectId = new SymbolId((objectIsConcept ? "concept:" : "entity:") + objectToken);
+
+        Set<String> subjectTypes = Set.of(subjectToken);
+        Set<String> objectTypes = Set.of(objectToken);
+
+        return new Statement(
+                subjectId,
+                objectId,
+                predicate,
+                subjectTypes,
+                objectTypes,
+                objectIsConcept,
+                0.9
+        );
+    }
+
+    private Statement buildConceptStatement(String subjectToken, String objectToken, String predicate, boolean objectIsConcept) {
+        SymbolId subjectId = new SymbolId("concept:" + subjectToken);
         SymbolId objectId = new SymbolId((objectIsConcept ? "concept:" : "entity:") + objectToken);
 
         Set<String> subjectTypes = Set.of(subjectToken);
