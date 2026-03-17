@@ -11,6 +11,7 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.QueryOperator;
 import com.sahr.core.QueryBinding;
 import com.sahr.core.QueryExecutor;
+import com.sahr.core.QueryNormalizer;
 import com.sahr.core.QueryResult;
 import com.sahr.core.PredicateResolver;
 import com.sahr.core.ReasoningCandidate;
@@ -31,6 +32,7 @@ public final class RelationQueryHead extends BaseHead {
     private final Map<String, List<String>> predicateAliases;
     private final PredicateResolver predicateResolver;
     private final QueryExecutor queryExecutor;
+    private final QueryNormalizer queryNormalizer;
 
     public RelationQueryHead() {
         this(Map.of());
@@ -40,6 +42,7 @@ public final class RelationQueryHead extends BaseHead {
         this.predicateAliases = predicateAliases == null ? Map.of() : predicateAliases;
         this.predicateResolver = new PredicateResolver(this.predicateAliases);
         this.queryExecutor = new QueryExecutor(predicateResolver);
+        this.queryNormalizer = new QueryNormalizer();
     }
 
     @Override
@@ -97,7 +100,7 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         if (query.type() == QueryGoal.Type.YESNO) {
-            QueryFrame frame = buildFrame(query, QueryOperator.EXISTS, expectedType);
+            QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.EXISTS, expectedType);
             QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
             if (result.exists() && !result.bindings().isEmpty()) {
                 return List.of(buildYesAnswer(query, result.bindings().get(0)));
@@ -106,13 +109,13 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         if (query.type() == QueryGoal.Type.COUNT) {
-            QueryFrame frame = buildFrame(query, QueryOperator.COUNT, expectedType);
+            QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.COUNT, expectedType);
             QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
             return List.of(buildCountAnswer(result.count(), frame.predicate()));
         }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        QueryFrame frame = buildFrame(query, QueryOperator.RETRIEVE, expectedType);
+        QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.RETRIEVE, expectedType);
         QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
         for (QueryBinding binding : result.bindings()) {
             SymbolId answer = binding.answer();
@@ -146,28 +149,6 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         return candidates;
-    }
-
-    private QueryFrame buildFrame(QueryGoal query, QueryOperator operator, String expectedType) {
-        QueryFrame.TargetSlot targetSlot = QueryFrame.TargetSlot.ANY;
-        if (query != null) {
-            boolean hasSubject = query.subject() != null && !query.subject().isBlank();
-            boolean hasObject = query.object() != null && !query.object().isBlank();
-            if (hasSubject && !hasObject) {
-                targetSlot = QueryFrame.TargetSlot.OBJECT;
-            } else if (hasObject && !hasSubject) {
-                targetSlot = QueryFrame.TargetSlot.SUBJECT;
-            }
-        }
-        return new QueryFrame(
-                operator == null ? QueryOperator.RETRIEVE : operator,
-                query == null ? null : query.subject(),
-                query == null ? null : query.predicate(),
-                query == null ? null : query.object(),
-                targetSlot,
-                expectedType,
-                true
-        );
     }
 
     private String stripPrefix(String value) {

@@ -43,6 +43,7 @@ import com.sahr.nlp.TermMapper;
 import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
 import com.sahr.ontology.SahrAnnotationVocabulary;
+import com.sahr.core.PredicateResolver;
 import edu.stanford.nlp.process.Morphology;
 
 import java.util.ArrayList;
@@ -73,6 +74,7 @@ public final class SahrAgent {
     private final StatementParser statementParser;
     private final RuleParser ruleParser;
     private final TermMapper termMapper;
+    private final PredicateResolver predicateResolver;
     private final SemanticNodeNormalizer semanticNormalizer;
     private final ReasoningTrace trace;
     private final WorkingMemory workingMemory;
@@ -124,6 +126,7 @@ public final class SahrAgent {
         this.statementParser = statementParser;
         this.ruleParser = new RuleParser(statementParser);
         this.termMapper = termMapper;
+        this.predicateResolver = new PredicateResolver(Map.of());
         this.semanticNormalizer = new SemanticNodeNormalizer(termMapper);
         this.trace = new ReasoningTrace();
         this.workingMemory = new WorkingMemory(phases);
@@ -801,14 +804,12 @@ public final class SahrAgent {
         if (query.type() == QueryGoal.Type.UNKNOWN) {
             return query;
         }
-
-        boolean predicateMapped = termMapper.mapPredicateToken(query.predicate()).isPresent();
         String requestedType = mapEntityType(query.entityType());
         String expectedRange = mapExpectedRange(query.expectedRange());
         String expectedType = mapExpectedType(query.expectedType());
         String subject = mapEntity(query.subject());
         String object = mapEntity(query.object());
-        String predicate = mapPredicate(query.predicate());
+        String predicate = predicateResolver.resolvePredicate(query.predicate(), termMapper, ontology, this::lemmatizePredicate);
         String discourse = query.discourseModifier();
 
         QueryGoal mapped = new QueryGoal(
@@ -829,13 +830,13 @@ public final class SahrAgent {
                 query.parentGoalId(),
                 query.depth()
         );
-        if (shouldGatePredicate(mapped, predicateMapped)) {
+        if (shouldGatePredicate(mapped)) {
             return QueryGoal.unknown();
         }
         return normalizeQuery(mapped);
     }
 
-    private boolean shouldGatePredicate(QueryGoal query, boolean predicateMapped) {
+    private boolean shouldGatePredicate(QueryGoal query) {
         if (query == null) {
             return false;
         }
@@ -1196,87 +1197,6 @@ public final class SahrAgent {
         return normalizeEntityBinding(value);
     }
 
-    private String mapPredicate(String predicate) {
-        if (predicate == null || predicate.isBlank()) {
-            return predicate;
-        }
-        Optional<String> mappedPredicate = termMapper.mapPredicateToken(predicate);
-        if (mappedPredicate.isPresent()) {
-            return mappedPredicate.get();
-        }
-        if (isIri(predicate)) {
-            return predicate;
-        }
-        Optional<String> ontologyPredicate = resolvePredicateIri(predicate);
-        if (ontologyPredicate.isPresent()) {
-            return ontologyPredicate.get();
-        }
-        String lemma = lemmatizePredicate(predicate);
-        if (!lemma.equals(predicate)) {
-            Optional<String> mappedLemma = termMapper.mapPredicateToken(lemma);
-            if (mappedLemma.isPresent()) {
-                return mappedLemma.get();
-            }
-            Optional<String> ontologyLemma = resolvePredicateIri(lemma);
-            if (ontologyLemma.isPresent()) {
-                return ontologyLemma.get();
-            }
-            return lemma;
-        }
-        return predicate;
-    }
-
-    private Optional<String> resolvePredicateIri(String predicate) {
-        if (predicate == null || predicate.isBlank()) {
-            return Optional.empty();
-        }
-        java.util.Set<String> direct = ontology.getObjectPropertiesByLabel(predicate);
-        if (!direct.isEmpty()) {
-            return Optional.of(selectBestPredicateIri(predicate, direct));
-        }
-        String spaced = predicate.replace('_', ' ');
-        if (!spaced.equals(predicate)) {
-            java.util.Set<String> spacedMatches = ontology.getObjectPropertiesByLabel(spaced);
-            if (!spacedMatches.isEmpty()) {
-                return Optional.of(selectBestPredicateIri(predicate, spacedMatches));
-            }
-        }
-        return Optional.empty();
-    }
-
-    private String selectBestPredicateIri(String predicate, java.util.Set<String> iris) {
-        if (iris == null || iris.isEmpty()) {
-            return predicate;
-        }
-        String normalized = annotationResolver.normalizeLabelToToken(predicate);
-        String preferred = null;
-        int preferredLength = Integer.MAX_VALUE;
-        for (String iri : iris) {
-            if (iri == null || iri.isBlank()) {
-                continue;
-            }
-            String local = annotationResolver.normalizeLabelToToken(localName(iri));
-            if (local.equals(normalized)) {
-                return iri;
-            }
-            if (local.equals(normalized + "s")) {
-                if (preferred == null || local.length() < preferredLength) {
-                    preferred = iri;
-                    preferredLength = local.length();
-                }
-                continue;
-            }
-            if (local.startsWith(normalized) && local.length() < preferredLength) {
-                preferred = iri;
-                preferredLength = local.length();
-            }
-        }
-        if (preferred != null) {
-            return preferred;
-        }
-        return iris.stream().sorted().findFirst().orElse(predicate);
-    }
-
     private String lemmatizePredicate(String predicate) {
         String trimmed = predicate.trim();
         if (trimmed.isEmpty()) {
@@ -1338,7 +1258,7 @@ public final class SahrAgent {
             objectId = normalizedPredicate.overrideObject;
             objectTypes = normalizedPredicate.overrideObjectTypes;
         }
-        String mappedPredicate = mapPredicate(predicate);
+        String mappedPredicate = predicateResolver.resolvePredicate(predicate, termMapper, ontology, this::lemmatizePredicate);
 
         List<Statement> mappedExtras = new java.util.ArrayList<>();
         for (Statement extra : statement.additionalStatements()) {

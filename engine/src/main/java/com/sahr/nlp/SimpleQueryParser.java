@@ -17,14 +17,6 @@ import java.util.Set;
 
 public final class SimpleQueryParser {
     private static final Set<String> WH_TOKENS = Set.of("who", "what", "where", "when", "why", "how", "which");
-    private static final Set<String> WILDCARD_TOKENS = Set.of(
-            "something",
-            "someone",
-            "somebody",
-            "anything",
-            "anyone",
-            "anybody"
-    );
     private static final Set<String> YESNO_PREFIXES = Set.of("is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "would", "will");
     private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "over", "below", "with", "in", "inside", "opposite");
     private static final Set<String> COLOCATION_SYNONYMS = Set.of("near", "beside", "alongside", "next");
@@ -583,9 +575,6 @@ public final class SimpleQueryParser {
             if (objectToken.isEmpty()) {
                 continue;
             }
-            if (isWildcardToken(objectToken)) {
-                return Optional.of(QueryGoal.relation(null, predicate, null, expectedTypeForWh(wh)));
-            }
             return Optional.of(QueryGoal.relation(null, predicate, objectToken, expectedTypeForWh(wh)));
         }
         return Optional.empty();
@@ -1108,18 +1097,6 @@ public final class SimpleQueryParser {
 
         String subjectText = buildPhrase(tokens, subjectIndex);
         String objectText = buildPhrase(tokens, objectIndex);
-        if (isWildcardToken(subject)) {
-            subject = null;
-            subjectText = null;
-        }
-        if (isWildcardToken(object)) {
-            object = null;
-            objectText = null;
-        }
-        if (subject == null && object == null) {
-            return Optional.empty();
-        }
-
         return Optional.of(QueryGoal.yesNo(subject, relation, object, null, subjectText, objectText, relation));
     }
 
@@ -1314,10 +1291,6 @@ public final class SimpleQueryParser {
             return "t" + normalized;
         }
         return normalized;
-    }
-
-    private boolean isWildcardToken(String token) {
-        return token != null && WILDCARD_TOKENS.contains(token);
     }
 
     private List<String> tokenize(String normalized) {

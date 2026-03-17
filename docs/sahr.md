@@ -612,6 +612,12 @@ operators without new Java predicate logic.
 Yes/no queries with wildcard subjects (e.g., “Is anything in the box”)
 now normalize to EXISTS over the remaining constraint so containment
 checks route through the shared query executor path.
+Predicate label lookup and fallback resolution now live exclusively in
+`PredicateResolver`, with `SahrAgent` calling a single resolver
+interface instead of performing local ontology/lemmatizer lookups.
+`QueryNormalizer` now owns wildcard YES/NO handling and target-slot
+selection, keeping surface parsing separate from canonical query-frame
+construction.
 `QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to
