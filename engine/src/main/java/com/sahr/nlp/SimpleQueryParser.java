@@ -26,7 +26,7 @@ public final class SimpleQueryParser {
             "anybody"
     );
     private static final Set<String> YESNO_PREFIXES = Set.of("is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "would", "will");
-    private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "below", "with", "in", "inside", "opposite");
+    private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "over", "below", "with", "in", "inside", "opposite");
     private static final Set<String> COLOCATION_SYNONYMS = Set.of("near", "beside", "alongside", "next");
     private static final Set<String> COLOR_MODIFIERS = Set.of("red", "blue", "green", "black", "white");
     private static final Morphology MORPHOLOGY = new Morphology();

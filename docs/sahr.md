@@ -599,6 +599,13 @@ Answer scoring and rendering now consult ontology annotations (e.g.,
 `ann:answerTemplate`) so domain packs can control ranking and output
 without hard-coded engine rules. Surface realization is handled by
 SimpleNLG using semantic templates, keeping English phrasing out of OWL.
+Question handling is converging on a unified `QueryFrame` model:
+heads still interpret language, but they emit a shared frame
+(`operator`, `subject`, `predicate`, `object`, `targetSlot`,
+`typeConstraint`) that flows through one retrieval path. `COUNT` is now
+treated as a first-class operator over the same retrieval set, so
+`retrieve` and `count` share predicate expansion, inference, and
+deduplication logic.
 Explanation candidates now include recovery agents and evidence nodes so
 “which system restored …” queries can return the most specific agent
 instead of the generic subject.
@@ -622,6 +629,9 @@ Supported annotations:
   - Value: `key:value` pairs (e.g., `verb:power;voice:passive;prep:by`).
   - Fallback: predicate-driven SimpleNLG clause rendering, with a safe
     "related to" clause if no template can be resolved.
+Lexical mapping for predicates now consults `rdfs:label`,
+`skos:prefLabel`, `skos:altLabel`, and `ontolex:writtenRep`, so synonym
+labels like "over" can map to canonical relations without code changes.
 - `ann:answerTemplateTrue` / `ann:answerTemplateFalse` (object properties)
   - Purpose: boolean semantic templates for SimpleNLG.
   - Value: `key:value` pairs (e.g., `verb:fail;negated:true`).

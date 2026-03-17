@@ -7,7 +7,9 @@ import com.sahr.core.HeadOntology;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.PropertyPolicyProvider;
+import com.sahr.core.QueryFrame;
 import com.sahr.core.QueryGoal;
+import com.sahr.core.QueryOperator;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
@@ -93,65 +95,44 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         if (query.type() == QueryGoal.Type.COUNT) {
-            return evaluateCount(query, graph, ontology, compatibility, subject, object, predicate, expectedType);
+            QueryFrame frame = buildFrame(query, QueryOperator.COUNT);
+            return evaluateCount(frame, graph, ontology, compatibility, subject, object, expectedType);
         }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        for (PredicateMatch predicateMatch : expandPredicateMatches(predicate, ontology)) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
-                boolean subjectMatch = subject == null || predicateMatch.matchesSubject(assertion, subject);
-                boolean objectMatch = object == null || predicateMatch.matchesObject(assertion, object);
-                SymbolId answer = null;
+        QueryFrame frame = buildFrame(query, QueryOperator.RETRIEVE);
+        List<FrameBinding> bindings = collectBindings(frame, graph, ontology, compatibility, subject, object, expectedType, false);
+        for (FrameBinding binding : bindings) {
+            SymbolId answer = binding.answer();
+            PredicateMatch predicateMatch = binding.predicateMatch();
+            RelationAssertion assertion = binding.assertion();
 
-                if (predicateOnly) {
-                    answer = selectPredicateOnlyAnswer(graph, ontology, compatibility, assertion, expectedType);
-                    if (answer == null) {
-                        continue;
-                    }
-                } else {
-                    if (!subjectMatch || !objectMatch) {
-                        continue;
-                    }
-                    if (subject != null) {
-                        answer = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
-                    } else if (object != null) {
-                        answer = predicateMatch.isSwapped() ? assertion.object() : assertion.subject();
-                    }
-                }
-                if (answer == null) {
-                    continue;
-                }
-                if (!matchesExpectedType(graph, ontology, compatibility, answer, expectedType)) {
-                    continue;
-                }
+            double queryMatch = predicateMatch.queryMatchScore();
+            double typeMatch = expectedType == null ? 0.5 : 1.0;
+            double graphConfidence = assertion.confidence();
+            double memoryFocus = memoryFocus(memory, subject, object, answer);
+            double score = normalize(queryMatch, typeMatch, graphConfidence, memoryFocus);
 
-                double queryMatch = predicateMatch.queryMatchScore();
-                double typeMatch = expectedType == null ? 0.5 : 1.0;
-                double graphConfidence = assertion.confidence();
-                double memoryFocus = memoryFocus(memory, subject, object, answer);
-                double score = normalize(queryMatch, typeMatch, graphConfidence, memoryFocus);
+            Map<String, Double> breakdown = new HashMap<>();
+            breakdown.put("query_match", queryMatch);
+            breakdown.put("entity_type_match", typeMatch);
+            breakdown.put("graph_confidence", graphConfidence);
+            breakdown.put("working_memory_focus", memoryFocus);
+            predicateMatch.policyStrengthScore().ifPresent(value -> {
+                breakdown.put("policy_strength", value);
+                breakdown.put("policy_applied", 1.0);
+                addPolicyRuleBreakdown(breakdown, predicateMatch.type());
+            });
 
-                Map<String, Double> breakdown = new HashMap<>();
-                breakdown.put("query_match", queryMatch);
-                breakdown.put("entity_type_match", typeMatch);
-                breakdown.put("graph_confidence", graphConfidence);
-                breakdown.put("working_memory_focus", memoryFocus);
-                predicateMatch.policyStrengthScore().ifPresent(value -> {
-                    breakdown.put("policy_strength", value);
-                    breakdown.put("policy_applied", 1.0);
-                    addPolicyRuleBreakdown(breakdown, predicateMatch.type());
-                });
-
-                candidates.add(new ReasoningCandidate(
-                        CandidateType.ANSWER,
-                        answer,
-                        score,
-                        getName(),
-                        List.of(assertion.toString()),
-                        breakdown,
-                        0
-                ));
-            }
+            candidates.add(new ReasoningCandidate(
+                    CandidateType.ANSWER,
+                    answer,
+                    score,
+                    getName(),
+                    List.of(assertion.toString()),
+                    breakdown,
+                    0
+            ));
         }
 
         if (candidates.isEmpty() && subject == null && object != null && isSymmetricAllowed(ontology, predicate)) {
@@ -180,48 +161,90 @@ public final class RelationQueryHead extends BaseHead {
         return null;
     }
 
-    private List<ReasoningCandidate> evaluateCount(QueryGoal query,
+    private List<ReasoningCandidate> evaluateCount(QueryFrame frame,
                                                    KnowledgeBase graph,
                                                    OntologyService ontology,
                                                    SemanticTypeCompatibilityService compatibility,
                                                    SymbolId subject,
                                                    SymbolId object,
-                                                   String predicate,
                                                    String expectedType) {
-        String modifier = query.modifier();
-        if (isDiscourseModifier(query.discourseModifier())) {
-            modifier = null;
+        if (frame == null) {
+            return List.of(buildCountAnswer(0, null));
         }
-        if (modifier != null && !modifier.isBlank()) {
-            if (object != null && !entityHasAttribute(graph, ontology, object, modifier)) {
-                return List.of(buildCountAnswer(0, predicate));
-            }
-            if (object == null && subject != null && !entityHasAttribute(graph, ontology, subject, modifier)) {
-                return List.of(buildCountAnswer(0, predicate));
+        List<FrameBinding> bindings = collectBindings(frame, graph, ontology, compatibility, subject, object, expectedType, true);
+        long count = bindings.stream()
+                .map(binding -> binding.answer().value())
+                .distinct()
+                .count();
+        return List.of(buildCountAnswer(count, frame.predicate()));
+    }
+
+    private QueryFrame buildFrame(QueryGoal query, QueryOperator operator) {
+        QueryFrame.TargetSlot targetSlot = QueryFrame.TargetSlot.ANY;
+        if (query != null) {
+            boolean hasSubject = query.subject() != null && !query.subject().isBlank();
+            boolean hasObject = query.object() != null && !query.object().isBlank();
+            if (hasSubject && !hasObject) {
+                targetSlot = QueryFrame.TargetSlot.OBJECT;
+            } else if (hasObject && !hasSubject) {
+                targetSlot = QueryFrame.TargetSlot.SUBJECT;
             }
         }
-        List<SymbolId> matches = new ArrayList<>();
-        for (PredicateMatch predicateMatch : expandPredicateMatches(predicate, ontology)) {
+        return new QueryFrame(
+                operator == null ? QueryOperator.RETRIEVE : operator,
+                query == null ? null : query.subject(),
+                query == null ? null : query.predicate(),
+                query == null ? null : query.object(),
+                targetSlot,
+                query == null ? null : query.expectedType(),
+                true
+        );
+    }
+
+    private List<FrameBinding> collectBindings(QueryFrame frame,
+                                               KnowledgeBase graph,
+                                               OntologyService ontology,
+                                               SemanticTypeCompatibilityService compatibility,
+                                               SymbolId subject,
+                                               SymbolId object,
+                                               String expectedType,
+                                               boolean countMode) {
+        if (frame == null || frame.predicate() == null || frame.predicate().isBlank()) {
+            return List.of();
+        }
+        boolean predicateOnly = (subject == null && object == null);
+        List<FrameBinding> bindings = new ArrayList<>();
+        for (PredicateMatch predicateMatch : expandPredicateMatches(frame.predicate(), ontology)) {
             for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
                 boolean subjectMatch = subject == null || predicateMatch.matchesSubject(assertion, subject);
                 boolean objectMatch = object == null || predicateMatch.matchesObject(assertion, object);
                 if (!subjectMatch || !objectMatch) {
                     continue;
                 }
-                SymbolId candidate = assertion.subject();
-                if (object != null) {
-                    candidate = predicateMatch.isSwapped() ? assertion.object() : assertion.subject();
+                SymbolId answer = null;
+                if (predicateOnly) {
+                    answer = selectPredicateOnlyAnswer(graph, ontology, compatibility, assertion, expectedType);
                 } else if (subject != null) {
-                    candidate = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
+                    answer = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
+                } else if (object != null) {
+                    answer = predicateMatch.isSwapped() ? assertion.object() : assertion.subject();
                 }
-                if (!matchesExpectedTypeForCount(graph, ontology, compatibility, candidate, expectedType)) {
+                if (answer == null) {
                     continue;
                 }
-                matches.add(candidate);
+                boolean typeMatch = countMode
+                        ? matchesExpectedTypeForCount(graph, ontology, compatibility, answer, expectedType)
+                        : matchesExpectedType(graph, ontology, compatibility, answer, expectedType);
+                if (!typeMatch) {
+                    continue;
+                }
+                bindings.add(new FrameBinding(assertion, predicateMatch, answer));
             }
         }
-        long count = matches.stream().map(SymbolId::value).distinct().count();
-        return List.of(buildCountAnswer(count, predicate));
+        return bindings;
+    }
+
+    private record FrameBinding(RelationAssertion assertion, PredicateMatch predicateMatch, SymbolId answer) {
     }
 
     private List<ReasoningCandidate> evaluateSymmetricFallback(KnowledgeBase graph,
@@ -285,6 +308,9 @@ public final class RelationQueryHead extends BaseHead {
             return true;
         }
         String normalized = stripPrefix(expectedType).toLowerCase(java.util.Locale.ROOT);
+        if (isGenericThing(normalized)) {
+            return true;
+        }
         if (!isIri(expectedType)) {
             if (isPersonLike(normalized)) {
                 return isPersonLike(stripPrefix(candidate.value()))
@@ -294,6 +320,16 @@ public final class RelationQueryHead extends BaseHead {
                     || hasTypeMatch(graph, candidate, Set.of(normalized));
         }
         return matchesExpectedType(graph, ontology, compatibility, candidate, expectedType);
+    }
+
+    private boolean isGenericThing(String value) {
+        if (value == null) {
+            return false;
+        }
+        return switch (value) {
+            case "thing", "things", "object", "objects", "item", "items" -> true;
+            default -> false;
+        };
     }
 
     private boolean hasTypeMatch(KnowledgeBase graph, SymbolId candidate, Set<String> expected) {

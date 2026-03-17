@@ -197,6 +197,16 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesRelationQueryFromOverPattern() {
+        QueryGoal query = parser.parse("What is over the mat");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("mat", query.object());
+        assertEquals("over", query.predicate());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromWhPrepositionObjectPattern() {
         QueryGoal query = parser.parse("What is the man sitting on");
 

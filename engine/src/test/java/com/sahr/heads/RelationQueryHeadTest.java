@@ -116,4 +116,32 @@ class RelationQueryHeadTest {
         assertFalse(inverseCandidates.isEmpty());
         assertEquals(new SymbolId("entity:man"), inverseCandidates.get(0).payload());
     }
+
+    @Test
+    void countsGenericThingsFromInverseRelation() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
+        String in = "https://sahr.ai/ontology/relations#in";
+        String contains = "https://sahr.ai/ontology/relations#contains";
+        baseOntology.addInverseProperty(in, contains);
+        OntologyService ontology = HeadOntologyTestSupport.wrapWithPolicy(baseOntology);
+
+        SymbolId box = new SymbolId("entity:box");
+        SymbolId ball = new SymbolId("entity:ball");
+        graph.addEntity(new EntityNode(box, "box", Set.of("box")));
+        graph.addEntity(new EntityNode(ball, "ball", Set.of("ball")));
+        graph.addAssertion(new RelationAssertion(box, contains, ball, 0.9));
+
+        QueryGoal query = QueryGoal.relation(null, in, "entity:box", null);
+        HeadContext context = new HeadContext(query, graph, ontology);
+        List<ReasoningCandidate> candidates = head.evaluate(context);
+        assertFalse(candidates.isEmpty());
+        assertEquals(new SymbolId("entity:ball"), candidates.get(0).payload());
+
+        QueryGoal countQuery = QueryGoal.count(null, in, "entity:box", "things", null);
+        HeadContext countContext = new HeadContext(countQuery, graph, ontology);
+        List<ReasoningCandidate> countCandidates = head.evaluate(countContext);
+        assertFalse(countCandidates.isEmpty());
+        assertEquals("1", countCandidates.get(0).payload());
+    }
 }

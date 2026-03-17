@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class LabelLexicalMapper implements TermMapper {
     private static final String RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label";
     private static final String SKOS_PREF_LABEL = "http://www.w3.org/2004/02/skos/core#prefLabel";
+    private static final String SKOS_ALT_LABEL = "http://www.w3.org/2004/02/skos/core#altLabel";
     private static final String ONTOLEX_WRITTEN_REP = "http://www.w3.org/ns/lemon/ontolex#writtenRep";
     private static final Map<String, String> CANONICAL_SYNSET_OVERRIDES = Map.ofEntries(
             Map.entry("person", "https://en-word.net/id/oewn-00007846-n"),
@@ -162,7 +163,10 @@ public final class LabelLexicalMapper implements TermMapper {
 
     private boolean isLabelProperty(IRI iri) {
         String value = iri.toString();
-        return RDFS_LABEL.equals(value) || SKOS_PREF_LABEL.equals(value);
+        return RDFS_LABEL.equals(value)
+                || SKOS_PREF_LABEL.equals(value)
+                || SKOS_ALT_LABEL.equals(value)
+                || ONTOLEX_WRITTEN_REP.equals(value);
     }
 
     private String normalize(String raw) {
