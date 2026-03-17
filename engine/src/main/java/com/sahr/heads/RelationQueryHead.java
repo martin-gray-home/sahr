@@ -6,16 +6,18 @@ import com.sahr.core.HeadContext;
 import com.sahr.core.HeadOntology;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
-import com.sahr.core.PropertyPolicyProvider;
 import com.sahr.core.QueryFrame;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.QueryOperator;
+import com.sahr.core.QueryBinding;
+import com.sahr.core.QueryExecutor;
+import com.sahr.core.QueryResult;
+import com.sahr.core.PredicateResolver;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
-import com.sahr.semantic.model.InferencePolicy;
 import com.sahr.semantic.model.InferencePolicyStrength;
 
 import java.util.ArrayList;
@@ -27,6 +29,8 @@ import java.util.Set;
 
 public final class RelationQueryHead extends BaseHead {
     private final Map<String, List<String>> predicateAliases;
+    private final PredicateResolver predicateResolver;
+    private final QueryExecutor queryExecutor;
 
     public RelationQueryHead() {
         this(Map.of());
@@ -34,6 +38,8 @@ public final class RelationQueryHead extends BaseHead {
 
     public RelationQueryHead(Map<String, List<String>> predicateAliases) {
         this.predicateAliases = predicateAliases == null ? Map.of() : predicateAliases;
+        this.predicateResolver = new PredicateResolver(this.predicateAliases);
+        this.queryExecutor = new QueryExecutor(predicateResolver);
     }
 
     @Override
@@ -91,25 +97,29 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         if (query.type() == QueryGoal.Type.YESNO) {
-            return evaluateYesNo(query, graph, ontology, subject, object, predicate, expectedType);
+            QueryFrame frame = buildFrame(query, QueryOperator.EXISTS);
+            QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
+            if (result.exists() && !result.bindings().isEmpty()) {
+                return List.of(buildYesAnswer(query, result.bindings().get(0)));
+            }
+            return List.of();
         }
 
         if (query.type() == QueryGoal.Type.COUNT) {
             QueryFrame frame = buildFrame(query, QueryOperator.COUNT);
-            return evaluateCount(frame, graph, ontology, compatibility, subject, object, expectedType);
+            QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
+            return List.of(buildCountAnswer(result.count(), frame.predicate()));
         }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
         QueryFrame frame = buildFrame(query, QueryOperator.RETRIEVE);
-        List<FrameBinding> bindings = collectBindings(frame, graph, ontology, compatibility, subject, object, expectedType, false);
-        for (FrameBinding binding : bindings) {
+        QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
+        for (QueryBinding binding : result.bindings()) {
             SymbolId answer = binding.answer();
-            PredicateMatch predicateMatch = binding.predicateMatch();
-            RelationAssertion assertion = binding.assertion();
 
-            double queryMatch = predicateMatch.queryMatchScore();
+            double queryMatch = queryMatchScore(binding.matchType(), binding.policyStrength());
             double typeMatch = expectedType == null ? 0.5 : 1.0;
-            double graphConfidence = assertion.confidence();
+            double graphConfidence = binding.confidence();
             double memoryFocus = memoryFocus(memory, subject, object, answer);
             double score = normalize(queryMatch, typeMatch, graphConfidence, memoryFocus);
 
@@ -118,10 +128,10 @@ public final class RelationQueryHead extends BaseHead {
             breakdown.put("entity_type_match", typeMatch);
             breakdown.put("graph_confidence", graphConfidence);
             breakdown.put("working_memory_focus", memoryFocus);
-            predicateMatch.policyStrengthScore().ifPresent(value -> {
+            policyStrengthScore(binding.policyStrength()).ifPresent(value -> {
                 breakdown.put("policy_strength", value);
                 breakdown.put("policy_applied", 1.0);
-                addPolicyRuleBreakdown(breakdown, predicateMatch.type());
+                addPolicyRuleBreakdown(breakdown, binding.matchType());
             });
 
             candidates.add(new ReasoningCandidate(
@@ -129,54 +139,13 @@ public final class RelationQueryHead extends BaseHead {
                     answer,
                     score,
                     getName(),
-                    List.of(assertion.toString()),
+                    List.of(binding.evidence()),
                     breakdown,
                     0
             ));
         }
 
-        if (candidates.isEmpty() && subject == null && object != null && isSymmetricAllowed(ontology, predicate)) {
-            candidates.addAll(evaluateSymmetricFallback(graph, ontology, compatibility, memory, object, predicate, expectedType));
-        }
-
         return candidates;
-    }
-
-    private SymbolId selectPredicateOnlyAnswer(KnowledgeBase graph,
-                                               OntologyService ontology,
-                                               SemanticTypeCompatibilityService compatibility,
-                                               RelationAssertion assertion,
-                                               String expectedType) {
-        SymbolId subject = assertion.subject();
-        SymbolId object = assertion.object();
-        if (expectedType == null || expectedType.isBlank()) {
-            return subject;
-        }
-        if (matchesExpectedType(graph, ontology, compatibility, subject, expectedType)) {
-            return subject;
-        }
-        if (matchesExpectedType(graph, ontology, compatibility, object, expectedType)) {
-            return object;
-        }
-        return null;
-    }
-
-    private List<ReasoningCandidate> evaluateCount(QueryFrame frame,
-                                                   KnowledgeBase graph,
-                                                   OntologyService ontology,
-                                                   SemanticTypeCompatibilityService compatibility,
-                                                   SymbolId subject,
-                                                   SymbolId object,
-                                                   String expectedType) {
-        if (frame == null) {
-            return List.of(buildCountAnswer(0, null));
-        }
-        List<FrameBinding> bindings = collectBindings(frame, graph, ontology, compatibility, subject, object, expectedType, true);
-        long count = bindings.stream()
-                .map(binding -> binding.answer().value())
-                .distinct()
-                .count();
-        return List.of(buildCountAnswer(count, frame.predicate()));
     }
 
     private QueryFrame buildFrame(QueryGoal query, QueryOperator operator) {
@@ -199,161 +168,6 @@ public final class RelationQueryHead extends BaseHead {
                 query == null ? null : query.expectedType(),
                 true
         );
-    }
-
-    private List<FrameBinding> collectBindings(QueryFrame frame,
-                                               KnowledgeBase graph,
-                                               OntologyService ontology,
-                                               SemanticTypeCompatibilityService compatibility,
-                                               SymbolId subject,
-                                               SymbolId object,
-                                               String expectedType,
-                                               boolean countMode) {
-        if (frame == null || frame.predicate() == null || frame.predicate().isBlank()) {
-            return List.of();
-        }
-        boolean predicateOnly = (subject == null && object == null);
-        List<FrameBinding> bindings = new ArrayList<>();
-        for (PredicateMatch predicateMatch : expandPredicateMatches(frame.predicate(), ontology)) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
-                boolean subjectMatch = subject == null || predicateMatch.matchesSubject(assertion, subject);
-                boolean objectMatch = object == null || predicateMatch.matchesObject(assertion, object);
-                if (!subjectMatch || !objectMatch) {
-                    continue;
-                }
-                SymbolId answer = null;
-                if (predicateOnly) {
-                    answer = selectPredicateOnlyAnswer(graph, ontology, compatibility, assertion, expectedType);
-                } else if (subject != null) {
-                    answer = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
-                } else if (object != null) {
-                    answer = predicateMatch.isSwapped() ? assertion.object() : assertion.subject();
-                }
-                if (answer == null) {
-                    continue;
-                }
-                boolean typeMatch = countMode
-                        ? matchesExpectedTypeForCount(graph, ontology, compatibility, answer, expectedType)
-                        : matchesExpectedType(graph, ontology, compatibility, answer, expectedType);
-                if (!typeMatch) {
-                    continue;
-                }
-                bindings.add(new FrameBinding(assertion, predicateMatch, answer));
-            }
-        }
-        return bindings;
-    }
-
-    private record FrameBinding(RelationAssertion assertion, PredicateMatch predicateMatch, SymbolId answer) {
-    }
-
-    private List<ReasoningCandidate> evaluateSymmetricFallback(KnowledgeBase graph,
-                                                               OntologyService ontology,
-                                                               SemanticTypeCompatibilityService compatibility,
-                                                               WorkingMemory memory,
-                                                               SymbolId anchor,
-                                                               String predicate,
-                                                               String expectedType) {
-        List<ReasoningCandidate> candidates = new ArrayList<>();
-        for (PredicateMatch predicateMatch : expandPredicateMatches(predicate, ontology)) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
-                boolean anchorMatch = predicateMatch.isSwapped()
-                        ? assertion.object().equals(anchor)
-                        : assertion.subject().equals(anchor);
-                if (!anchorMatch) {
-                    continue;
-                }
-                SymbolId answer = predicateMatch.isSwapped() ? assertion.subject() : assertion.object();
-                if (!matchesExpectedType(graph, ontology, compatibility, answer, expectedType)) {
-                    continue;
-                }
-
-                double queryMatch = predicateMatch.policyStrengthScore().orElse(0.85);
-                double typeMatch = expectedType == null ? 0.5 : 1.0;
-                double graphConfidence = assertion.confidence();
-                double memoryFocus = memoryFocus(memory, anchor, null, answer);
-                double score = normalize(queryMatch, typeMatch, graphConfidence, memoryFocus);
-
-                Map<String, Double> breakdown = new HashMap<>();
-                breakdown.put("query_match", queryMatch);
-                breakdown.put("entity_type_match", typeMatch);
-                breakdown.put("graph_confidence", graphConfidence);
-                breakdown.put("working_memory_focus", memoryFocus);
-                predicateMatch.policyStrengthScore().ifPresent(value -> {
-                    breakdown.put("policy_strength", value);
-                    breakdown.put("policy_applied", 1.0);
-                    addPolicyRuleBreakdown(breakdown, predicateMatch.type());
-                });
-
-                candidates.add(new ReasoningCandidate(
-                        CandidateType.ANSWER,
-                        answer,
-                        score,
-                        getName(),
-                        List.of(assertion.toString()),
-                        breakdown,
-                        0
-                ));
-            }
-        }
-        return candidates;
-    }
-
-    private boolean matchesExpectedTypeForCount(KnowledgeBase graph,
-                                               OntologyService ontology,
-                                               SemanticTypeCompatibilityService compatibility,
-                                               SymbolId candidate,
-                                               String expectedType) {
-        if (expectedType == null || expectedType.isBlank()) {
-            return true;
-        }
-        String normalized = stripPrefix(expectedType).toLowerCase(java.util.Locale.ROOT);
-        if (isGenericThing(normalized)) {
-            return true;
-        }
-        if (!isIri(expectedType)) {
-            if (isPersonLike(normalized)) {
-                return isPersonLike(stripPrefix(candidate.value()))
-                        || hasTypeMatch(graph, candidate, Set.of("person", "people", "man", "woman", "boy", "girl"));
-            }
-            return stripPrefix(candidate.value()).equalsIgnoreCase(normalized)
-                    || hasTypeMatch(graph, candidate, Set.of(normalized));
-        }
-        return matchesExpectedType(graph, ontology, compatibility, candidate, expectedType);
-    }
-
-    private boolean isGenericThing(String value) {
-        if (value == null) {
-            return false;
-        }
-        return switch (value) {
-            case "thing", "things", "object", "objects", "item", "items" -> true;
-            default -> false;
-        };
-    }
-
-    private boolean hasTypeMatch(KnowledgeBase graph, SymbolId candidate, Set<String> expected) {
-        Optional<EntityNode> entity = graph.findEntity(candidate);
-        if (entity.isEmpty()) {
-            return false;
-        }
-        for (String type : entity.get().conceptTypes()) {
-            String raw = stripPrefix(type);
-            if (expected.contains(raw.toLowerCase(java.util.Locale.ROOT))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isPersonLike(String value) {
-        if (value == null) {
-            return false;
-        }
-        return switch (value.toLowerCase(java.util.Locale.ROOT)) {
-            case "person", "people", "man", "woman", "boy", "girl" -> true;
-            default -> false;
-        };
     }
 
     private String stripPrefix(String value) {
@@ -431,39 +245,6 @@ public final class RelationQueryHead extends BaseHead {
         return focus;
     }
 
-    private boolean matchesExpectedType(KnowledgeBase graph,
-                                        OntologyService ontology,
-                                        SemanticTypeCompatibilityService compatibility,
-                                        SymbolId answer,
-                                        String expectedType) {
-        if (expectedType == null || expectedType.isBlank()) {
-            return true;
-        }
-        Optional<EntityNode> entity = graph.findEntity(answer);
-        if (entity.isEmpty()) {
-            return false;
-        }
-        if (!isIri(expectedType)) {
-            return true;
-        }
-        boolean hasIriType = entity.get().conceptTypes().stream().anyMatch(this::isIri);
-        if (!hasIriType) {
-            return !isPersonLikeExpectedType(ontology, expectedType);
-        }
-        for (String type : entity.get().conceptTypes()) {
-            if (!isIri(type)) {
-                continue;
-            }
-            if (compatibility.isCompatible(type, expectedType)) {
-                return true;
-            }
-        }
-        if (isPersonLikeExpectedType(ontology, expectedType)) {
-            return false;
-        }
-        return false;
-    }
-
     private String canonicalExpectedType(OntologyService ontology, String expectedType) {
         if (expectedType == null || expectedType.isBlank()) {
             return expectedType;
@@ -499,6 +280,19 @@ public final class RelationQueryHead extends BaseHead {
         return null;
     }
 
+    private static final java.util.Set<String> PERSON_LIKE_TOKENS = java.util.Set.of(
+            "person",
+            "people",
+            "human",
+            "agent",
+            "man",
+            "woman",
+            "boy",
+            "girl"
+    );
+
+    private static final String WORDNET_PERSON_SYNSET = "https://en-word.net/id/oewn-00007846-n";
+
     private boolean isPersonLikeExpectedType(OntologyService ontology, String expectedType) {
         if (expectedType == null || expectedType.isBlank() || !isIri(expectedType)) {
             return false;
@@ -525,123 +319,13 @@ public final class RelationQueryHead extends BaseHead {
         return normalized;
     }
 
-    private static final java.util.Set<String> PERSON_LIKE_TOKENS = java.util.Set.of(
-            "person",
-            "people",
-            "human",
-            "agent",
-            "man",
-            "woman",
-            "boy",
-            "girl"
-    );
-
-    private static final String WORDNET_PERSON_SYNSET = "https://en-word.net/id/oewn-00007846-n";
-
-    private List<PredicateMatch> expandPredicateMatches(String predicate, OntologyService ontology) {
-        List<PredicateMatch> expanded = new ArrayList<>();
-        expanded.add(new PredicateMatch(predicate, MatchType.DIRECT, null));
-        InferencePolicy symmetricPolicy = policyForSymmetric(ontology, predicate);
-        if (symmetricPolicy != null && symmetricPolicy.strength() != InferencePolicyStrength.DISABLED) {
-            expanded.add(new PredicateMatch(predicate, MatchType.SYMMETRIC, symmetricPolicy.strength()));
-        } else if (isSymmetricAllowed(ontology, predicate)) {
-            expanded.add(new PredicateMatch(predicate, MatchType.SYMMETRIC, null));
-        }
-        List<String> aliases = predicateAliases.getOrDefault(predicate, List.of());
-        for (String alias : aliases) {
-            expanded.add(new PredicateMatch(alias, MatchType.DIRECT, null));
-        }
-        if (isIri(predicate)) {
-            for (String subproperty : ontology.getSubproperties(predicate)) {
-                expanded.add(new PredicateMatch(subproperty, MatchType.DIRECT, null));
-            }
-            InferencePolicy inversePolicy = policyForInverse(ontology, predicate);
-            inverseProperty(ontology, predicate).ifPresent(inv -> {
-                expanded.add(new PredicateMatch(inv, MatchType.INVERSE,
-                        inversePolicy == null ? null : inversePolicy.strength()));
-                for (String subproperty : ontology.getSubproperties(inv)) {
-                    expanded.add(new PredicateMatch(subproperty, MatchType.INVERSE,
-                            inversePolicy == null ? null : inversePolicy.strength()));
-                }
-            });
-            return expanded;
-        }
-        java.util.Set<String> locationFamily = HeadOntology.expandFamily(ontology, HeadOntology.LOCATION_TRANSFER);
-        if (locationFamily.contains(predicate)) {
-            for (String relation : locationFamily) {
-                expanded.add(new PredicateMatch(relation, MatchType.DIRECT, null));
-            }
-        }
-        return expanded;
-    }
-
-    private boolean isSymmetricAllowed(OntologyService ontology, String predicate) {
-        if (ontology instanceof PropertyPolicyProvider provider) {
-            return provider.symmetricPolicy(predicate).isPresent();
-        }
-        return false;
-    }
-
-    private Optional<String> inverseProperty(OntologyService ontology, String predicate) {
-        if (ontology instanceof PropertyPolicyProvider provider) {
-            return provider.inverseProperty(predicate);
-        }
-        return Optional.empty();
-    }
-
-    private InferencePolicy policyForSymmetric(OntologyService ontology, String predicate) {
-        if (ontology instanceof PropertyPolicyProvider provider) {
-            return provider.symmetricPolicy(predicate).orElse(null);
-        }
-        return null;
-    }
-
-    private InferencePolicy policyForInverse(OntologyService ontology, String predicate) {
-        if (ontology instanceof PropertyPolicyProvider provider) {
-            return provider.inversePolicy(predicate).orElse(null);
-        }
-        return null;
-    }
-
-    private List<ReasoningCandidate> evaluateYesNo(QueryGoal query,
-                                                   KnowledgeBase graph,
-                                                   OntologyService ontology,
-                                                   SymbolId subject,
-                                                   SymbolId object,
-                                                   String predicate,
-                                                   String expectedType) {
-        if (subject == null || object == null) {
-            return List.of();
-        }
-        for (PredicateMatch predicateMatch : expandPredicateMatches(predicate, ontology)) {
-            for (RelationAssertion assertion : graph.findByPredicate(predicateMatch.predicate())) {
-                boolean subjectMatch = predicateMatch.matchesSubject(assertion, subject);
-                boolean objectMatch = predicateMatch.matchesObject(assertion, object);
-                if (subjectMatch && objectMatch) {
-                    return List.of(buildYesAnswer(query, assertion, predicateMatch.isInverse(),
-                            subject, object, predicateMatch.type(),
-                            predicateMatch.policyStrengthScore().orElse(null)));
-                }
-            }
-        }
-        return List.of();
-    }
-
-    private ReasoningCandidate buildYesAnswer(QueryGoal query,
-                                              RelationAssertion assertion,
-                                              boolean inverseMatch,
-                                              SymbolId subject,
-                                              SymbolId object,
-                                              MatchType matchType,
-                                              Double policyStrength) {
-        String subjectText = query.subjectText() != null ? query.subjectText() : subjectFromAssertion(assertion);
-        String objectText = query.objectText() != null ? query.objectText() : objectFromAssertion(assertion);
-        String predicateText = query.predicateText() != null ? query.predicateText() : predicateFromAssertion(assertion);
-        if (inverseMatch) {
-            subjectText = query.subjectText() != null ? query.subjectText()
-                    : subject == null ? subjectText : subject.value();
-            objectText = query.objectText() != null ? query.objectText()
-                    : object == null ? objectText : object.value();
+    private ReasoningCandidate buildYesAnswer(QueryGoal query, QueryBinding binding) {
+        String subjectText = query.subjectText() != null ? query.subjectText() : binding.subject().toString();
+        String objectText = query.objectText() != null ? query.objectText() : binding.object().toString();
+        String predicateText = query.predicateText() != null ? query.predicateText() : binding.predicate();
+        if (binding.matchType() == com.sahr.core.PredicateMatchType.INVERSE) {
+            subjectText = query.subjectText() != null ? query.subjectText() : binding.answer().value();
+            objectText = query.objectText() != null ? query.objectText() : binding.object().value();
             predicateText = query.predicateText() != null ? query.predicateText() : query.predicate();
         }
         predicateText = normalizePredicateText(predicateText);
@@ -650,35 +334,23 @@ public final class RelationQueryHead extends BaseHead {
 
         Map<String, Double> breakdown = new HashMap<>();
         breakdown.put("query_match", 1.0);
-        breakdown.put("graph_confidence", assertion.confidence());
-        if (policyStrength != null) {
-            breakdown.put("policy_strength", policyStrength);
+        breakdown.put("graph_confidence", binding.confidence());
+        policyStrengthScore(binding.policyStrength()).ifPresent(value -> {
+            breakdown.put("policy_strength", value);
             breakdown.put("policy_applied", 1.0);
-            addPolicyRuleBreakdown(breakdown, matchType);
-        }
-        double score = normalize(1.0, assertion.confidence());
+            addPolicyRuleBreakdown(breakdown, binding.matchType());
+        });
+        double score = normalize(1.0, binding.confidence());
 
         return new ReasoningCandidate(
                 CandidateType.ANSWER,
                 answer,
                 score,
                 getName(),
-                List.of(assertion.toString()),
+                List.of(binding.evidence()),
                 breakdown,
                 0
         );
-    }
-
-    private String subjectFromAssertion(RelationAssertion assertion) {
-        return assertion.subject().toString();
-    }
-
-    private String objectFromAssertion(RelationAssertion assertion) {
-        return assertion.object().toString();
-    }
-
-    private String predicateFromAssertion(RelationAssertion assertion) {
-        return assertion.predicate();
     }
 
     private String normalizePredicateText(String predicateText) {
@@ -699,53 +371,34 @@ public final class RelationQueryHead extends BaseHead {
         return predicateText.replace('_', ' ');
     }
 
-    private enum MatchType {
-        DIRECT,
-        SYMMETRIC,
-        INVERSE
+    private double queryMatchScore(com.sahr.core.PredicateMatchType type, InferencePolicyStrength policyStrength) {
+        if (policyStrength == null) {
+            return type == com.sahr.core.PredicateMatchType.INVERSE ? 0.9 : 1.0;
+        }
+        return switch (policyStrength) {
+            case HARD -> 1.0;
+            case SOFT -> 0.9;
+            case RANKING_HINT -> 0.6;
+            case DISABLED -> 0.0;
+        };
     }
 
-    private record PredicateMatch(String predicate, MatchType type, InferencePolicyStrength policyStrength) {
-        boolean matchesSubject(RelationAssertion assertion, SymbolId subject) {
-            return isSwapped() ? assertion.object().equals(subject) : assertion.subject().equals(subject);
+    private java.util.Optional<Double> policyStrengthScore(InferencePolicyStrength policyStrength) {
+        if (policyStrength == null) {
+            return java.util.Optional.empty();
         }
-
-        boolean matchesObject(RelationAssertion assertion, SymbolId object) {
-            return isSwapped() ? assertion.subject().equals(object) : assertion.object().equals(object);
-        }
-
-        boolean isSwapped() {
-            return type != MatchType.DIRECT;
-        }
-
-        boolean isInverse() {
-            return type == MatchType.INVERSE;
-        }
-
-        double queryMatchScore() {
-            if (policyStrength == null) {
-                return type == MatchType.INVERSE ? 0.9 : 1.0;
-            }
-            return switch (policyStrength) {
-                case HARD -> 1.0;
-                case SOFT -> 0.9;
-                case RANKING_HINT -> 0.6;
-                case DISABLED -> 0.0;
-            };
-        }
-
-        java.util.Optional<Double> policyStrengthScore() {
-            if (policyStrength == null) {
-                return java.util.Optional.empty();
-            }
-            return java.util.Optional.of(queryMatchScore());
-        }
+        return switch (policyStrength) {
+            case HARD -> java.util.Optional.of(1.0);
+            case SOFT -> java.util.Optional.of(0.9);
+            case RANKING_HINT -> java.util.Optional.of(0.6);
+            case DISABLED -> java.util.Optional.of(0.0);
+        };
     }
 
-    private void addPolicyRuleBreakdown(Map<String, Double> breakdown, MatchType type) {
-        if (type == MatchType.INVERSE) {
+    private void addPolicyRuleBreakdown(Map<String, Double> breakdown, com.sahr.core.PredicateMatchType type) {
+        if (type == com.sahr.core.PredicateMatchType.INVERSE) {
             breakdown.put("policy_rule_inverse", 1.0);
-        } else if (type == MatchType.SYMMETRIC) {
+        } else if (type == com.sahr.core.PredicateMatchType.SYMMETRIC) {
             breakdown.put("policy_rule_symmetric", 1.0);
         }
     }

@@ -910,6 +910,7 @@ public final class SahrAgent {
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         java.util.List<ReasoningCandidate> ontologyMatches = new java.util.ArrayList<>();
         java.util.List<ReasoningCandidate> fallbackMatches = new java.util.ArrayList<>();
+        int nonPersonCount = 0;
         for (ReasoningCandidate candidate : answers) {
             if (!(candidate.payload() instanceof SymbolId)) {
                 continue;
@@ -919,6 +920,8 @@ public final class SahrAgent {
             if (entity == null) {
                 if (matchesPersonLikeSurface(symbol, expectedIris)) {
                     ontologyMatches.add(candidate);
+                } else {
+                    nonPersonCount++;
                 }
                 continue;
             }
@@ -935,7 +938,12 @@ public final class SahrAgent {
             }
             if (types != null && !types.isEmpty() && !containsIri(types) && matchesFallbackPersonType(types)) {
                 fallbackMatches.add(candidate);
+                continue;
             }
+            nonPersonCount++;
+        }
+        if (nonPersonCount > 0) {
+            return java.util.List.of();
         }
         if (!ontologyMatches.isEmpty()) {
             return ontologyMatches;
@@ -955,6 +963,7 @@ public final class SahrAgent {
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         java.util.List<String> ontologyMatches = new java.util.ArrayList<>();
         java.util.List<String> fallbackMatches = new java.util.ArrayList<>();
+        int nonPersonCount = 0;
         for (String value : values) {
             if (value == null || value.isBlank()) {
                 continue;
@@ -964,6 +973,8 @@ public final class SahrAgent {
             if (entity == null) {
                 if (matchesPersonLikeSurface(symbol, expectedIris)) {
                     ontologyMatches.add(value);
+                } else {
+                    nonPersonCount++;
                 }
                 continue;
             }
@@ -980,7 +991,12 @@ public final class SahrAgent {
             }
             if (types != null && !types.isEmpty() && !containsIri(types) && matchesFallbackPersonType(types)) {
                 fallbackMatches.add(value);
+                continue;
             }
+            nonPersonCount++;
+        }
+        if (nonPersonCount > 0) {
+            return java.util.List.of();
         }
         if (!ontologyMatches.isEmpty()) {
             return ontologyMatches;
@@ -2355,13 +2371,20 @@ public final class SahrAgent {
             if (!directMatches.isEmpty()) {
                 long rankStart = planTiming ? System.nanoTime() : 0L;
                 directMatches = answerRanker.filterEchoValues(directMatches, goal);
+                boolean applyActiveRanking = false;
                 if (directMatches.stream().allMatch(this::isEntityValue)) {
                     java.util.List<String> preferredValues = preferPersonLikeValues(directMatches, goal);
-                    if (!preferredValues.isEmpty() && preferredValues.size() < directMatches.size()) {
-                        directMatches = preferredValues;
+                    if (!preferredValues.isEmpty()) {
+                        applyActiveRanking = true;
+                        if (preferredValues.size() < directMatches.size()) {
+                            directMatches = preferredValues;
+                        }
                     }
                 }
                 directMatches = answerRanker.rankAnswerValues(directMatches);
+                if (applyActiveRanking) {
+                    directMatches = rankByActiveEntities(directMatches);
+                }
                 if (planTiming) {
                     logPlanTiming("rank_direct", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
                             System.nanoTime() - rankStart);
@@ -2369,6 +2392,9 @@ public final class SahrAgent {
                 if (directMatches.size() == 1) {
                     String value = directMatches.get(0);
                     if (isEntityValue(value)) {
+                        if (QueryGoal.Type.RELATION.equals(goal.type())) {
+                            return value;
+                        }
                         return answerComposer.renderEntityAnswer(value, goal);
                     }
                     return value;
@@ -2386,6 +2412,9 @@ public final class SahrAgent {
             }
             if (ruleMatch != null) {
                 if (isEntityValue(ruleMatch)) {
+                    if (QueryGoal.Type.RELATION.equals(goal.type())) {
+                        return ruleMatch;
+                    }
                     return answerComposer.renderEntityAnswer(ruleMatch, goal);
                 }
                 return ruleMatch;
@@ -2413,6 +2442,9 @@ public final class SahrAgent {
         }
         String payload = winner.payload().toString();
         if (isEntityValue(payload)) {
+            if (QueryGoal.Type.RELATION.equals(goal.type())) {
+                return payload;
+            }
             return answerComposer.renderEntityAnswer(payload, goal);
         }
         return payload;
@@ -2751,6 +2783,24 @@ public final class SahrAgent {
             return false;
         }
         return value.startsWith("entity:") || value.startsWith("concept:");
+    }
+
+    private java.util.List<String> rankByActiveEntities(java.util.List<String> values) {
+        if (values == null || values.size() <= 1) {
+            return values == null ? java.util.List.of() : values;
+        }
+        java.util.List<com.sahr.core.SymbolId> activeOrder = workingMemory.activeEntityOrder();
+        if (activeOrder.isEmpty()) {
+            return values;
+        }
+        java.util.Map<String, Integer> rank = new java.util.HashMap<>();
+        int index = 0;
+        for (com.sahr.core.SymbolId symbol : activeOrder) {
+            rank.put(symbol.value(), index++);
+        }
+        java.util.List<String> ranked = new java.util.ArrayList<>(values);
+        ranked.sort(java.util.Comparator.comparingInt(value -> rank.getOrDefault(value, Integer.MAX_VALUE)));
+        return ranked;
     }
 
     private SymbolId selectCauseNode(RelationAssertion antecedent) {

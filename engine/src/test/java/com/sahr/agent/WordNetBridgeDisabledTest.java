@@ -12,6 +12,7 @@ import com.sahr.ontology.OntologyHeadCompiler;
 import com.sahr.ontology.OntologyLoader;
 import com.sahr.ontology.OwlApiOntologyService;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.semanticweb.owlapi.model.OWLOntology;
 

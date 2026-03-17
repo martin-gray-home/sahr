@@ -606,6 +606,15 @@ heads still interpret language, but they emit a shared frame
 treated as a first-class operator over the same retrieval set, so
 `retrieve` and `count` share predicate expansion, inference, and
 deduplication logic.
+`QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
+subproperty/inverse expansion, retrieval, type filtering, and operator
+application, returning a structured `QueryResult` that can be adapted to
+legacy answer candidates.
+Relation queries that target people now return raw entity identifiers
+(e.g., `entity:woman`) instead of English clauses to keep head behavior
+stable while the new query frame path is being adopted. When a relation
+query resolves only person-like entities, answer ordering is biased by
+working-memory recency so recently mentioned actors are surfaced first.
 Explanation candidates now include recovery agents and evidence nodes so
 “which system restored …” queries can return the most specific agent
 instead of the generic subject.

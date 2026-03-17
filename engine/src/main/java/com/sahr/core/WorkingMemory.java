@@ -61,6 +61,10 @@ public final class WorkingMemory {
         return Collections.unmodifiableSet(activeEntities);
     }
 
+    public List<SymbolId> activeEntityOrder() {
+        return List.copyOf(activeEntityOrder);
+    }
+
     public void recordAssertion(RelationAssertion assertion) {
         assertUpdate("recordAssertion");
         if (assertion == null) {

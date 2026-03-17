@@ -2759,6 +2759,9 @@ final class AnswerComposer {
         if (value == null || value.isBlank()) {
             return "No candidates produced.";
         }
+        if (shouldReturnRawEntity(goal, java.util.List.of(value))) {
+            return value;
+        }
         String display = displayValue(value);
         if (role != null) {
             switch (role) {
@@ -2792,6 +2795,10 @@ final class AnswerComposer {
         if (values == null || values.isEmpty()) {
             return "No candidates produced.";
         }
+        if (shouldReturnRawEntity(goal, values)) {
+            java.util.LinkedHashSet<String> uniqueValues = new java.util.LinkedHashSet<>(values);
+            return String.join(", ", uniqueValues);
+        }
         java.util.LinkedHashSet<String> uniqueValues = new java.util.LinkedHashSet<>(values);
         java.util.List<String> rendered = new java.util.ArrayList<>();
         for (String value : uniqueValues) {
@@ -2815,6 +2822,26 @@ final class AnswerComposer {
             return "The answers were " + list + ".";
         }
         return "The answer was " + list + ".";
+    }
+
+    private boolean shouldReturnRawEntity(QueryGoal goal, java.util.List<String> values) {
+        if (goal == null || values == null || values.isEmpty()) {
+            return false;
+        }
+        boolean relation = QueryGoal.Type.RELATION.equals(goal.type());
+        boolean personExpected = "person".equalsIgnoreCase(goal.expectedType());
+        if (!relation && !personExpected) {
+            return false;
+        }
+        for (String value : values) {
+            if (value == null) {
+                return false;
+            }
+            if (!(value.startsWith("entity:") || value.startsWith("concept:"))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isPlural(String text) {
