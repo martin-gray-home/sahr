@@ -879,7 +879,7 @@ public final class SahrAgent {
             }
         }
         if (query.type() == QueryGoal.Type.YESNO) {
-            if (isBlank(query.predicate()) || isBlank(query.subject()) || isBlank(query.object())) {
+            if (isBlank(query.predicate()) || (isBlank(query.subject()) && isBlank(query.object()))) {
                 return QueryGoal.unknown();
             }
         }
@@ -1207,15 +1207,74 @@ public final class SahrAgent {
         if (isIri(predicate)) {
             return predicate;
         }
+        Optional<String> ontologyPredicate = resolvePredicateIri(predicate);
+        if (ontologyPredicate.isPresent()) {
+            return ontologyPredicate.get();
+        }
         String lemma = lemmatizePredicate(predicate);
         if (!lemma.equals(predicate)) {
             Optional<String> mappedLemma = termMapper.mapPredicateToken(lemma);
             if (mappedLemma.isPresent()) {
                 return mappedLemma.get();
             }
+            Optional<String> ontologyLemma = resolvePredicateIri(lemma);
+            if (ontologyLemma.isPresent()) {
+                return ontologyLemma.get();
+            }
             return lemma;
         }
         return predicate;
+    }
+
+    private Optional<String> resolvePredicateIri(String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return Optional.empty();
+        }
+        java.util.Set<String> direct = ontology.getObjectPropertiesByLabel(predicate);
+        if (!direct.isEmpty()) {
+            return Optional.of(selectBestPredicateIri(predicate, direct));
+        }
+        String spaced = predicate.replace('_', ' ');
+        if (!spaced.equals(predicate)) {
+            java.util.Set<String> spacedMatches = ontology.getObjectPropertiesByLabel(spaced);
+            if (!spacedMatches.isEmpty()) {
+                return Optional.of(selectBestPredicateIri(predicate, spacedMatches));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private String selectBestPredicateIri(String predicate, java.util.Set<String> iris) {
+        if (iris == null || iris.isEmpty()) {
+            return predicate;
+        }
+        String normalized = annotationResolver.normalizeLabelToToken(predicate);
+        String preferred = null;
+        int preferredLength = Integer.MAX_VALUE;
+        for (String iri : iris) {
+            if (iri == null || iri.isBlank()) {
+                continue;
+            }
+            String local = annotationResolver.normalizeLabelToToken(localName(iri));
+            if (local.equals(normalized)) {
+                return iri;
+            }
+            if (local.equals(normalized + "s")) {
+                if (preferred == null || local.length() < preferredLength) {
+                    preferred = iri;
+                    preferredLength = local.length();
+                }
+                continue;
+            }
+            if (local.startsWith(normalized) && local.length() < preferredLength) {
+                preferred = iri;
+                preferredLength = local.length();
+            }
+        }
+        if (preferred != null) {
+            return preferred;
+        }
+        return iris.stream().sorted().findFirst().orElse(predicate);
     }
 
     private String lemmatizePredicate(String predicate) {
@@ -1279,7 +1338,7 @@ public final class SahrAgent {
             objectId = normalizedPredicate.overrideObject;
             objectTypes = normalizedPredicate.overrideObjectTypes;
         }
-        Optional<String> predicateIri = termMapper.mapPredicateToken(predicate);
+        String mappedPredicate = mapPredicate(predicate);
 
         List<Statement> mappedExtras = new java.util.ArrayList<>();
         for (Statement extra : statement.additionalStatements()) {
@@ -1315,7 +1374,7 @@ public final class SahrAgent {
                     AssertionLayer.CANONICAL
             ));
         }
-        if (predicateIri.isPresent() && !predicateIri.get().equals(predicate)) {
+        if (isIri(mappedPredicate) && !mappedPredicate.equals(predicate)) {
             mappedExtras.add(new Statement(
                     subjectId,
                     objectId,
@@ -1327,10 +1386,12 @@ public final class SahrAgent {
                     List.of(),
                     AssertionLayer.SURFACE
             ));
-            predicate = predicateIri.get();
+            predicate = mappedPredicate;
             if (layer == AssertionLayer.SURFACE) {
                 layer = AssertionLayer.CANONICAL;
             }
+        } else {
+            predicate = mappedPredicate;
         }
 
         return new Statement(
@@ -2616,7 +2677,11 @@ public final class SahrAgent {
         if (best == null) {
             return null;
         }
-        return best.subject().value() + " " + localName(best.predicate()) + " " + best.object().value();
+        String predicateName = localName(best.predicate());
+        if ("inside".equals(predicateName)) {
+            predicateName = "in";
+        }
+        return best.subject().value() + " " + predicateName + " " + best.object().value();
     }
 
     private int rankDirectWherePredicate(String predicate,
@@ -2631,10 +2696,13 @@ public final class SahrAgent {
             return 0;
         }
         if (containmentPredicates.contains(predicate) || containmentNames.contains(predicateName)) {
-            return 1;
+            if ("in".equals(predicateName) || "locatedin".equals(predicateName)) {
+                return 1;
+            }
+            return 2;
         }
         if (locationPredicates.contains(predicate) || locationNames.contains(predicateName)) {
-            return 2;
+            return 3;
         }
         return Integer.MAX_VALUE;
     }

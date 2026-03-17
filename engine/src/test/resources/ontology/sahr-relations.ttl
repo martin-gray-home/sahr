@@ -26,6 +26,13 @@ sahr:containment a owl:ObjectProperty ;
     rdfs:label "containment" ;
     rdfs:subPropertyOf head:containment .
 
+sahr:contains a owl:ObjectProperty ;
+    rdfs:label "contain" ;
+    rdfs:label "contains" ;
+    rdfs:label "contained" ;
+    rdfs:subPropertyOf sahr:containment ;
+    owl:inverseOf sahr:in .
+
 sahr:proximity a owl:ObjectProperty ;
     rdfs:label "proximity" ;
     rdfs:subPropertyOf sahr:locationTransferRelation .
@@ -57,10 +64,12 @@ sahr:locatedIn a owl:ObjectProperty ;
 
 sahr:inside a owl:ObjectProperty ;
     rdfs:label "inside" ;
+    owl:inverseOf sahr:contains ;
     rdfs:subPropertyOf sahr:containment .
 
 sahr:in a owl:ObjectProperty ;
     rdfs:label "in" ;
+    owl:inverseOf sahr:contains ;
     rdfs:subPropertyOf sahr:containment .
 
 sahr:at a owl:ObjectProperty ;

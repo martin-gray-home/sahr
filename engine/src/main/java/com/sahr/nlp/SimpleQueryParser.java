@@ -1108,6 +1108,17 @@ public final class SimpleQueryParser {
 
         String subjectText = buildPhrase(tokens, subjectIndex);
         String objectText = buildPhrase(tokens, objectIndex);
+        if (isWildcardToken(subject)) {
+            subject = null;
+            subjectText = null;
+        }
+        if (isWildcardToken(object)) {
+            object = null;
+            objectText = null;
+        }
+        if (subject == null && object == null) {
+            return Optional.empty();
+        }
 
         return Optional.of(QueryGoal.yesNo(subject, relation, object, null, subjectText, objectText, relation));
     }

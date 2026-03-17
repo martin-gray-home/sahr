@@ -606,6 +606,12 @@ heads still interpret language, but they emit a shared frame
 treated as a first-class operator over the same retrieval set, so
 `retrieve` and `count` share predicate expansion, inference, and
 deduplication logic.
+Containment reasoning now has a north‑star regression test that uses the
+ontology‑only `contains` predicate to validate retrieve/count/exists
+operators without new Java predicate logic.
+Yes/no queries with wildcard subjects (e.g., “Is anything in the box”)
+now normalize to EXISTS over the remaining constraint so containment
+checks route through the shared query executor path.
 `QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to

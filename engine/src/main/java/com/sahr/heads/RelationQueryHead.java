@@ -97,7 +97,7 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         if (query.type() == QueryGoal.Type.YESNO) {
-            QueryFrame frame = buildFrame(query, QueryOperator.EXISTS);
+            QueryFrame frame = buildFrame(query, QueryOperator.EXISTS, expectedType);
             QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
             if (result.exists() && !result.bindings().isEmpty()) {
                 return List.of(buildYesAnswer(query, result.bindings().get(0)));
@@ -106,13 +106,13 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         if (query.type() == QueryGoal.Type.COUNT) {
-            QueryFrame frame = buildFrame(query, QueryOperator.COUNT);
+            QueryFrame frame = buildFrame(query, QueryOperator.COUNT, expectedType);
             QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
             return List.of(buildCountAnswer(result.count(), frame.predicate()));
         }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        QueryFrame frame = buildFrame(query, QueryOperator.RETRIEVE);
+        QueryFrame frame = buildFrame(query, QueryOperator.RETRIEVE, expectedType);
         QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
         for (QueryBinding binding : result.bindings()) {
             SymbolId answer = binding.answer();
@@ -148,7 +148,7 @@ public final class RelationQueryHead extends BaseHead {
         return candidates;
     }
 
-    private QueryFrame buildFrame(QueryGoal query, QueryOperator operator) {
+    private QueryFrame buildFrame(QueryGoal query, QueryOperator operator, String expectedType) {
         QueryFrame.TargetSlot targetSlot = QueryFrame.TargetSlot.ANY;
         if (query != null) {
             boolean hasSubject = query.subject() != null && !query.subject().isBlank();
@@ -165,7 +165,7 @@ public final class RelationQueryHead extends BaseHead {
                 query == null ? null : query.predicate(),
                 query == null ? null : query.object(),
                 targetSlot,
-                query == null ? null : query.expectedType(),
+                expectedType,
                 true
         );
     }

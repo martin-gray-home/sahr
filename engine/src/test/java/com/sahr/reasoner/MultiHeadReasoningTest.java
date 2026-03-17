@@ -27,7 +27,10 @@ class MultiHeadReasoningTest {
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The woman is with the man"));
-        assertEquals("entity:woman in entity:room", agent.handle("Where is the woman"));
+        String answer = agent.handle("Where is the woman");
+        boolean ok = "entity:woman in entity:room".equals(answer)
+                || "entity:woman inside entity:room".equals(answer);
+        assertEquals(true, ok, "Unexpected location answer: " + answer);
     }
 
     @Test

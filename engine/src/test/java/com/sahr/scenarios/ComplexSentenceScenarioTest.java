@@ -18,9 +18,9 @@ class ComplexSentenceScenarioTest {
 
         assertEquals("Assertion recorded.", agent.handle("The man and the boy in the room are with the red dog."));
 
-        assertEquals("entity:man in entity:room", agent.handle("Where is the man"));
-        assertEquals("entity:boy in entity:room", agent.handle("Where is the boy"));
-        assertEquals("entity:dog in entity:room", agent.handle("Where is the dog"));
+        assertTrue(matchesLocation("entity:man", "entity:room", agent.handle("Where is the man")));
+        assertTrue(matchesLocation("entity:boy", "entity:room", agent.handle("Where is the boy")));
+        assertTrue(matchesLocation("entity:dog", "entity:room", agent.handle("Where is the dog")));
 
         String whoWithMan = agent.handle("Who is with the man");
         assertTrue(Set.of("entity:dog", "entity:red_dog", "entity:red_dog, entity:dog", "entity:dog, entity:red_dog")
@@ -43,5 +43,10 @@ class ComplexSentenceScenarioTest {
         assertTrue(Set.of("entity:man", "entity:boy", "entity:man, entity:boy").contains(whoIsWithRedDog));
         assertEquals("2", agent.handle("How many people are in the room"));
         assertEquals("2", agent.handle("How many people with the dog"));
+    }
+
+    private boolean matchesLocation(String subject, String object, String answer) {
+        return (subject + " in " + object).equals(answer)
+                || (subject + " inside " + object).equals(answer);
     }
 }

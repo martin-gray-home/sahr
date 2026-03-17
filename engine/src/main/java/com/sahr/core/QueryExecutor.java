@@ -140,6 +140,10 @@ public final class QueryExecutor {
         if (expectedType == null || expectedType.isBlank()) {
             return true;
         }
+        String normalizedExpected = stripPrefix(expectedType).toLowerCase(java.util.Locale.ROOT);
+        if (isGenericThing(normalizedExpected)) {
+            return true;
+        }
         if (isEntityValue(expectedType)) {
             return candidate.value().equals(expectedType);
         }
@@ -234,7 +238,7 @@ public final class QueryExecutor {
             return false;
         }
         return switch (value) {
-            case "thing", "things", "object", "objects", "item", "items" -> true;
+            case "entity", "entities", "thing", "things", "object", "objects", "item", "items" -> true;
             default -> false;
         };
     }
