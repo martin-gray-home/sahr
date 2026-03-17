@@ -622,6 +622,9 @@ construction.
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to
 legacy answer candidates.
+Modifier constraints (e.g., color adjectives) now flow through
+`QueryFrame` into `QueryExecutor`, so relation heads no longer inspect the
+graph for attribute filters.
 Relation queries that target people now return raw entity identifiers
 (e.g., `entity:woman`) instead of English clauses to keep head behavior
 stable while the new query frame path is being adopted. When a relation

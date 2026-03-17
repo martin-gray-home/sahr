@@ -1,9 +1,7 @@
 package com.sahr.heads;
 
 import com.sahr.core.CandidateType;
-import com.sahr.core.EntityNode;
 import com.sahr.core.HeadContext;
-import com.sahr.core.HeadOntology;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.QueryFrame;
@@ -15,7 +13,6 @@ import com.sahr.core.QueryNormalizer;
 import com.sahr.core.QueryResult;
 import com.sahr.core.PredicateResolver;
 import com.sahr.core.ReasoningCandidate;
-import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.WorkingMemory;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
@@ -85,19 +82,6 @@ public final class RelationQueryHead extends BaseHead {
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         SymbolId subject = subjectBinding == null || subjectBinding.isBlank() ? null : new SymbolId(subjectBinding);
         SymbolId object = objectBinding == null || objectBinding.isBlank() ? null : new SymbolId(objectBinding);
-        String modifier = query.modifier();
-        if (isDiscourseModifier(query.discourseModifier())) {
-            modifier = null;
-        }
-
-        if (modifier != null && !modifier.isBlank()) {
-            if (subject != null && !entityHasAttribute(graph, ontology, subject, modifier)) {
-                return List.of();
-            }
-            if (object != null && !entityHasAttribute(graph, ontology, object, modifier)) {
-                return List.of();
-            }
-        }
 
         if (query.type() == QueryGoal.Type.YESNO) {
             QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.EXISTS, expectedType);
@@ -151,19 +135,6 @@ public final class RelationQueryHead extends BaseHead {
         return candidates;
     }
 
-    private String stripPrefix(String value) {
-        if (value == null) {
-            return "";
-        }
-        if (value.startsWith("entity:")) {
-            return value.substring("entity:".length());
-        }
-        if (value.startsWith("concept:")) {
-            return value.substring("concept:".length());
-        }
-        return value;
-    }
-
     private ReasoningCandidate buildCountAnswer(long count, String predicate) {
         double score = normalize(1.0, 0.8);
         Map<String, Double> breakdown = new HashMap<>();
@@ -178,35 +149,6 @@ public final class RelationQueryHead extends BaseHead {
                 breakdown,
                 0
         );
-    }
-
-    private boolean entityHasAttribute(KnowledgeBase graph, OntologyService ontology, SymbolId entity, String modifier) {
-        if (entity == null || modifier == null || modifier.isBlank()) {
-            return true;
-        }
-        String normalized = modifier.toLowerCase(java.util.Locale.ROOT);
-        java.util.Set<String> attributePredicates = HeadOntology.expandFamily(ontology, HeadOntology.ATTRIBUTE_RELATION);
-        if (attributePredicates.isEmpty()) {
-            return false;
-        }
-        for (RelationAssertion assertion : graph.findBySubject(entity)) {
-            if (!attributePredicates.contains(assertion.predicate())) {
-                continue;
-            }
-            String value = assertion.object().value().replace("entity:", "").toLowerCase(java.util.Locale.ROOT);
-            if (normalized.equals(value)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isDiscourseModifier(String modifier) {
-        if (modifier == null || modifier.isBlank()) {
-            return false;
-        }
-        String normalized = modifier.toLowerCase(java.util.Locale.ROOT);
-        return "else".equals(normalized) || "other".equals(normalized) || "another".equals(normalized);
     }
 
     private double memoryFocus(WorkingMemory memory, SymbolId subject, SymbolId object, SymbolId answer) {
@@ -259,6 +201,19 @@ public final class RelationQueryHead extends BaseHead {
             }
         }
         return null;
+    }
+
+    private String stripPrefix(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.startsWith("entity:")) {
+            return value.substring("entity:".length());
+        }
+        if (value.startsWith("concept:")) {
+            return value.substring("concept:".length());
+        }
+        return value;
     }
 
     private static final java.util.Set<String> PERSON_LIKE_TOKENS = java.util.Set.of(

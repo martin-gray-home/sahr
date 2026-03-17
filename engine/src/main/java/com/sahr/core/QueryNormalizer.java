@@ -17,6 +17,12 @@ public final class QueryNormalizer {
         QueryOperator resolvedOperator = operator == null ? operatorFor(query) : operator;
         String subject = query == null ? null : query.subject();
         String object = query == null ? null : query.object();
+        String modifier = query == null ? null : query.modifier();
+        String discourse = query == null ? null : query.discourseModifier();
+
+        if (isDiscourseModifier(discourse)) {
+            modifier = null;
+        }
 
         if (query != null && query.type() == QueryGoal.Type.YESNO) {
             if (isWildcard(subject)) {
@@ -43,6 +49,7 @@ public final class QueryNormalizer {
                 object,
                 targetSlot,
                 expectedType,
+                modifier,
                 true
         );
     }
@@ -69,5 +76,13 @@ public final class QueryNormalizer {
             normalized = normalized.substring("concept:".length());
         }
         return WILDCARD_TOKENS.contains(normalized);
+    }
+
+    private boolean isDiscourseModifier(String modifier) {
+        if (modifier == null || modifier.isBlank()) {
+            return false;
+        }
+        String normalized = modifier.toLowerCase(Locale.ROOT);
+        return "else".equals(normalized) || "other".equals(normalized) || "another".equals(normalized);
     }
 }

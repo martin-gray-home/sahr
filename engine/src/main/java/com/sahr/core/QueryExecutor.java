@@ -29,7 +29,12 @@ public final class QueryExecutor {
         SymbolId subject = frame.subject() == null || frame.subject().isBlank() ? null : new SymbolId(frame.subject());
         SymbolId object = frame.object() == null || frame.object().isBlank() ? null : new SymbolId(frame.object());
         String expectedType = frame.typeConstraint();
+        String modifier = frame.modifier();
         boolean countMode = frame.operator() == QueryOperator.COUNT;
+
+        if (!modifierSatisfied(graph, ontology, subject, object, modifier)) {
+            return new QueryResult(frame.operator(), List.of(), 0L, false, List.of());
+        }
 
         List<QueryBinding> bindings = new ArrayList<>();
         List<String> evidence = new ArrayList<>();
@@ -82,6 +87,47 @@ public final class QueryExecutor {
                     .count();
         }
         return new QueryResult(frame.operator(), bindings, count, exists, evidence);
+    }
+
+    private boolean modifierSatisfied(KnowledgeBase graph,
+                                      OntologyService ontology,
+                                      SymbolId subject,
+                                      SymbolId object,
+                                      String modifier) {
+        if (modifier == null || modifier.isBlank()) {
+            return true;
+        }
+        if (subject != null && !entityHasAttribute(graph, ontology, subject, modifier)) {
+            return false;
+        }
+        if (object != null && !entityHasAttribute(graph, ontology, object, modifier)) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean entityHasAttribute(KnowledgeBase graph,
+                                       OntologyService ontology,
+                                       SymbolId entity,
+                                       String modifier) {
+        if (entity == null || modifier == null || modifier.isBlank()) {
+            return true;
+        }
+        String normalized = modifier.toLowerCase(Locale.ROOT);
+        Set<String> attributePredicates = HeadOntology.expandFamily(ontology, HeadOntology.ATTRIBUTE_RELATION);
+        if (attributePredicates.isEmpty()) {
+            return false;
+        }
+        for (RelationAssertion assertion : graph.findBySubject(entity)) {
+            if (!attributePredicates.contains(assertion.predicate())) {
+                continue;
+            }
+            String value = assertion.object().value().replace("entity:", "").toLowerCase(Locale.ROOT);
+            if (normalized.equals(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private SymbolId selectPredicateOnlyAnswer(KnowledgeBase graph,

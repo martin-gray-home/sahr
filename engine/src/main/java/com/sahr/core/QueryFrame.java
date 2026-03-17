@@ -15,6 +15,7 @@ public final class QueryFrame {
     private final String object;
     private final TargetSlot targetSlot;
     private final String typeConstraint;
+    private final String modifier;
     private final boolean includeInferred;
 
     public QueryFrame(QueryOperator operator,
@@ -23,6 +24,7 @@ public final class QueryFrame {
                       String object,
                       TargetSlot targetSlot,
                       String typeConstraint,
+                      String modifier,
                       boolean includeInferred) {
         this.operator = Objects.requireNonNull(operator, "operator");
         this.subject = subject;
@@ -30,6 +32,7 @@ public final class QueryFrame {
         this.object = object;
         this.targetSlot = targetSlot == null ? TargetSlot.ANY : targetSlot;
         this.typeConstraint = typeConstraint;
+        this.modifier = modifier;
         this.includeInferred = includeInferred;
     }
 
@@ -55,6 +58,10 @@ public final class QueryFrame {
 
     public String typeConstraint() {
         return typeConstraint;
+    }
+
+    public String modifier() {
+        return modifier;
     }
 
     public boolean includeInferred() {
