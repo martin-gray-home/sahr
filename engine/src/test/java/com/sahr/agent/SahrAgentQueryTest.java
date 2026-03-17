@@ -345,7 +345,80 @@ class SahrAgentQueryTest {
             public String normalizeTypeToken(String raw) {
                 return raw == null ? "" : raw;
             }
-        }, null);
+        }, new OntologyAnnotationResolver(new com.sahr.core.OntologyService() {
+            @Override
+            public boolean isSubclassOf(String child, String parent) {
+                return false;
+            }
+
+            @Override
+            public boolean isSymmetricProperty(String property) {
+                return false;
+            }
+
+            @Override
+            public boolean isTransitiveProperty(String property) {
+                return false;
+            }
+
+            @Override
+            public java.util.Optional<String> getInverseProperty(String property) {
+                return java.util.Optional.empty();
+            }
+
+            @Override
+            public java.util.Set<String> getSuperclasses(String concept) {
+                return java.util.Set.of();
+            }
+
+            @Override
+            public java.util.Set<String> getSubclasses(String concept) {
+                return java.util.Set.of();
+            }
+
+            @Override
+            public java.util.Set<String> getSubproperties(String property) {
+                return java.util.Set.of();
+            }
+
+            @Override
+            public java.util.Set<String> getObjectPropertyRanges(String property) {
+                return java.util.Set.of();
+            }
+
+            @Override
+            public java.util.Set<String> getObjectPropertiesByLabel(String label) {
+                return java.util.Set.of();
+            }
+
+            @Override
+            public java.util.Set<String> getEntityIrisByLabel(String label) {
+                return java.util.Set.of();
+            }
+
+            @Override
+            public java.util.Set<String> getLabels(String iri) {
+                if (iri != null && iri.contains("#wear")) {
+                    return java.util.Set.of("wear");
+                }
+                return java.util.Set.of();
+            }
+
+            @Override
+            public java.util.Optional<String> getAnnotationValue(String iri, String annotationIri) {
+                return java.util.Optional.empty();
+            }
+
+            @Override
+            public java.util.Set<String> getEntitiesWithAnnotation(String annotationIri, String value) {
+                return java.util.Set.of();
+            }
+
+            @Override
+            public java.util.Set<String> getObjectPropertyTargets(String subjectIri, String propertyIri) {
+                return java.util.Set.of();
+            }
+        }));
         RelationAssertion subclassAssertion = new RelationAssertion(
                 new SymbolId("concept:hat"),
                 "rdfs:subClassOf",
@@ -364,10 +437,17 @@ class SahrAgentQueryTest {
                 new SymbolId("entity:green"),
                 0.9
         );
+        RelationAssertion wearAssertion = new RelationAssertion(
+                new SymbolId("entity:man"),
+                "https://sahr.ai/ontology/relations#wear",
+                new SymbolId("entity:hat"),
+                0.9
+        );
         String subclassSentence = renderer.formatAssertionSentence(subclassAssertion).toLowerCase(java.util.Locale.ROOT);
         assertTrue(subclassSentence.contains("kind of green"));
         assertTrue(renderer.formatAssertionSentence(typeAssertion).toLowerCase(java.util.Locale.ROOT).contains("hat is a tool"));
         assertTrue(renderer.formatAssertionSentence(attributeAssertion).toLowerCase(java.util.Locale.ROOT).contains("hat has green"));
+        assertTrue(renderer.formatAssertionSentence(wearAssertion).toLowerCase(java.util.Locale.ROOT).contains("man wears hat"));
     }
 
     @Test

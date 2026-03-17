@@ -131,7 +131,10 @@ final class AnswerRenderer {
             return renderClause(subjectText, displayValue(object), new TemplateSpec("restore"), null);
         }
         String objectText = displayValue(object);
-        TemplateSpec template = templateForPredicate(displayPredicate(assertion.predicate()));
+        TemplateSpec template = resolveLexicalTemplate(assertion.predicate());
+        if (template == null) {
+            template = templateForPredicate(displayPredicate(assertion.predicate()));
+        }
         if (template == null) {
             return formatFallbackRelation(subjectText, objectText, displayPredicate(assertion.predicate()));
         }
@@ -284,6 +287,47 @@ final class AnswerRenderer {
                     .withPreposition("by");
         }
         return null;
+    }
+
+    private TemplateSpec resolveLexicalTemplate(String predicate) {
+        if (resolver == null || predicate == null || predicate.isBlank()) {
+            return null;
+        }
+        return resolver.resolveObjectPropertyIri(predicate)
+                .map(resolver::labelsForIri)
+                .filter(labels -> !labels.isEmpty())
+                .map(labels -> {
+                    String best = pickLexicalLabel(labels);
+                    if (best == null || best.isBlank()) {
+                        return null;
+                    }
+                    String normalized = best.trim().toLowerCase(Locale.ROOT).replace('_', ' ');
+                    if (isPrepositionalRelation(normalized)) {
+                        return new TemplateSpec("be").withPreposition(normalized);
+                    }
+                    return new TemplateSpec(baseVerb(normalized));
+                })
+                .orElse(null);
+    }
+
+    private String pickLexicalLabel(java.util.Set<String> labels) {
+        if (labels == null || labels.isEmpty()) {
+            return null;
+        }
+        String fallback = null;
+        for (String label : labels) {
+            if (label == null || label.isBlank()) {
+                continue;
+            }
+            String normalized = label.trim().toLowerCase(Locale.ROOT).replace('_', ' ');
+            if (fallback == null) {
+                fallback = normalized;
+            }
+            if (!normalized.contains(" ")) {
+                return normalized;
+            }
+        }
+        return fallback;
     }
 
     private boolean isPrepositionalRelation(String normalized) {
