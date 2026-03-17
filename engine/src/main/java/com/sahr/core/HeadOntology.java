@@ -82,6 +82,6 @@ public final class HeadOntology {
         if (ontology instanceof PropertyPolicyProvider provider) {
             return provider.inverseProperty(predicate);
         }
-        return ontology.getInverseProperty(predicate);
+        return Optional.empty();
     }
 }

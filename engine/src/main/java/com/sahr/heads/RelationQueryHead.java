@@ -543,14 +543,14 @@ public final class RelationQueryHead extends BaseHead {
         if (ontology instanceof PropertyPolicyProvider provider) {
             return provider.symmetricPolicy(predicate).isPresent();
         }
-        return ontology.isSymmetricProperty(predicate);
+        return false;
     }
 
     private Optional<String> inverseProperty(OntologyService ontology, String predicate) {
         if (ontology instanceof PropertyPolicyProvider provider) {
             return provider.inverseProperty(predicate);
         }
-        return ontology.getInverseProperty(predicate);
+        return Optional.empty();
     }
 
     private InferencePolicy policyForSymmetric(OntologyService ontology, String predicate) {

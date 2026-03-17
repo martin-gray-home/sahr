@@ -16,6 +16,10 @@ public final class PropertyPolicyRegistry {
         this.decisionsByProperty = Map.copyOf(decisionsByProperty);
     }
 
+    public static PropertyPolicyRegistry empty() {
+        return new PropertyPolicyRegistry(Map.of());
+    }
+
     public static PropertyPolicyRegistry fromDecisions(List<PropertyPolicyDecision> decisions) {
         Objects.requireNonNull(decisions, "decisions");
         Map<String, PropertyPolicyDecision> map = new HashMap<>();

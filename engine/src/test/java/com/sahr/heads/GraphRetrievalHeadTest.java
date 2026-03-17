@@ -23,7 +23,7 @@ class GraphRetrievalHeadTest {
     @Test
     void resolvesNestedLocationChain() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
         GraphRetrievalHead head = new GraphRetrievalHead();
 
         graph.addAssertion(new RelationAssertion(

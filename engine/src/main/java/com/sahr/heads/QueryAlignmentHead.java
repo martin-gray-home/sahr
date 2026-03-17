@@ -51,9 +51,9 @@ public final class QueryAlignmentHead extends BaseHead {
             if (!matchesType(graph, compatibility, assertion, requestedType, canonicalRequestedType)) {
                 continue;
             }
-            if (!matchesRange(ontology, assertion, expectedRange)) {
-                continue;
-            }
+        if (!matchesRange(ontology, normalizer, assertion, expectedRange)) {
+            continue;
+        }
 
             double queryMatch = 0.9;
             double entityMatch = 1.0;
@@ -109,7 +109,10 @@ public final class QueryAlignmentHead extends BaseHead {
                 .orElse(false);
     }
 
-    private boolean matchesRange(OntologyService ontology, RelationAssertion assertion, String expectedRange) {
+    private boolean matchesRange(OntologyService ontology,
+                                 SemanticNodeNormalizer normalizer,
+                                 RelationAssertion assertion,
+                                 String expectedRange) {
         if (expectedRange == null || expectedRange.isBlank()) {
             return true;
         }
@@ -117,11 +120,25 @@ public final class QueryAlignmentHead extends BaseHead {
             return false;
         }
         for (String range : ontology.getObjectPropertyRanges(assertion.predicate())) {
-            if (range.equals(expectedRange) || ontology.isSubclassOf(range, expectedRange)) {
+            String canonicalRange = canonicalRange(normalizer, range);
+            if (canonicalRange == null || canonicalRange.isBlank()) {
+                continue;
+            }
+            if (canonicalRange.equals(expectedRange) || ontology.isSubclassOf(canonicalRange, expectedRange)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private String canonicalRange(SemanticNodeNormalizer normalizer, String range) {
+        if (range == null || range.isBlank()) {
+            return range;
+        }
+        if (normalizer == null) {
+            return range;
+        }
+        return normalizer.canonicalType(range).orElse(range);
     }
 
     private String canonicalRequestedType(OntologyService ontology,

@@ -46,9 +46,10 @@ public final class SymbolicAttentionScorer {
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
 
+        String canonicalExpectedRange = canonicalExpectedRange(context, query.expectedRange());
         double entityMatch = matchEntityType(graph, ontology, triple.get().subject, query.entityType());
-        double relationMatch = matchLocationRelation(ontology, triple.get().predicate, query.expectedRange());
-        double typeMatch = matchRange(ontology, triple.get().predicate, query.expectedRange());
+        double relationMatch = matchLocationRelation(context, ontology, triple.get().predicate, canonicalExpectedRange);
+        double typeMatch = matchRange(context, ontology, triple.get().predicate, canonicalExpectedRange);
 
         return QueryMatchResult.of(entityMatch, relationMatch, typeMatch);
     }
@@ -58,10 +59,10 @@ public final class SymbolicAttentionScorer {
         OntologyService ontology = context.ontology();
 
         double entityMatch = matchRelationEntity(candidate, query);
-        double relationMatch = matchRelationPredicate(context, candidate, query);
+        RelationMatch relationMatch = matchRelationPredicate(context, candidate, query);
         double typeMatch = matchExpectedType(graph, ontology, candidate, query.expectedType());
 
-        return QueryMatchResult.of(entityMatch, relationMatch, typeMatch);
+        return QueryMatchResult.of(entityMatch, relationMatch.score(), typeMatch, relationMatch.policy());
     }
 
     private double matchEntityType(KnowledgeBase graph, OntologyService ontology, String subject, String requestedType) {
@@ -83,7 +84,10 @@ public final class SymbolicAttentionScorer {
         return 0.2;
     }
 
-    private double matchLocationRelation(OntologyService ontology, String predicate, String expectedRange) {
+    private double matchLocationRelation(HeadContext context,
+                                         OntologyService ontology,
+                                         String predicate,
+                                         String expectedRange) {
         if (predicate == null) {
             return DEFAULT_RELATION_MATCH;
         }
@@ -91,12 +95,15 @@ public final class SymbolicAttentionScorer {
             return 1.0;
         }
         if (expectedRange != null && isIri(predicate)) {
-            return matchRange(ontology, predicate, expectedRange) > 0.6 ? 1.0 : 0.6;
+            return matchRange(context, ontology, predicate, expectedRange) > 0.6 ? 1.0 : 0.6;
         }
         return DEFAULT_RELATION_MATCH;
     }
 
-    private double matchRange(OntologyService ontology, String predicate, String expectedRange) {
+    private double matchRange(HeadContext context,
+                              OntologyService ontology,
+                              String predicate,
+                              String expectedRange) {
         if (expectedRange == null || expectedRange.isBlank()) {
             return DEFAULT_TYPE_MATCH;
         }
@@ -107,7 +114,11 @@ public final class SymbolicAttentionScorer {
             return 0.2;
         }
         for (String range : ontology.getObjectPropertyRanges(predicate)) {
-            if (range.equals(expectedRange) || ontology.isSubclassOf(range, expectedRange)) {
+            String canonicalRange = canonicalRange(context, range);
+            if (canonicalRange == null || canonicalRange.isBlank()) {
+                continue;
+            }
+            if (canonicalRange.equals(expectedRange) || ontology.isSubclassOf(canonicalRange, expectedRange)) {
                 return 1.0;
             }
         }
@@ -144,34 +155,57 @@ public final class SymbolicAttentionScorer {
         return family.contains(predicate);
     }
 
-    private double matchRelationPredicate(HeadContext context, ReasoningCandidate candidate, QueryGoal query) {
+    private RelationMatch matchRelationPredicate(HeadContext context, ReasoningCandidate candidate, QueryGoal query) {
         Optional<Triple> triple = extractTripleFromEvidence(candidate);
         if (triple.isEmpty() || query.predicate() == null) {
-            return DEFAULT_RELATION_MATCH;
+            return new RelationMatch(DEFAULT_RELATION_MATCH, null);
         }
         String predicate = triple.get().predicate;
         if (predicate.equals(query.predicate())) {
-            return 1.0;
+            return new RelationMatch(1.0, null);
         }
         OntologyService ontology = context.ontology();
         if (isIri(query.predicate())) {
             if (ontology.getSubproperties(query.predicate()).contains(predicate)) {
-                return 1.0;
+                return new RelationMatch(1.0, null);
             }
             Optional<String> inverse = inverseProperty(ontology, query.predicate());
             if (inverse.isPresent() && (inverse.get().equals(predicate)
                     || ontology.getSubproperties(inverse.get()).contains(predicate))) {
-                return 1.0;
+                PolicySignal policy = policySignalForInverse(ontology, query.predicate());
+                if (policy != null) {
+                    return new RelationMatch(policy.score(), policy);
+                }
+                return new RelationMatch(1.0, null);
             }
         }
-        return DEFAULT_RELATION_MATCH;
+        return new RelationMatch(DEFAULT_RELATION_MATCH, null);
     }
 
     private Optional<String> inverseProperty(OntologyService ontology, String predicate) {
         if (ontology instanceof PropertyPolicyProvider provider) {
             return provider.inverseProperty(predicate);
         }
-        return ontology.getInverseProperty(predicate);
+        return Optional.empty();
+    }
+
+    private PolicySignal policySignalForInverse(OntologyService ontology, String predicate) {
+        if (!(ontology instanceof PropertyPolicyProvider provider)) {
+            return null;
+        }
+        return provider.inversePolicy(predicate)
+                .filter(policy -> policy.enabled() && policy.strength() != com.sahr.semantic.model.InferencePolicyStrength.DISABLED)
+                .map(policy -> new PolicySignal("policy_rule_inverse", policyScore(policy.strength())))
+                .orElse(null);
+    }
+
+    private double policyScore(com.sahr.semantic.model.InferencePolicyStrength strength) {
+        return switch (strength) {
+            case HARD -> 1.0;
+            case SOFT -> 0.9;
+            case RANKING_HINT -> 0.6;
+            case DISABLED -> 0.0;
+        };
     }
 
     private double matchExpectedType(KnowledgeBase graph, OntologyService ontology, ReasoningCandidate candidate, String expectedType) {
@@ -226,6 +260,30 @@ public final class SymbolicAttentionScorer {
             return synset;
         }
         return iris.stream().sorted().findFirst().orElse(expectedType);
+    }
+
+    private String canonicalExpectedRange(HeadContext context, String expectedRange) {
+        if (expectedRange == null || expectedRange.isBlank()) {
+            return expectedRange;
+        }
+        if (isIri(expectedRange)) {
+            return expectedRange;
+        }
+        return context.semanticNormalizer()
+                .flatMap(normalizer -> normalizer.canonicalType(expectedRange))
+                .orElse(expectedRange);
+    }
+
+    private String canonicalRange(HeadContext context, String range) {
+        if (range == null || range.isBlank()) {
+            return range;
+        }
+        if (isIri(range)) {
+            return range;
+        }
+        return context.semanticNormalizer()
+                .flatMap(normalizer -> normalizer.canonicalType(range))
+                .orElse(range);
     }
 
     private String selectWordNetSynset(Set<String> iris) {
@@ -290,24 +348,30 @@ public final class SymbolicAttentionScorer {
         private final double relationMatch;
         private final double typeMatch;
         private final double queryMatchScore;
+        private final PolicySignal policySignal;
 
-        private QueryMatchResult(double entityMatch, double relationMatch, double typeMatch) {
+        private QueryMatchResult(double entityMatch, double relationMatch, double typeMatch, PolicySignal policySignal) {
             this.entityMatch = clamp(entityMatch);
             this.relationMatch = clamp(relationMatch);
             this.typeMatch = clamp(typeMatch);
             this.queryMatchScore = clamp(this.entityMatch * this.relationMatch * this.typeMatch);
+            this.policySignal = policySignal;
         }
 
         public static QueryMatchResult of(double entityMatch, double relationMatch, double typeMatch) {
-            return new QueryMatchResult(entityMatch, relationMatch, typeMatch);
+            return new QueryMatchResult(entityMatch, relationMatch, typeMatch, null);
+        }
+
+        public static QueryMatchResult of(double entityMatch, double relationMatch, double typeMatch, PolicySignal policySignal) {
+            return new QueryMatchResult(entityMatch, relationMatch, typeMatch, policySignal);
         }
 
         public static QueryMatchResult neutral(double score) {
-            return new QueryMatchResult(score, 1.0, 1.0);
+            return new QueryMatchResult(score, 1.0, 1.0, null);
         }
 
         public static QueryMatchResult full() {
-            return new QueryMatchResult(1.0, 1.0, 1.0);
+            return new QueryMatchResult(1.0, 1.0, 1.0, null);
         }
 
         public double queryMatchScore() {
@@ -322,6 +386,11 @@ public final class SymbolicAttentionScorer {
             breakdown.put("attention_query_match", queryMatchScore);
             breakdown.put("attention_head_score", headScore);
             breakdown.put("attention_final_score", finalScore);
+            if (policySignal != null) {
+                breakdown.put("policy_strength", policySignal.score());
+                breakdown.put("policy_applied", 1.0);
+                breakdown.put(policySignal.ruleKey(), 1.0);
+            }
             return breakdown;
         }
 
@@ -346,5 +415,11 @@ public final class SymbolicAttentionScorer {
             this.predicate = predicate;
             this.object = object;
         }
+    }
+
+    private record RelationMatch(double score, PolicySignal policy) {
+    }
+
+    private record PolicySignal(String ruleKey, double score) {
     }
 }

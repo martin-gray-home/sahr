@@ -1,7 +1,10 @@
 package com.sahr.support;
 
 import com.sahr.core.HeadOntology;
+import com.sahr.core.OntologyService;
 import com.sahr.ontology.InMemoryOntologyService;
+import com.sahr.semantic.policy.PolicyAwareOntologyService;
+import com.sahr.semantic.policy.PropertyPolicyRegistry;
 
 public final class HeadOntologyTestSupport {
     private static final String SAHR_NS = "https://sahr.ai/ontology/relations#";
@@ -13,6 +16,20 @@ public final class HeadOntologyTestSupport {
         InMemoryOntologyService ontology = new InMemoryOntologyService();
         configure(ontology);
         return ontology;
+    }
+
+    public static OntologyService createPolicyOntology() {
+        InMemoryOntologyService ontology = createOntology();
+        return wrapWithPolicy(ontology);
+    }
+
+    public static OntologyService wrapWithPolicy(InMemoryOntologyService ontology) {
+        if (ontology == null) {
+            return null;
+        }
+        PropertyPolicyRegistry registry = PropertyPolicyRegistry.fromDecisions(
+                InMemoryPolicyDecisionBuilder.build(ontology));
+        return new PolicyAwareOntologyService(ontology, registry);
     }
 
     public static InMemoryOntologyService configure(InMemoryOntologyService ontology) {

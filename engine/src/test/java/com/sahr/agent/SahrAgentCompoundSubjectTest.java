@@ -19,7 +19,7 @@ class SahrAgentCompoundSubjectTest {
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
-        SahrAgent agent = new SahrAgent(graph, HeadOntologyTestSupport.createOntology(), reasoner, new SimpleQueryParser());
+        SahrAgent agent = new SahrAgent(graph, HeadOntologyTestSupport.createPolicyOntology(), reasoner, new SimpleQueryParser());
 
         agent.handle("The man and the boy sat at the table");
 

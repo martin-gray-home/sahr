@@ -16,7 +16,7 @@ class SahrAgentIngestionTest {
     @Test
     void ingestsStatementThenAnswersWhereQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = HeadOntologyTestSupport.createOntology();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
@@ -29,7 +29,7 @@ class SahrAgentIngestionTest {
     @Test
     void appliesPropagationClosureAfterAssertion() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = HeadOntologyTestSupport.createOntology();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));

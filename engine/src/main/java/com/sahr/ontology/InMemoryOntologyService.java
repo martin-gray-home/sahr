@@ -73,6 +73,18 @@ public final class InMemoryOntologyService implements OntologyService {
                 .add(object);
     }
 
+    public Set<String> getSymmetricProperties() {
+        return Collections.unmodifiableSet(symmetricProperties);
+    }
+
+    public Set<String> getTransitiveProperties() {
+        return Collections.unmodifiableSet(transitiveProperties);
+    }
+
+    public Map<String, String> getInverseProperties() {
+        return Collections.unmodifiableMap(inverseProperties);
+    }
+
     @Override
     public boolean isSubclassOf(String child, String parent) {
         return subclassMap.getOrDefault(child, Collections.emptySet()).contains(parent);

@@ -1,13 +1,15 @@
 package com.sahr.ontology;
 
 import com.sahr.core.OntologyService;
+import com.sahr.core.PropertyPolicyProvider;
+import com.sahr.semantic.model.InferencePolicy;
 
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-public final class CompositeOntologyService implements OntologyService {
+public final class CompositeOntologyService implements OntologyService, PropertyPolicyProvider {
     private final List<OntologyService> delegates;
 
     public CompositeOntologyService(List<OntologyService> delegates) {
@@ -130,5 +132,46 @@ public final class CompositeOntologyService implements OntologyService {
             results.addAll(service.getObjectPropertyTargets(subjectIri, propertyIri));
         }
         return results;
+    }
+
+    @Override
+    public Optional<InferencePolicy> inversePolicy(String propertyIri) {
+        return policyFromDelegates(provider -> provider.inversePolicy(propertyIri));
+    }
+
+    @Override
+    public Optional<InferencePolicy> symmetricPolicy(String propertyIri) {
+        return policyFromDelegates(provider -> provider.symmetricPolicy(propertyIri));
+    }
+
+    @Override
+    public Optional<InferencePolicy> transitivePolicy(String propertyIri) {
+        return policyFromDelegates(provider -> provider.transitivePolicy(propertyIri));
+    }
+
+    @Override
+    public Optional<String> inverseProperty(String propertyIri) {
+        for (OntologyService service : delegates) {
+            if (service instanceof PropertyPolicyProvider provider) {
+                Optional<String> candidate = provider.inverseProperty(propertyIri);
+                if (candidate.isPresent()) {
+                    return candidate;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<InferencePolicy> policyFromDelegates(
+            java.util.function.Function<PropertyPolicyProvider, Optional<InferencePolicy>> lookup) {
+        for (OntologyService service : delegates) {
+            if (service instanceof PropertyPolicyProvider provider) {
+                Optional<InferencePolicy> candidate = lookup.apply(provider);
+                if (candidate.isPresent()) {
+                    return candidate;
+                }
+            }
+        }
+        return Optional.empty();
     }
 }

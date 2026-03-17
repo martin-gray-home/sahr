@@ -23,7 +23,7 @@ class RelationQueryHeadTest {
     @Test
     void answersForwardRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = HeadOntologyTestSupport.createOntology();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
         SymbolId man = new SymbolId("entity:man");
         SymbolId hat = new SymbolId("entity:hat");
 
@@ -43,7 +43,7 @@ class RelationQueryHeadTest {
     @Test
     void answersInverseRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontology = HeadOntologyTestSupport.createOntology();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
         SymbolId man = new SymbolId("entity:man");
         SymbolId woman = new SymbolId("entity:woman");
 
@@ -63,15 +63,16 @@ class RelationQueryHeadTest {
     @Test
     void answersObjectBoundRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
+        InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
         SymbolId man = new SymbolId("entity:man");
         SymbolId hat = new SymbolId("entity:hat");
 
         graph.addEntity(new EntityNode(man, "man", Set.of("person")));
         graph.addEntity(new EntityNode(hat, "hat", Set.of("hat")));
         graph.addAssertion(new RelationAssertion(man, "https://sahr.ai/ontology/relations#wear", hat, 0.9));
-        ontology.addSubproperty("https://sahr.ai/ontology/relations#wear", "https://sahr.ai/ontology/relations#on");
-        ontology.addInverseProperty("https://sahr.ai/ontology/relations#on", "https://sahr.ai/ontology/relations#under");
+        baseOntology.addSubproperty("https://sahr.ai/ontology/relations#wear", "https://sahr.ai/ontology/relations#on");
+        baseOntology.addInverseProperty("https://sahr.ai/ontology/relations#on", "https://sahr.ai/ontology/relations#under");
+        OntologyService ontology = HeadOntologyTestSupport.wrapWithPolicy(baseOntology);
 
         QueryGoal query = QueryGoal.relation(null, "https://sahr.ai/ontology/relations#wear", "entity:hat", null);
         HeadContext context = new HeadContext(query, graph, ontology);
@@ -85,7 +86,7 @@ class RelationQueryHeadTest {
     @Test
     void answersSubpropertyAndInverseRelationQuery() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
+        InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
         SymbolId man = new SymbolId("entity:man");
         SymbolId hat = new SymbolId("entity:hat");
 
@@ -96,8 +97,9 @@ class RelationQueryHeadTest {
         String under = "https://sahr.ai/ontology/relations#under";
         graph.addAssertion(new RelationAssertion(man, wear, hat, 0.9));
 
-        ontology.addSubproperty(wear, on);
-        ontology.addInverseProperty(on, under);
+        baseOntology.addSubproperty(wear, on);
+        baseOntology.addInverseProperty(on, under);
+        OntologyService ontology = HeadOntologyTestSupport.wrapWithPolicy(baseOntology);
 
         QueryGoal query = QueryGoal.relation("entity:man", on, null, null);
         HeadContext context = new HeadContext(query, graph, ontology);

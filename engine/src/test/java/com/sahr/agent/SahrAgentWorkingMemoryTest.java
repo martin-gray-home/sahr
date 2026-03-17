@@ -21,9 +21,10 @@ class SahrAgentWorkingMemoryTest {
     @Test
     void activeEntitiesPersistAcrossQueries() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
-        ontology.addSubclass("concept:man", "concept:person");
-        ontology.addSubclass("concept:woman", "concept:person");
+        InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
+        baseOntology.addSubclass("concept:man", "concept:person");
+        baseOntology.addSubclass("concept:woman", "concept:person");
+        OntologyService ontology = HeadOntologyTestSupport.wrapWithPolicy(baseOntology);
 
         SymbolId man = new SymbolId("entity:man");
         SymbolId woman = new SymbolId("entity:woman");

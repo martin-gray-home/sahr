@@ -35,8 +35,9 @@ class QueryAlignmentHeadTest {
                 0.8
         ));
 
-        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
-        ontology.addPropertyRange("http://example.org/test#inside", "http://example.org/test#Place");
+        InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
+        baseOntology.addPropertyRange("http://example.org/test#inside", "http://example.org/test#Place");
+        OntologyService ontology = HeadOntologyTestSupport.wrapWithPolicy(baseOntology);
 
         List<ReasoningCandidate> candidates = head.evaluate(new HeadContext(
                 QueryGoal.where("cat", "http://example.org/test#Place"),

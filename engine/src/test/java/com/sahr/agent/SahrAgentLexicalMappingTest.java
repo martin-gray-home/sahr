@@ -47,7 +47,7 @@ class SahrAgentLexicalMappingTest {
         LabelLexicalMapper mapper = new LabelLexicalMapper(ontology);
 
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontologyService = HeadOntologyTestSupport.createOntology();
+        OntologyService ontologyService = HeadOntologyTestSupport.createPolicyOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));
@@ -76,7 +76,7 @@ class SahrAgentLexicalMappingTest {
         LabelLexicalMapper mapper = new LabelLexicalMapper(ontology);
 
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        OntologyService ontologyService = HeadOntologyTestSupport.createOntology();
+        OntologyService ontologyService = HeadOntologyTestSupport.createPolicyOntology();
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
         ));

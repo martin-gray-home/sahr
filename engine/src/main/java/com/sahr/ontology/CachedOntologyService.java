@@ -1,6 +1,8 @@
 package com.sahr.ontology;
 
 import com.sahr.core.OntologyService;
+import com.sahr.core.PropertyPolicyProvider;
+import com.sahr.semantic.model.InferencePolicy;
 
 import java.util.Optional;
 import java.util.Set;
@@ -8,13 +10,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Logger;
 
-public final class CachedOntologyService implements OntologyService {
+public final class CachedOntologyService implements OntologyService, PropertyPolicyProvider {
     private static final Logger logger = Logger.getLogger(CachedOntologyService.class.getName());
 
     private final OntologyService delegate;
+    private final PropertyPolicyProvider policyProvider;
     private final ConcurrentMap<String, Boolean> symmetricCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Boolean> transitiveCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Optional<String>> inverseCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Optional<InferencePolicy>> inversePolicyCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Optional<InferencePolicy>> symmetricPolicyCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Optional<InferencePolicy>> transitivePolicyCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Optional<String>> policyInverseCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<String>> superCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<String>> subCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<String>> subPropertyCache = new ConcurrentHashMap<>();
@@ -29,6 +36,7 @@ public final class CachedOntologyService implements OntologyService {
 
     public CachedOntologyService(OntologyService delegate) {
         this.delegate = delegate;
+        this.policyProvider = delegate instanceof PropertyPolicyProvider provider ? provider : null;
         logger.info("CachedOntologyService initialized (lazy memoization).");
     }
 
@@ -106,5 +114,37 @@ public final class CachedOntologyService implements OntologyService {
         String key = subjectIri + "|" + propertyIri;
         return objectPropertyTargetsCache.computeIfAbsent(key,
                 ignored -> delegate.getObjectPropertyTargets(subjectIri, propertyIri));
+    }
+
+    @Override
+    public Optional<InferencePolicy> inversePolicy(String propertyIri) {
+        if (policyProvider == null) {
+            return Optional.empty();
+        }
+        return inversePolicyCache.computeIfAbsent(propertyIri, policyProvider::inversePolicy);
+    }
+
+    @Override
+    public Optional<InferencePolicy> symmetricPolicy(String propertyIri) {
+        if (policyProvider == null) {
+            return Optional.empty();
+        }
+        return symmetricPolicyCache.computeIfAbsent(propertyIri, policyProvider::symmetricPolicy);
+    }
+
+    @Override
+    public Optional<InferencePolicy> transitivePolicy(String propertyIri) {
+        if (policyProvider == null) {
+            return Optional.empty();
+        }
+        return transitivePolicyCache.computeIfAbsent(propertyIri, policyProvider::transitivePolicy);
+    }
+
+    @Override
+    public Optional<String> inverseProperty(String propertyIri) {
+        if (policyProvider == null) {
+            return Optional.empty();
+        }
+        return policyInverseCache.computeIfAbsent(propertyIri, policyProvider::inverseProperty);
     }
 }

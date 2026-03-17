@@ -25,10 +25,11 @@ class QueryAlignmentScenarioTest {
     @Test
     void answersWhereUsingRangeAlignedPredicate() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
-        InMemoryOntologyService ontology = HeadOntologyTestSupport.createOntology();
+        InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
         String inside = "https://sahr.ai/ontology/relations#inside";
         String place = "http://example.org/test#Place";
-        ontology.addPropertyRange(inside, place);
+        baseOntology.addPropertyRange(inside, place);
+        OntologyService ontology = HeadOntologyTestSupport.wrapWithPolicy(baseOntology);
 
         SahrReasoner reasoner = new SahrReasoner(List.of(
                 new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
