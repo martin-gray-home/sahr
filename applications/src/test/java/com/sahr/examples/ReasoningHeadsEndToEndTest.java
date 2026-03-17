@@ -216,6 +216,14 @@ class ReasoningHeadsEndToEndTest {
         assertTrue(answer.toLowerCase(Locale.ROOT).contains("red"), "Attribute answer was: " + answer);
     }
 
+    @Test
+    void copularAdjectivesProjectAttributes() {
+        SahrAgent agent = newAgent();
+        agent.handle("The hat is green.");
+        String answer = agent.handle("What color is the hat?");
+        assertTrue(answer.toLowerCase(Locale.ROOT).contains("green"), "Attribute answer was: " + answer);
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("transitiveCases")
     void transitiveHeadsDeriveAssertions(String headName, String predicate) {

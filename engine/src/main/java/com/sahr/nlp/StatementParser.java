@@ -471,6 +471,9 @@ public final class StatementParser {
             }
             String predicateType = preposition != null ? mapPreposition(preposition, predicate.word()) : PREDICATE_TYPE;
             boolean objectIsConcept = PREDICATE_TYPE.equals(predicateType);
+            boolean emitAttributeProjection = preposition == null
+                    && objectIsConcept
+                    && isAdjectivalCopula(predicate);
 
             String subjectToken = normalizeToken(composeCompoundToken(graph, subject));
             String baseSubjectToken = normalizeToken(subject.word());
@@ -511,6 +514,9 @@ public final class StatementParser {
             for (String subjectEntry : subjectTokens) {
                 for (String objectEntry : objectTokens) {
                     statements.add(buildStatement(subjectEntry, objectEntry, predicateType, objectIsConcept));
+                    if (emitAttributeProjection) {
+                        statements.add(buildStatement(subjectEntry, objectEntry, PREDICATE_ATTRIBUTE, false));
+                    }
                 }
             }
             List<CoreLabel> objectConjuncts = findConjuncts(graph, prepObject != null ? prepObject : predicate);
@@ -531,6 +537,20 @@ public final class StatementParser {
             return false;
         }
         return PREPOSITION_PREDICATES.contains(word.toLowerCase(Locale.ROOT));
+    }
+
+    private boolean isAdjectivalCopula(CoreLabel predicate) {
+        if (predicate == null) {
+            return false;
+        }
+        String tag = predicate.tag();
+        if (tag == null || tag.isBlank()) {
+            return false;
+        }
+        if (tag.startsWith("JJ")) {
+            return true;
+        }
+        return "VBN".equals(tag) || "VBG".equals(tag);
     }
 
     private PrepMatch findCopularPreposition(SemanticGraph graph,
