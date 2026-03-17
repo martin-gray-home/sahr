@@ -104,6 +104,17 @@ final class AnswerRenderer {
             TemplateSpec fallback = templateForPredicate(displayPredicate(assertion.predicate()));
             return renderClause(subjectText, null, fallback, booleanValue);
         }
+        if ("rdf:type".equals(predicate) || "type".equals(predicate)) {
+            String objectText = displayValue(object);
+            String labeled = withIndefiniteArticle(objectText);
+            return renderClause(subjectText, labeled, new TemplateSpec("be"), null);
+        }
+        if ("rdfs:subclassof".equals(predicate) || "subclassof".equals(predicate)) {
+            TemplateSpec template = new TemplateSpec("be")
+                    .withObject("a kind")
+                    .withPreposition("of");
+            return renderClause(subjectText, displayValue(object), template, null);
+        }
         if ("backupfor".equals(predicate) || "backup_for".equals(predicate)) {
             TemplateSpec template = new TemplateSpec("be")
                     .withObject("backup")
@@ -252,13 +263,43 @@ final class AnswerRenderer {
         if (predicateText == null || predicateText.isBlank()) {
             return new TemplateSpec("be");
         }
-        String normalized = predicateText.trim().toLowerCase(Locale.ROOT);
+        String normalized = predicateText.trim().toLowerCase(Locale.ROOT).replace('_', ' ');
+        if ("locatedin".equals(normalized) || "located in".equals(normalized)) {
+            return new TemplateSpec("be").withPreposition("in");
+        }
+        if (isPrepositionalRelation(normalized)) {
+            return new TemplateSpec("be").withPreposition(normalized);
+        }
+        if ("hasattribute".equals(normalized) || "has attribute".equals(normalized)) {
+            return new TemplateSpec("have");
+        }
         if (normalized.contains("powered by")) {
             return new TemplateSpec("power")
                     .withVoice(Voice.PASSIVE)
                     .withPreposition("by");
         }
         return new TemplateSpec(baseVerb(predicateText));
+    }
+
+    private boolean isPrepositionalRelation(String normalized) {
+        return switch (normalized) {
+            case "in", "with", "on", "under", "near", "inside", "beside", "alongside", "next to", "next-to", "at" -> true;
+            default -> false;
+        };
+    }
+
+    private String withIndefiniteArticle(String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        String trimmed = value.trim();
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("a ") || lower.startsWith("an ")) {
+            return trimmed;
+        }
+        char first = lower.charAt(0);
+        boolean vowel = first == 'a' || first == 'e' || first == 'i' || first == 'o' || first == 'u';
+        return (vowel ? "an " : "a ") + trimmed;
     }
 
     private String baseVerb(String verb) {
