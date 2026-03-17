@@ -726,6 +726,46 @@ public final class SahrAgent {
         return Optional.of(entries.get(entries.size() - 1));
     }
 
+    Optional<AssertionRendering> renderAssertionForChat(Object payload) {
+        RelationAssertion assertion = null;
+        if (payload instanceof RelationAssertion) {
+            assertion = (RelationAssertion) payload;
+        } else if (payload instanceof Statement) {
+            Statement statement = (Statement) payload;
+            assertion = new RelationAssertion(statement.subject(), statement.predicate(), statement.object(), statement.confidence());
+        } else if (payload instanceof StatementBatch) {
+            StatementBatch batch = (StatementBatch) payload;
+            if (!batch.statements().isEmpty()) {
+                Statement statement = batch.statements().get(0);
+                assertion = new RelationAssertion(statement.subject(), statement.predicate(), statement.object(), statement.confidence());
+            }
+        }
+        if (assertion == null) {
+            return Optional.empty();
+        }
+        String model = assertion.subject().value() + " " + modelPredicate(assertion.predicate()) + " " + assertion.object().value();
+        String nlg = answerRenderer.formatAssertionSentence(assertion);
+        return Optional.of(new AssertionRendering(model, nlg));
+    }
+
+    static final class AssertionRendering {
+        private final String model;
+        private final String nlg;
+
+        private AssertionRendering(String model, String nlg) {
+            this.model = model;
+            this.nlg = nlg;
+        }
+
+        String model() {
+            return model;
+        }
+
+        String nlg() {
+            return nlg;
+        }
+    }
+
     public WorkingMemorySnapshot workingMemorySnapshot() {
         return new WorkingMemorySnapshot(
                 List.copyOf(workingMemory.activeEntities()),
@@ -2560,6 +2600,19 @@ public final class SahrAgent {
         int idx = Math.max(hashIdx, slashIdx);
         String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
         return local.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private String modelPredicate(String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return "";
+        }
+        int hashIdx = predicate.lastIndexOf('#');
+        int slashIdx = predicate.lastIndexOf('/');
+        int idx = Math.max(hashIdx, slashIdx);
+        if (idx >= 0) {
+            return predicate.substring(idx + 1);
+        }
+        return predicate;
     }
 
     private Boolean booleanConcept(SymbolId id) {

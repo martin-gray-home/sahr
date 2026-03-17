@@ -48,6 +48,15 @@ public final class ChatRepl {
             }
             String response = agent.handle(trimmed);
             out.println(response);
+            agent.lastTraceEntry().ifPresent(entry -> {
+                if (entry.winner().type() != com.sahr.core.CandidateType.ASSERTION) {
+                    return;
+                }
+                agent.renderAssertionForChat(entry.winner().payload()).ifPresent(rendering -> {
+                    out.println(rendering.model());
+                    out.println(rendering.nlg());
+                });
+            });
             if (attentionDebug) {
                 printAttentionDebug();
             }
