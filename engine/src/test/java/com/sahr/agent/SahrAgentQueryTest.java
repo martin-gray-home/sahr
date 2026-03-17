@@ -281,6 +281,131 @@ class SahrAgentQueryTest {
     }
 
     @Test
+    void rendersPrepositionalRelationsWithCopula() {
+        AnswerRenderer renderer = new AnswerRenderer(new AnswerRenderer.DisplayFormatter() {
+            @Override
+            public String localName(String predicate) {
+                if (predicate == null || predicate.isBlank()) {
+                    return "";
+                }
+                int hashIdx = predicate.lastIndexOf('#');
+                int slashIdx = predicate.lastIndexOf('/');
+                int idx = Math.max(hashIdx, slashIdx);
+                String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
+                return local.toLowerCase(java.util.Locale.ROOT);
+            }
+
+            @Override
+            public Boolean booleanConcept(SymbolId id) {
+                return null;
+            }
+
+            @Override
+            public String normalizeTypeToken(String raw) {
+                return raw == null ? "" : raw;
+            }
+        }, null);
+        RelationAssertion inAssertion = new RelationAssertion(
+                new SymbolId("entity:man"),
+                "https://sahr.ai/ontology/relations#in",
+                new SymbolId("entity:house"),
+                0.9
+        );
+        RelationAssertion withAssertion = new RelationAssertion(
+                new SymbolId("entity:woman"),
+                "https://sahr.ai/ontology/relations#with",
+                new SymbolId("entity:man"),
+                0.9
+        );
+        assertTrue(renderer.formatAssertionSentence(inAssertion).toLowerCase(java.util.Locale.ROOT).contains("man is in house"));
+        assertTrue(renderer.formatAssertionSentence(withAssertion).toLowerCase(java.util.Locale.ROOT).contains("woman is with man"));
+    }
+
+    @Test
+    void rendersTaxonomyAndAttributePredicates() {
+        AnswerRenderer renderer = new AnswerRenderer(new AnswerRenderer.DisplayFormatter() {
+            @Override
+            public String localName(String predicate) {
+                if (predicate == null || predicate.isBlank()) {
+                    return "";
+                }
+                int hashIdx = predicate.lastIndexOf('#');
+                int slashIdx = predicate.lastIndexOf('/');
+                int idx = Math.max(hashIdx, slashIdx);
+                String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
+                return local.toLowerCase(java.util.Locale.ROOT);
+            }
+
+            @Override
+            public Boolean booleanConcept(SymbolId id) {
+                return null;
+            }
+
+            @Override
+            public String normalizeTypeToken(String raw) {
+                return raw == null ? "" : raw;
+            }
+        }, null);
+        RelationAssertion subclassAssertion = new RelationAssertion(
+                new SymbolId("concept:hat"),
+                "rdfs:subClassOf",
+                new SymbolId("concept:green"),
+                0.9
+        );
+        RelationAssertion typeAssertion = new RelationAssertion(
+                new SymbolId("entity:hat"),
+                "rdf:type",
+                new SymbolId("concept:tool"),
+                0.9
+        );
+        RelationAssertion attributeAssertion = new RelationAssertion(
+                new SymbolId("entity:hat"),
+                "hasAttribute",
+                new SymbolId("entity:green"),
+                0.9
+        );
+        String subclassSentence = renderer.formatAssertionSentence(subclassAssertion).toLowerCase(java.util.Locale.ROOT);
+        assertTrue(subclassSentence.contains("kind of green"));
+        assertTrue(renderer.formatAssertionSentence(typeAssertion).toLowerCase(java.util.Locale.ROOT).contains("hat is a tool"));
+        assertTrue(renderer.formatAssertionSentence(attributeAssertion).toLowerCase(java.util.Locale.ROOT).contains("hat has green"));
+    }
+
+    @Test
+    void rendersUnknownPredicatesWithSafeFallback() {
+        AnswerRenderer renderer = new AnswerRenderer(new AnswerRenderer.DisplayFormatter() {
+            @Override
+            public String localName(String predicate) {
+                if (predicate == null || predicate.isBlank()) {
+                    return "";
+                }
+                int hashIdx = predicate.lastIndexOf('#');
+                int slashIdx = predicate.lastIndexOf('/');
+                int idx = Math.max(hashIdx, slashIdx);
+                String local = idx >= 0 ? predicate.substring(idx + 1) : predicate;
+                return local.toLowerCase(java.util.Locale.ROOT);
+            }
+
+            @Override
+            public Boolean booleanConcept(SymbolId id) {
+                return null;
+            }
+
+            @Override
+            public String normalizeTypeToken(String raw) {
+                return raw == null ? "" : raw;
+            }
+        }, null);
+        RelationAssertion assertion = new RelationAssertion(
+                new SymbolId("entity:hat"),
+                "glorped",
+                new SymbolId("entity:house"),
+                0.9
+        );
+        String sentence = renderer.formatAssertionSentence(assertion).toLowerCase(java.util.Locale.ROOT);
+        assertTrue(sentence.contains("is related to house by glorped"));
+    }
+
+    @Test
     void buildsForwardExplanationChain() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         SahrAgent agent = SahrTestAgentFactory.newAgent(graph);

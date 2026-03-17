@@ -130,7 +130,12 @@ final class AnswerRenderer {
         if ("restore".equals(predicate)) {
             return renderClause(subjectText, displayValue(object), new TemplateSpec("restore"), null);
         }
-        return renderClause(subjectText, displayValue(object), templateForPredicate(displayPredicate(assertion.predicate())), null);
+        String objectText = displayValue(object);
+        TemplateSpec template = templateForPredicate(displayPredicate(assertion.predicate()));
+        if (template == null) {
+            return formatFallbackRelation(subjectText, objectText, displayPredicate(assertion.predicate()));
+        }
+        return renderClause(subjectText, objectText, template, null);
     }
 
     private String normalizeBackupTarget(String target) {
@@ -278,7 +283,7 @@ final class AnswerRenderer {
                     .withVoice(Voice.PASSIVE)
                     .withPreposition("by");
         }
-        return new TemplateSpec(baseVerb(predicateText));
+        return null;
     }
 
     private boolean isPrepositionalRelation(String normalized) {
@@ -286,6 +291,17 @@ final class AnswerRenderer {
             case "in", "with", "on", "under", "near", "inside", "beside", "alongside", "next to", "next-to", "at" -> true;
             default -> false;
         };
+    }
+
+    private String formatFallbackRelation(String subjectText, String objectText, String predicateText) {
+        if (subjectText == null || subjectText.isBlank()) {
+            return "unknown";
+        }
+        String normalizedPredicate = predicateText == null || predicateText.isBlank() ? "relation" : predicateText;
+        if (objectText == null || objectText.isBlank()) {
+            return subjectText + " is related by " + normalizedPredicate;
+        }
+        return subjectText + " is related to " + objectText + " by " + normalizedPredicate;
     }
 
     private String withIndefiniteArticle(String value) {
