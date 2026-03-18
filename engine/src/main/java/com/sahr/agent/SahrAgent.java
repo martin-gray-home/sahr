@@ -20,6 +20,8 @@ import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.ReasoningTrace;
 import com.sahr.core.ReasoningTraceEntry;
 import com.sahr.core.RelationAssertion;
+import com.sahr.core.RuleDerivation;
+import com.sahr.core.RuleDerivationService;
 import com.sahr.core.RuleAssertion;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
@@ -93,6 +95,7 @@ public final class SahrAgent {
     private final OntologyAnnotationResolver annotationResolver;
     private final AnswerComposer answerComposer;
     private final LanguageCandidateProducer languageCandidateProducer;
+    private final RuleDerivationService ruleDerivationService;
     private final java.util.concurrent.atomic.AtomicLong assertionSequence = new java.util.concurrent.atomic.AtomicLong();
     private String lastInput;
 
@@ -169,6 +172,7 @@ public final class SahrAgent {
         );
         this.answerRanker = new AnswerRanker(annotationResolver);
         this.answerRealizer = new AnswerRealizer(this::localName);
+        this.ruleDerivationService = new RuleDerivationService();
         this.explanationChains = new ExplanationChainBuilder(
                 this.graph,
                 this.ontology,
@@ -3303,8 +3307,27 @@ public final class SahrAgent {
         int totalAdded = 0;
 
         for (int i = 0; i < MAX_PROPAGATION_ITERATIONS; i++) {
-            List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
             int addedThisRound = 0;
+            for (RuleDerivation derivation : ruleDerivationService.derive(graph)) {
+                if (totalAdded >= MAX_DERIVED_ASSERTIONS) {
+                    return;
+                }
+                RelationAssertion assertion = derivation.assertion();
+                AssertionRecord record = buildAssertionRecord(
+                        assertion.subject(),
+                        assertion.predicate(),
+                        assertion.object(),
+                        assertion.confidence(),
+                        AssertionLayer.INFERRED,
+                        buildProvenance(AssertionSource.HEAD, "rule-forward-chain", AssertionMode.DERIVED, null, derivation.evidence())
+                );
+                if (addAssertionRecordIfNew(record)) {
+                    addedThisRound++;
+                    totalAdded++;
+                    logAssertionAdded("propagation", assertion, "rule-forward-chain");
+                }
+            }
+            List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
             for (ReasoningCandidate candidate : candidates) {
                 if (!(candidate.payload() instanceof RelationAssertion)) {
                     continue;

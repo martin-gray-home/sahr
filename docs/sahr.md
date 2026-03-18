@@ -661,6 +661,12 @@ the house are green” into `rdf:type` + `locatedIn` antecedents and a
 frames by matching entity types (not just explicit `rdf:type`
 assertions), emits binding evidence in trace data, and drives the first
 end-to-end scenario for inferred attributes.
+`RuleFrame` execution now runs through a shared core
+`RuleDerivationService`, which is used both by ontology-driven
+rule-forward-chain heads and by propagation closure inside `SahrAgent`.
+That makes variable binding, antecedent matching, consequent
+instantiation, and rule evidence assembly a single execution seam rather
+than duplicated logic in multiple layers.
 Statement ingestion now triggers the propagation closure so newly added
 facts immediately fire rule-forward-chain assertions.
 Yes/no attribute questions (e.g., "Is the hat green") now normalize to
