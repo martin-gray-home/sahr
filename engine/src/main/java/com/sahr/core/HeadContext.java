@@ -9,38 +9,36 @@ public final class HeadContext {
     private final KnowledgeBase graph;
     private final OntologyService ontology;
     private final com.sahr.nlp.Statement statement;
-    private final RuleAssertion rule;
     private final RuleFrame ruleFrame;
     private final WorkingMemory workingMemory;
     private final com.sahr.nlp.InputFeatures inputFeatures;
     private final SemanticNodeNormalizer semanticNormalizer;
 
     public HeadContext(QueryGoal query, KnowledgeBase graph, OntologyService ontology) {
-        this(query, graph, ontology, null, null, null, new WorkingMemory(), null, null);
+        this(query, graph, ontology, null, null, new WorkingMemory(), null, null);
     }
 
     public HeadContext(QueryGoal query, KnowledgeBase graph, OntologyService ontology, WorkingMemory workingMemory) {
-        this(query, graph, ontology, null, null, null, workingMemory, null, null);
+        this(query, graph, ontology, null, null, workingMemory, null, null);
     }
 
     public HeadContext(QueryGoal query, KnowledgeBase graph, OntologyService ontology, com.sahr.nlp.Statement statement) {
-        this(query, graph, ontology, statement, null, null, new WorkingMemory(), null, null);
+        this(query, graph, ontology, statement, null, new WorkingMemory(), null, null);
     }
 
     public HeadContext(QueryGoal query,
                        KnowledgeBase graph,
                        OntologyService ontology,
                        com.sahr.nlp.Statement statement,
-                       RuleAssertion rule,
+                       RuleFrame ruleFrame,
                        WorkingMemory workingMemory) {
-        this(query, graph, ontology, statement, rule, null, workingMemory, null, null);
+        this(query, graph, ontology, statement, ruleFrame, workingMemory, null, null);
     }
 
     public HeadContext(QueryGoal query,
                        KnowledgeBase graph,
                        OntologyService ontology,
                        com.sahr.nlp.Statement statement,
-                       RuleAssertion rule,
                        RuleFrame ruleFrame,
                        WorkingMemory workingMemory,
                        com.sahr.nlp.InputFeatures inputFeatures,
@@ -49,7 +47,6 @@ public final class HeadContext {
         this.graph = Objects.requireNonNull(graph, "graph");
         this.ontology = Objects.requireNonNull(ontology, "ontology");
         this.statement = statement;
-        this.rule = rule;
         this.ruleFrame = ruleFrame;
         this.workingMemory = workingMemory == null ? new WorkingMemory() : workingMemory;
         this.inputFeatures = inputFeatures;
@@ -70,10 +67,6 @@ public final class HeadContext {
 
     public java.util.Optional<com.sahr.nlp.Statement> statement() {
         return java.util.Optional.ofNullable(statement);
-    }
-
-    public java.util.Optional<RuleAssertion> rule() {
-        return java.util.Optional.ofNullable(rule);
     }
 
     public java.util.Optional<RuleFrame> ruleFrame() {

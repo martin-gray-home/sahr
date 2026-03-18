@@ -190,7 +190,7 @@ public final class SahrAgent {
                     }
 
                     @Override
-                    public String formatRuleSentence(RuleAssertion rule) {
+                    public String formatRuleSentence(RuleFrame rule) {
                         return answerRenderer.formatRuleSentence(rule);
                     }
 
@@ -217,7 +217,7 @@ public final class SahrAgent {
                     }
 
                     @Override
-                    public String formatRuleSentence(RuleAssertion rule) {
+                    public String formatRuleSentence(RuleFrame rule) {
                         return answerRenderer.formatRuleSentence(rule);
                     }
 
@@ -249,7 +249,7 @@ public final class SahrAgent {
                     }
 
                     @Override
-                    public String formatRuleSentence(RuleAssertion rule) {
+                    public String formatRuleSentence(RuleFrame rule) {
                         return answerRenderer.formatRuleSentence(rule);
                     }
 
@@ -259,7 +259,12 @@ public final class SahrAgent {
                     }
                 },
                 (assertion) -> answerRanker.assertionExplanationScore(assertion, localName(assertion.predicate())),
-                (rule) -> answerRanker.ruleExplanationScore(rule, localName(rule.consequent().predicate())),
+                (rule) -> answerRanker.ruleExplanationScore(
+                        rule,
+                        RuleFrames.legacyConsequent(rule)
+                                .map(consequent -> localName(consequent.predicate()))
+                                .orElse("")
+                ),
                 explanationChains
         );
         this.answerComposer = new AnswerComposer(
@@ -353,7 +358,7 @@ public final class SahrAgent {
 
         try {
             if (!isQuestion(query)) {
-                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), null,
+                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null),
                         ruleFrame.orElse(null),
                         workingMemory, features, semanticNormalizer);
                 long answerStart = timing ? System.nanoTime() : 0L;
@@ -809,7 +814,7 @@ public final class SahrAgent {
         if (query == null) {
             return List.of();
         }
-        HeadContext context = new HeadContext(query, graph, ontology, null, null, null, workingMemory, null, semanticNormalizer);
+        HeadContext context = new HeadContext(query, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
         return reasoner.heads().stream()
                 .map(head -> head.explain(context))
                 .toList();
@@ -1840,7 +1845,7 @@ public final class SahrAgent {
 
     private String resolveQuestionAfterAssertion(QueryGoal query, int maxIterations) {
         for (int i = 0; i < maxIterations; i++) {
-            HeadContext followUpContext = new HeadContext(query, graph, ontology, null, null, null, workingMemory, null, semanticNormalizer);
+            HeadContext followUpContext = new HeadContext(query, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
             List<ReasoningCandidate> followUp = withReadPhase(() -> reasoner.reason(followUpContext));
             if (followUp.isEmpty()) {
                 return noCandidatesAnswer(query);
@@ -1963,7 +1968,6 @@ public final class SahrAgent {
                     graph,
                     ontology,
                     current.goalId().equals(root.goalId()) ? statement : null,
-                    null,
                     current.goalId().equals(root.goalId()) ? ruleFrame : null,
                     workingMemory,
                     features,
@@ -2415,7 +2419,7 @@ public final class SahrAgent {
         if (answerComposer.isRelationshipQuestion(goal)) {
             return "No candidates produced.";
         }
-        HeadContext context = new HeadContext(goal, graph, ontology, null, null, null, workingMemory, null, semanticNormalizer);
+        HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
         long headStart = planTiming ? System.nanoTime() : 0L;
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         if (planTiming) {
@@ -2576,9 +2580,12 @@ public final class SahrAgent {
         SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
         SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
         java.util.List<String> matches = new java.util.ArrayList<>();
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
-            RelationAssertion antecedent = rule.antecedent();
+        for (RuleFrame rule : graph.getAllRuleFrames()) {
+            RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+            RelationAssertion antecedent = RuleFrames.legacyAntecedent(rule).orElse(null);
+            if (consequent == null || antecedent == null) {
+                continue;
+            }
             String consequentPredicate = localName(consequent.predicate());
             String antecedentPredicate = localName(antecedent.predicate());
 
@@ -2587,7 +2594,7 @@ public final class SahrAgent {
                 if (match != null) {
                     matches.add(match);
                 } else {
-                    logRuleReject(rule, predicate, subject, object, "consequent");
+                    logRuleReject(rule, consequent, predicate, subject, object, "consequent");
                 }
             }
             if (predicate.equals(antecedentPredicate)) {
@@ -2595,7 +2602,7 @@ public final class SahrAgent {
                 if (match != null) {
                     matches.add(match);
                 } else {
-                    logRuleReject(rule, predicate, subject, object, "antecedent");
+                    logRuleReject(rule, antecedent, predicate, subject, object, "antecedent");
                 }
             }
         }
@@ -2620,7 +2627,8 @@ public final class SahrAgent {
         return null;
     }
 
-    private void logRuleReject(RuleAssertion rule,
+    private void logRuleReject(RuleFrame rule,
+                               RelationAssertion assertion,
                                String expectedPredicate,
                                SymbolId subject,
                                SymbolId object,
@@ -2628,7 +2636,6 @@ public final class SahrAgent {
         if (!logger.isLoggable(java.util.logging.Level.FINE)) {
             return;
         }
-        RelationAssertion assertion = "consequent".equals(side) ? rule.consequent() : rule.antecedent();
         StringBuilder reason = new StringBuilder("rule-bind skip side=").append(side)
                 .append(" expectedPredicate=").append(expectedPredicate)
                 .append(" rulePredicate=").append(localName(assertion.predicate()));
@@ -3073,17 +3080,6 @@ public final class SahrAgent {
         return true;
     }
 
-    private boolean rulesEqual(RuleAssertion left, RuleAssertion right) {
-        if (left == right) {
-            return true;
-        }
-        if (left == null || right == null) {
-            return false;
-        }
-        return assertionsEqual(left.antecedent(), right.antecedent())
-                && assertionsEqual(left.consequent(), right.consequent());
-    }
-
     private boolean assertionsEqual(RelationAssertion left, RelationAssertion right) {
         if (left == right) {
             return true;
@@ -3296,7 +3292,7 @@ public final class SahrAgent {
     }
 
     private void runPropagationClosure() {
-        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, null, workingMemory, null, semanticNormalizer);
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, workingMemory, null, semanticNormalizer);
         int totalAdded = 0;
 
         for (int i = 0; i < MAX_PROPAGATION_ITERATIONS; i++) {
@@ -3362,7 +3358,7 @@ public final class SahrAgent {
         if (features == null) {
             return new IntentDecision(IntentType.UNKNOWN, 0.0, List.of());
         }
-        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, null, workingMemory, features, semanticNormalizer);
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, workingMemory, features, semanticNormalizer);
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         IntentDecision winner = null;
         double bestScore = -1.0;

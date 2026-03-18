@@ -3,7 +3,8 @@ package com.sahr.agent;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.RelationAssertion;
-import com.sahr.core.RuleAssertion;
+import com.sahr.core.RuleFrame;
+import com.sahr.core.RuleFrames;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.SahrAnnotationVocabulary;
 
@@ -19,7 +20,7 @@ final class ExplanationChainBuilder {
 
         String formatAssertionSentence(RelationAssertion assertion);
 
-        String formatRuleSentence(RuleAssertion rule);
+        String formatRuleSentence(RuleFrame rule);
 
         String formatCausalSentence(RelationAssertion assertion, SymbolId cause, SymbolId effect);
 
@@ -38,7 +39,7 @@ final class ExplanationChainBuilder {
     private java.util.Map<String, java.util.Map<SymbolId, List<RelationAssertion>>> reverseAssertionsByPredicate = new java.util.HashMap<>();
     private java.util.Map<String, Set<String>> predicatesByLocalName = new java.util.HashMap<>();
     private java.util.Map<String, List<RelationAssertion>> assertionsByLocalName = new java.util.HashMap<>();
-    private java.util.Map<SymbolId, List<RuleAssertion>> rulesByConsequent = new java.util.HashMap<>();
+    private java.util.Map<SymbolId, List<RuleFrame>> rulesByConsequent = new java.util.HashMap<>();
     private java.util.Map<String, Double> evidenceWeightByPredicate = new java.util.HashMap<>();
     private java.util.Set<String> nonEvidencePredicates = new java.util.HashSet<>();
     private java.util.Map<String, Double> temporalSupportCache = new java.util.HashMap<>();
@@ -109,7 +110,7 @@ final class ExplanationChainBuilder {
         visited.add(current);
         for (int depth = 0; depth < maxDepth; depth++) {
             RelationAssertion causeAssertion = selectBestCauseAssertion(current);
-            RuleAssertion rule = selectBestRuleForConsequent(current);
+            RuleFrame rule = selectBestRuleForConsequent(current);
             double assertionScore = scoreCauseAssertion(causeAssertion, current);
             double ruleScore = scoreRuleConsequent(rule, current);
             if (rule != null && ruleScore >= assertionScore) {
@@ -117,7 +118,9 @@ final class ExplanationChainBuilder {
                 if (seen.add(sentence)) {
                     sentences.add(sentence);
                 }
-                SymbolId cause = selectCauseNode(rule.antecedent());
+                SymbolId cause = RuleFrames.legacyAntecedent(rule)
+                        .map(this::selectCauseNode)
+                        .orElse(null);
                 if (cause == null || !visited.add(cause)) {
                     break;
                 }
@@ -173,20 +176,20 @@ final class ExplanationChainBuilder {
         return best;
     }
 
-    RuleAssertion selectBestRuleForConsequent(SymbolId effect) {
+    RuleFrame selectBestRuleForConsequent(SymbolId effect) {
         if (effect == null) {
             return null;
         }
         refreshIndexesIfNeeded();
-        List<RuleAssertion> candidates = rulesByConsequent.get(effect);
+        List<RuleFrame> candidates = rulesByConsequent.get(effect);
         if (candidates == null || candidates.isEmpty()) {
             return null;
         }
-        RuleAssertion best = candidates.get(0);
-        SymbolId bestCause = selectCauseNode(best.antecedent());
+        RuleFrame best = candidates.get(0);
+        SymbolId bestCause = RuleFrames.legacyAntecedent(best).map(this::selectCauseNode).orElse(null);
         double bestScore = bestCause == null ? 0.0 : causeEvidenceScore(bestCause, effect);
-        for (RuleAssertion candidate : candidates) {
-            SymbolId cause = selectCauseNode(candidate.antecedent());
+        for (RuleFrame candidate : candidates) {
+            SymbolId cause = RuleFrames.legacyAntecedent(candidate).map(this::selectCauseNode).orElse(null);
             double score = cause == null ? 0.0 : causeEvidenceScore(cause, effect);
             if (score > bestScore) {
                 best = candidate;
@@ -323,8 +326,11 @@ final class ExplanationChainBuilder {
                 losses.add(assertion.subject());
             }
         }
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
+        for (RuleFrame rule : graph.getAllRuleFrames()) {
+            RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+            if (consequent == null) {
+                continue;
+            }
             String predicate = formatter.localName(consequent.predicate());
             if (!"control".equals(predicate)) {
                 continue;
@@ -400,15 +406,18 @@ final class ExplanationChainBuilder {
         return causeEvidenceScore(cause, effect) + predicateDynamicWeight(assertion.predicate());
     }
 
-    private double scoreRuleConsequent(RuleAssertion rule, SymbolId effect) {
+    private double scoreRuleConsequent(RuleFrame rule, SymbolId effect) {
         if (rule == null) {
             return 0.0;
         }
-        SymbolId cause = selectCauseNode(rule.antecedent());
+        SymbolId cause = RuleFrames.legacyAntecedent(rule).map(this::selectCauseNode).orElse(null);
         if (cause == null) {
             return 0.0;
         }
-        return causeEvidenceScore(cause, effect) + predicateDynamicWeight(rule.consequent().predicate());
+        return causeEvidenceScore(cause, effect)
+                + RuleFrames.legacyConsequent(rule)
+                .map(consequent -> predicateDynamicWeight(consequent.predicate()))
+                .orElse(0.0);
     }
 
     private double predicateDynamicWeight(String predicate) {
@@ -639,11 +648,11 @@ final class ExplanationChainBuilder {
                     }
                 }
             }
-            for (RuleAssertion rule : graph.getAllRules()) {
+            for (RuleFrame rule : graph.getAllRuleFrames()) {
                 if (rule == null) {
                     continue;
                 }
-                RelationAssertion consequent = rule.consequent();
+                RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
                 if (consequent == null) {
                     continue;
                 }
@@ -683,9 +692,12 @@ final class ExplanationChainBuilder {
             }
         }
         List<SymbolId> subsystemFailures = new ArrayList<>(componentFailures);
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
-            RelationAssertion antecedent = rule.antecedent();
+        for (RuleFrame rule : graph.getAllRuleFrames()) {
+            RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+            RelationAssertion antecedent = RuleFrames.legacyAntecedent(rule).orElse(null);
+            if (consequent == null || antecedent == null) {
+                continue;
+            }
             String predicate = formatter.localName(consequent.predicate());
             if ("fail".equals(predicate)) {
                 if (isBooleanTrue(consequent.object()) || failureSelfReference(consequent)) {

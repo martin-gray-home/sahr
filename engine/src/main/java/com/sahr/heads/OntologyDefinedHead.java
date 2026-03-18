@@ -1382,8 +1382,11 @@ public final class OntologyDefinedHead extends BaseHead {
                     return localName(assertion.predicate());
                 }
             }
-            for (com.sahr.core.RuleAssertion rule : graph.getAllRules()) {
-                com.sahr.core.RelationAssertion consequent = rule.consequent();
+            for (com.sahr.core.RuleFrame rule : graph.getAllRuleFrames()) {
+                com.sahr.core.RelationAssertion consequent = com.sahr.core.RuleFrames.legacyConsequent(rule).orElse(null);
+                if (consequent == null) {
+                    continue;
+                }
                 if ((consequent.subject().equals(leftId) && consequent.object().equals(rightId))
                         || (consequent.subject().equals(rightId) && consequent.object().equals(leftId))) {
                     String predicate = localName(consequent.predicate());
@@ -1411,9 +1414,14 @@ public final class OntologyDefinedHead extends BaseHead {
                     names.add(name);
                 }
             }
-            for (com.sahr.core.RuleAssertion rule : graph.getAllRules()) {
-                String antecedent = localName(rule.antecedent().predicate());
-                String consequent = localName(rule.consequent().predicate());
+            for (com.sahr.core.RuleFrame rule : graph.getAllRuleFrames()) {
+                com.sahr.core.RelationAssertion antecedentAssertion = com.sahr.core.RuleFrames.legacyAntecedent(rule).orElse(null);
+                com.sahr.core.RelationAssertion consequentAssertion = com.sahr.core.RuleFrames.legacyConsequent(rule).orElse(null);
+                if (antecedentAssertion == null || consequentAssertion == null) {
+                    continue;
+                }
+                String antecedent = localName(antecedentAssertion.predicate());
+                String consequent = localName(consequentAssertion.predicate());
                 if (!antecedent.isBlank()) {
                     names.add(antecedent);
                 }

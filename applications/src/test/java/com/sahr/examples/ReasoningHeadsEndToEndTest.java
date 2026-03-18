@@ -90,7 +90,7 @@ class ReasoningHeadsEndToEndTest {
     void questionQueryHeadProposesSubgoal() {
         InputFeatures features = InputFeatureExtractor.extract("What is the man wearing?");
         HeadContext context = new HeadContext(QueryGoal.unknown(), new InMemoryKnowledgeBase(),
-                ontologyContext.service(), null, null, null, new WorkingMemory(), features, semanticNormalizer);
+                ontologyContext.service(), null, null, new WorkingMemory(), features, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
         assertTrue(candidates.stream().anyMatch(candidate -> "question-query".equals(candidate.producedBy())));
     }
@@ -110,7 +110,7 @@ class ReasoningHeadsEndToEndTest {
         QueryGoal query = QueryGoal.relation("entity:battery", "power", "entity:engine", null);
         InputFeatures features = InputFeatureExtractor.extract("What powers the engine?");
         HeadContext context = new HeadContext(query, new InMemoryKnowledgeBase(),
-                ontologyContext.service(), null, null, null, new WorkingMemory(), features, semanticNormalizer);
+                ontologyContext.service(), null, null, new WorkingMemory(), features, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
         List<String> producerNames = candidates.stream()
                 .map(ReasoningCandidate::producedBy)
@@ -181,7 +181,7 @@ class ReasoningHeadsEndToEndTest {
         ));
         graph.addAssertion(new RelationAssertion(motor, "https://sahr.ai/ontology/relations#fail", new SymbolId("concept:true"), 0.9));
         HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontologyContext.service(), null, null,
-                null, new WorkingMemory(), null, semanticNormalizer);
+                new WorkingMemory(), null, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
         assertTrue(candidates.stream().anyMatch(candidate -> "rule-forward-chain".equals(candidate.producedBy())));
     }
@@ -243,7 +243,7 @@ class ReasoningHeadsEndToEndTest {
         graph.addAssertion(new RelationAssertion(b, predicate, c, 0.9));
 
         HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontologyContext.service(), null, null,
-                null, new WorkingMemory(), null, semanticNormalizer);
+                new WorkingMemory(), null, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
 
         assertTrue(candidates.stream().anyMatch(candidate ->
@@ -263,7 +263,7 @@ class ReasoningHeadsEndToEndTest {
         graph.addAssertion(new RelationAssertion(a, inputPredicate, b, 0.9));
 
         HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontologyContext.service(), null, null,
-                null, new WorkingMemory(), null, semanticNormalizer);
+                new WorkingMemory(), null, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
 
         assertTrue(candidates.stream().anyMatch(candidate ->
@@ -291,7 +291,7 @@ class ReasoningHeadsEndToEndTest {
         }
 
         HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontologyContext.service(), null, null,
-                null, new WorkingMemory(), null, semanticNormalizer);
+                new WorkingMemory(), null, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
 
         assertTrue(candidates.stream().anyMatch(candidate ->
@@ -323,7 +323,7 @@ class ReasoningHeadsEndToEndTest {
         }
 
         HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontologyContext.service(), null, null,
-                null, new WorkingMemory(), null, semanticNormalizer);
+                new WorkingMemory(), null, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
 
         assertFalse(candidates.stream().anyMatch(candidate ->
@@ -342,7 +342,7 @@ class ReasoningHeadsEndToEndTest {
         graph.addAssertion(new RelationAssertion(b, secondPredicate, c, 0.9));
 
         HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontologyContext.service(), null, null,
-                null, new WorkingMemory(), null, semanticNormalizer);
+                new WorkingMemory(), null, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
 
         assertTrue(candidates.stream().anyMatch(candidate ->
@@ -362,7 +362,7 @@ class ReasoningHeadsEndToEndTest {
     private List<ReasoningCandidate> selectIntentCandidates(String input) {
         InputFeatures features = InputFeatureExtractor.extract(input);
         HeadContext context = new HeadContext(QueryGoal.unknown(), new InMemoryKnowledgeBase(),
-                ontologyContext.service(), null, null, null, new WorkingMemory(), features, semanticNormalizer);
+                ontologyContext.service(), null, null, new WorkingMemory(), features, semanticNormalizer);
         List<ReasoningCandidate> candidates = reasoner.reason(context);
         List<ReasoningCandidate> intents = new ArrayList<>();
         for (ReasoningCandidate candidate : candidates) {

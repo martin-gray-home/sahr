@@ -25,12 +25,26 @@ public final class RuleFrames {
         if (!isLegacyCompatible(rule)) {
             return Optional.empty();
         }
-        RelationAssertion antecedent = toAssertion(rule.antecedents().get(0), rule.confidence());
-        RelationAssertion consequent = toAssertion(rule.consequent(), rule.confidence());
+        RelationAssertion antecedent = legacyAntecedent(rule).orElse(null);
+        RelationAssertion consequent = legacyConsequent(rule).orElse(null);
         if (antecedent == null || consequent == null) {
             return Optional.empty();
         }
         return Optional.of(new RuleAssertion(antecedent, consequent, rule.confidence()));
+    }
+
+    public static Optional<RelationAssertion> legacyAntecedent(RuleFrame rule) {
+        if (!isLegacyCompatible(rule)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(toAssertion(rule.antecedents().get(0), rule.confidence()));
+    }
+
+    public static Optional<RelationAssertion> legacyConsequent(RuleFrame rule) {
+        if (!isLegacyCompatible(rule)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(toAssertion(rule.consequent(), rule.confidence()));
     }
 
     public static boolean isLegacyCompatible(RuleFrame rule) {

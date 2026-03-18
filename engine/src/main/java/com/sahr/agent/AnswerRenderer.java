@@ -1,6 +1,8 @@
 package com.sahr.agent;
 
 import com.sahr.core.RelationAssertion;
+import com.sahr.core.RuleFrame;
+import com.sahr.core.RuleFrames;
 import com.sahr.core.RuleAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.SahrAnnotationVocabulary;
@@ -50,6 +52,19 @@ final class AnswerRenderer {
     String formatRuleSentence(RuleAssertion rule) {
         RelationAssertion antecedent = rule.antecedent();
         RelationAssertion consequent = rule.consequent();
+        return formatRuleSentence(antecedent, consequent);
+    }
+
+    String formatRuleSentence(RuleFrame rule) {
+        RelationAssertion antecedent = RuleFrames.legacyAntecedent(rule).orElse(null);
+        RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+        if (antecedent == null || consequent == null) {
+            return ensureSentenceTerminal(rule == null ? "unknown rule" : rule.toString());
+        }
+        return formatRuleSentence(antecedent, consequent);
+    }
+
+    private String formatRuleSentence(RelationAssertion antecedent, RelationAssertion consequent) {
         String consequentPredicate = formatter.localName(consequent.predicate());
         if ("backupfor".equals(consequentPredicate) || "backup_for".equals(consequentPredicate)) {
             String subject = displayValue(consequent.subject());

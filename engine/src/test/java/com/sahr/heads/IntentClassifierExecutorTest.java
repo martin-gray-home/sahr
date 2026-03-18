@@ -40,7 +40,6 @@ class IntentClassifierExecutorTest {
                 new InMemoryOntologyService(),
                 null,
                 null,
-                null,
                 new com.sahr.core.WorkingMemory(),
                 features,
                 null

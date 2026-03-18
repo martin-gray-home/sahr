@@ -3,7 +3,8 @@ package com.sahr.agent;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.RelationAssertion;
-import com.sahr.core.RuleAssertion;
+import com.sahr.core.RuleFrame;
+import com.sahr.core.RuleFrames;
 import com.sahr.core.SymbolId;
 
 import java.util.ArrayList;
@@ -44,9 +45,12 @@ final class AliasBridge {
             known.add(assertion.subject());
             known.add(assertion.object());
         }
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion antecedent = rule.antecedent();
-            RelationAssertion consequent = rule.consequent();
+        for (RuleFrame rule : graph.getAllRuleFrames()) {
+            RelationAssertion antecedent = RuleFrames.legacyAntecedent(rule).orElse(null);
+            RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+            if (antecedent == null || consequent == null) {
+                continue;
+            }
             known.add(antecedent.subject());
             known.add(antecedent.object());
             known.add(consequent.subject());

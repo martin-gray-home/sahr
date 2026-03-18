@@ -5,7 +5,8 @@ import com.sahr.core.KnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.RelationAssertion;
-import com.sahr.core.RuleAssertion;
+import com.sahr.core.RuleFrame;
+import com.sahr.core.RuleFrames;
 import com.sahr.core.SymbolId;
 import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
@@ -3071,9 +3072,12 @@ final class AnswerComposer {
             int size = queue.size();
             for (int i = 0; i < size; i++) {
                 SymbolId current = queue.removeFirst();
-                for (RuleAssertion rule : graph.getAllRules()) {
-                    RelationAssertion consequent = rule.consequent();
-                    RelationAssertion antecedent = rule.antecedent();
+                for (RuleFrame rule : graph.getAllRuleFrames()) {
+                    RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+                    RelationAssertion antecedent = RuleFrames.legacyAntecedent(rule).orElse(null);
+                    if (consequent == null || antecedent == null) {
+                        continue;
+                    }
                     if (!consequent.subject().equals(current) && !consequent.object().equals(current)) {
                         continue;
                     }
@@ -3495,8 +3499,11 @@ final class AnswerComposer {
     private String backupForFallback(SymbolId subject, SymbolId object) {
         List<SymbolId> subjectCandidates = aliasBridge.expandAliasSymbols(subject);
         List<SymbolId> objectCandidates = aliasBridge.expandAliasSymbols(object);
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
+        for (RuleFrame rule : graph.getAllRuleFrames()) {
+            RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+            if (consequent == null) {
+                continue;
+            }
             if (!"backupfor".equals(support.localName(consequent.predicate()))) {
                 continue;
             }
@@ -3521,8 +3528,11 @@ final class AnswerComposer {
             return answerRenderer.formatAssertionSentence(assertion);
         }
         if (subject != null) {
-            for (RuleAssertion rule : graph.getAllRules()) {
-                RelationAssertion consequent = rule.consequent();
+            for (RuleFrame rule : graph.getAllRuleFrames()) {
+                RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+                if (consequent == null) {
+                    continue;
+                }
                 if (!"backupfor".equals(support.localName(consequent.predicate()))) {
                     continue;
                 }

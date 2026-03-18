@@ -2,6 +2,8 @@ package com.sahr.agent;
 
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.ReasoningCandidate;
+import com.sahr.core.RuleFrame;
+import com.sahr.core.RuleFrames;
 import com.sahr.core.RuleAssertion;
 import com.sahr.core.SymbolId;
 import com.sahr.core.QueryGoal;
@@ -88,12 +90,26 @@ final class AnswerRanker {
                 specificityScore(consequent.object().value()));
     }
 
+    double ruleSpecificity(RuleFrame rule) {
+        return RuleFrames.legacyConsequent(rule)
+                .map(this::assertionSpecificity)
+                .orElse(0.0);
+    }
+
     double ruleExplanationScore(RuleAssertion rule, String predicateLocal) {
         if (rule == null) {
             return 0.0;
         }
         RelationAssertion consequent = rule.consequent();
         if (consequent == null) {
+            return 0.0;
+        }
+        return ruleSpecificity(rule)
+                + predicateDynamismScore(predicateLocal);
+    }
+
+    double ruleExplanationScore(RuleFrame rule, String predicateLocal) {
+        if (rule == null) {
             return 0.0;
         }
         return ruleSpecificity(rule)

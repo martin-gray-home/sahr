@@ -674,6 +674,12 @@ head dispatch, and `KnowledgeBase.getAllRules()` is now just a temporary
 adapter view over legacy-compatible ground `RuleFrame` entries. That
 keeps old explanation/search code working while the canonical rule model
 is now shared-frame-first rather than dual-stored.
+The remaining explanation/search paths now read `RuleFrame` directly
+from `KnowledgeBase.getAllRuleFrames()` and only project ground
+antecedent/consequent assertions through `RuleFrames` compatibility
+helpers when they need legacy single-antecedent semantics. `HeadContext`
+also now carries only `ruleFrame`, removing the parallel `rule`
+payload from head dispatch.
 Statement ingestion now triggers the propagation closure so newly added
 facts immediately fire rule-forward-chain assertions.
 Yes/no attribute questions (e.g., "Is the hat green") now normalize to

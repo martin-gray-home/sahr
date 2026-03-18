@@ -3,7 +3,8 @@ package com.sahr.agent;
 import com.sahr.core.KnowledgeBase;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.RelationAssertion;
-import com.sahr.core.RuleAssertion;
+import com.sahr.core.RuleFrame;
+import com.sahr.core.RuleFrames;
 import com.sahr.core.SymbolId;
 
 import java.util.ArrayList;
@@ -18,7 +19,7 @@ final class PredicateExplainer {
 
         String formatAssertionSentence(RelationAssertion assertion);
 
-        String formatRuleSentence(RuleAssertion rule);
+        String formatRuleSentence(RuleFrame rule);
 
         SymbolId selectCauseNode(RelationAssertion antecedent);
     }
@@ -26,13 +27,13 @@ final class PredicateExplainer {
     private final KnowledgeBase graph;
     private final Formatter formatter;
     private final ToDoubleFunction<RelationAssertion> assertionScore;
-    private final ToDoubleFunction<RuleAssertion> ruleScore;
+    private final ToDoubleFunction<RuleFrame> ruleScore;
     private final ExplanationChainBuilder explanationChains;
 
     PredicateExplainer(KnowledgeBase graph,
                        Formatter formatter,
                        ToDoubleFunction<RelationAssertion> assertionScore,
-                       ToDoubleFunction<RuleAssertion> ruleScore,
+                       ToDoubleFunction<RuleFrame> ruleScore,
                        ExplanationChainBuilder explanationChains) {
         this.graph = graph;
         this.formatter = formatter;
@@ -72,9 +73,12 @@ final class PredicateExplainer {
             }
         }
 
-        List<RuleAssertion> ruleMatches = new ArrayList<>();
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion consequent = rule.consequent();
+        List<RuleFrame> ruleMatches = new ArrayList<>();
+        for (RuleFrame rule : graph.getAllRuleFrames()) {
+            RelationAssertion consequent = RuleFrames.legacyConsequent(rule).orElse(null);
+            if (consequent == null) {
+                continue;
+            }
             if (!predicate.equals(formatter.localName(consequent.predicate()))) {
                 continue;
             }
@@ -91,7 +95,7 @@ final class PredicateExplainer {
                 ruleScore.applyAsDouble(left)
         ));
         Set<String> seen = new HashSet<>(sentences);
-        for (RuleAssertion rule : ruleMatches) {
+        for (RuleFrame rule : ruleMatches) {
             String ruleSentence = formatter.formatRuleSentence(rule);
             if (seen.add(ruleSentence)) {
                 sentences.add(ruleSentence);
@@ -99,7 +103,9 @@ final class PredicateExplainer {
             if (sentences.size() >= limit) {
                 return sentences;
             }
-            SymbolId next = formatter.selectCauseNode(rule.antecedent());
+            SymbolId next = RuleFrames.legacyAntecedent(rule)
+                    .map(formatter::selectCauseNode)
+                    .orElse(null);
             if (next == null) {
                 continue;
             }
