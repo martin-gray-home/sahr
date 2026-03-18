@@ -628,6 +628,12 @@ graph for attribute filters.
 Yes/no and count answers now flow through `QueryResult`, with heads
 adapting structured results and the agent responsible for final
 answer phrasing.
+Invariant: for query intents `RELATION`, `COUNT`, and `YESNO`, semantic
+execution must occur only in `QueryExecutor`. Heads may select and adapt,
+but must not perform operator semantics, graph traversal for these modes,
+result filtering, or natural-language shaping.
+Invariant: natural-language rendering of `QueryResult` belongs in
+`SahrAgent` (or a dedicated renderer), never in heads.
 Relation queries that target people now return raw entity identifiers
 (e.g., `entity:woman`) instead of English clauses to keep head behavior
 stable while the new query frame path is being adopted. When a relation
