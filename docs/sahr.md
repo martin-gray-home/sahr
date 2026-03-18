@@ -645,6 +645,10 @@ Scenario tests now assert the preferred containment/location choice for
 WHERE queries to lock the policy in.
 WHERE rendering now normalizes containment predicates (e.g., `inside`,
 `locatedIn`) to the canonical surface form `in` for stable output.
+Answer realization now flows through a dedicated shared
+`com.sahr.presentation.AnswerRealizer` boundary that converts
+semantic-only `QueryResult` plus `QueryFrame` context into final
+user-facing text, keeping NLG decisions out of heads and executor paths.
 Relation queries that target people now return raw entity identifiers
 (e.g., `entity:woman`) instead of English clauses to keep head behavior
 stable while the new query frame path is being adopted. When a relation
