@@ -46,7 +46,6 @@ class ComplexSentenceScenarioTest {
     }
 
     private boolean matchesLocation(String subject, String object, String answer) {
-        return (subject + " in " + object).equals(answer)
-                || (subject + " inside " + object).equals(answer);
+        return (subject + " in " + object).equals(answer);
     }
 }
