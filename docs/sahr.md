@@ -641,6 +641,11 @@ The wear→on predicate bridge is now enabled in the ontology reasoning
 heads (with correct argument inversion), and a scenario test asserts
 that "The man is wearing a hat" answers "What is on the man" and
 "What is the hat on" correctly.
+Reasoning heads now carry an explicit rule category tag to prevent
+ad hoc heuristic rules from silently acting as hard entailments:
+`StructuralRule` and `CanonicalizationRule` stay enabled by default,
+`BridgeRule` heads remain enabled but run at lower confidence, and
+`HeuristicRule` heads are disabled by default until explicitly promoted.
 `QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to

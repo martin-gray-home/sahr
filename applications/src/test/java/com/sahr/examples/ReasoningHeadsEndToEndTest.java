@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -306,6 +307,32 @@ class ReasoningHeadsEndToEndTest {
     }
 
     @ParameterizedTest(name = "{0}")
+    @MethodSource("heuristicTransferCases")
+    void heuristicLocationTransferHeadsAreDisabled(String headName, String predicate, boolean reverse) {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SymbolId subject = new SymbolId("entity:subject");
+        SymbolId object = new SymbolId("entity:object");
+        SymbolId location = new SymbolId("entity:room");
+        graph.addEntity(new EntityNode(subject, "subject", Set.of("https://en-word.net/id/oewn-00007846-n")));
+        graph.addEntity(new EntityNode(object, "object", Set.of("https://en-word.net/id/oewn-00007846-n")));
+        if (reverse) {
+            graph.addAssertion(new RelationAssertion(subject, predicate, object, 0.9));
+            graph.addAssertion(new RelationAssertion(object, "https://sahr.ai/ontology/relations#in", location, 0.9));
+        } else {
+            graph.addAssertion(new RelationAssertion(subject, predicate, object, 0.9));
+            graph.addAssertion(new RelationAssertion(subject, "https://sahr.ai/ontology/relations#in", location, 0.9));
+        }
+
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontologyContext.service(), null, null,
+                new WorkingMemory(), null, semanticNormalizer);
+        List<ReasoningCandidate> candidates = reasoner.reason(context);
+
+        assertFalse(candidates.stream().anyMatch(candidate ->
+                candidate.type() == CandidateType.ASSERTION
+                        && headName.equals(candidate.producedBy())));
+    }
+
+    @ParameterizedTest(name = "{0}")
     @MethodSource("dependencyCases")
     void dependencyHeadsDeriveChains(String headName, String firstPredicate, String secondPredicate) {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
@@ -405,6 +432,12 @@ class ReasoningHeadsEndToEndTest {
 
     private static Stream<Arguments> transferCases() {
         List<Arguments> cases = new ArrayList<>();
+        addTransferPair(cases, "partOf", "partOf-location-transfer", "partOf-location-reverse");
+        return cases.stream();
+    }
+
+    private static Stream<Arguments> heuristicTransferCases() {
+        List<Arguments> cases = new ArrayList<>();
         addTransferPair(cases, "with", "with-location-transfer", "with-location-reverse");
         addTransferPair(cases, "wear", "wear-location-transfer", "wear-location-reverse");
         addTransferPair(cases, "wornBy", "wornBy-location-transfer", "wornBy-location-reverse");
@@ -413,7 +446,6 @@ class ReasoningHeadsEndToEndTest {
         addTransferPair(cases, "possess", "possess-location-transfer", "possess-location-reverse");
         addTransferPair(cases, "have", "have-location-transfer", "have-location-reverse");
         addTransferPair(cases, "opposite", "opposite-location-transfer", "opposite-location-reverse");
-        addTransferPair(cases, "partOf", "partOf-location-transfer", "partOf-location-reverse");
         addTransferPair(cases, "near", "near-location-transfer", "near-location-reverse");
         addTransferPair(cases, "beside", "beside-location-transfer", "beside-location-reverse");
         addTransferPair(cases, "alongside", "alongside-location-transfer", "alongside-location-reverse");

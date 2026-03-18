@@ -11,12 +11,18 @@ headr:Constant a owl:Class .
 headr:AddAssertion a owl:Class .
 headr:ScorePolicy a owl:Class .
 headr:ExecutorParam a owl:Class .
+headr:RuleCategory a owl:Class .
+headr:StructuralRule a headr:RuleCategory .
+headr:CanonicalizationRule a headr:RuleCategory .
+headr:BridgeRule a headr:RuleCategory .
+headr:HeuristicRule a headr:RuleCategory .
 
 headr:hasPattern a owl:ObjectProperty .
 headr:hasTriple a owl:ObjectProperty .
 headr:hasAction a owl:ObjectProperty .
 headr:hasScorePolicy a owl:ObjectProperty .
 headr:hasExecutorParam a owl:ObjectProperty .
+headr:ruleCategory a owl:ObjectProperty .
 headr:subject a owl:ObjectProperty .
 headr:predicate a owl:ObjectProperty .
 headr:object a owl:ObjectProperty .
@@ -308,6 +314,7 @@ headr:actionInTransitive a headr:AddAssertion ;
 
 headr:TransitiveInHead a headr:ReasoningHead ;
     headr:name "transitive-in" ;
+    headr:ruleCategory headr:StructuralRule ;
     headr:hasPattern headr:patternInTransitive ;
     headr:hasAction headr:actionInTransitive ;
     headr:hasScorePolicy headr:scoreContainment .
@@ -332,6 +339,7 @@ headr:actionInsideTransitive a headr:AddAssertion ;
 
 headr:TransitiveInsideHead a headr:ReasoningHead ;
     headr:name "transitive-inside" ;
+    headr:ruleCategory headr:StructuralRule ;
     headr:hasPattern headr:patternInsideTransitive ;
     headr:hasAction headr:actionInsideTransitive ;
     headr:hasScorePolicy headr:scoreContainment .
@@ -356,6 +364,7 @@ headr:actionLocatedInTransitive a headr:AddAssertion ;
 
 headr:TransitiveLocatedInHead a headr:ReasoningHead ;
     headr:name "transitive-locatedIn" ;
+    headr:ruleCategory headr:StructuralRule ;
     headr:hasPattern headr:patternLocatedInTransitive ;
     headr:hasAction headr:actionLocatedInTransitive ;
     headr:hasScorePolicy headr:scoreContainment .
@@ -380,6 +389,7 @@ headr:actionWithLocationTransfer a headr:AddAssertion ;
 
 headr:WithLocationTransferHead a headr:ReasoningHead ;
     headr:name "with-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternWithLocationTransfer ;
     headr:hasAction headr:actionWithLocationTransfer ;
     headr:hasExecutorParam headr:paramWithLocationRequireVarA ;
@@ -401,6 +411,7 @@ headr:actionWithLocationReverse a headr:AddAssertion ;
 
 headr:WithLocationReverseHead a headr:ReasoningHead ;
     headr:name "with-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternWithLocationReverse ;
     headr:hasAction headr:actionWithLocationReverse ;
     headr:hasExecutorParam headr:paramWithLocationRequireVarA ;
@@ -422,6 +433,7 @@ headr:actionWearLocationTransfer a headr:AddAssertion ;
 
 headr:WearLocationTransferHead a headr:ReasoningHead ;
     headr:name "wear-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternWearLocationTransfer ;
     headr:hasAction headr:actionWearLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -436,6 +448,7 @@ headr:actionWearLocationReverse a headr:AddAssertion ;
 
 headr:WearLocationReverseHead a headr:ReasoningHead ;
     headr:name "wear-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternWearLocationReverse ;
     headr:hasAction headr:actionWearLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -455,6 +468,7 @@ headr:actionCarryLocationTransfer a headr:AddAssertion ;
 
 headr:CarryLocationTransferHead a headr:ReasoningHead ;
     headr:name "carry-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternCarryLocationTransfer ;
     headr:hasAction headr:actionCarryLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -469,6 +483,7 @@ headr:actionCarryLocationReverse a headr:AddAssertion ;
 
 headr:CarryLocationReverseHead a headr:ReasoningHead ;
     headr:name "carry-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternCarryLocationReverse ;
     headr:hasAction headr:actionCarryLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -488,6 +503,7 @@ headr:actionHoldLocationTransfer a headr:AddAssertion ;
 
 headr:HoldLocationTransferHead a headr:ReasoningHead ;
     headr:name "hold-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternHoldLocationTransfer ;
     headr:hasAction headr:actionHoldLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -502,6 +518,7 @@ headr:actionHoldLocationReverse a headr:AddAssertion ;
 
 headr:HoldLocationReverseHead a headr:ReasoningHead ;
     headr:name "hold-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternHoldLocationReverse ;
     headr:hasAction headr:actionHoldLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -521,6 +538,7 @@ headr:actionPossessLocationTransfer a headr:AddAssertion ;
 
 headr:PossessLocationTransferHead a headr:ReasoningHead ;
     headr:name "possess-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternPossessLocationTransfer ;
     headr:hasAction headr:actionPossessLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -535,6 +553,7 @@ headr:actionPossessLocationReverse a headr:AddAssertion ;
 
 headr:PossessLocationReverseHead a headr:ReasoningHead ;
     headr:name "possess-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternPossessLocationReverse ;
     headr:hasAction headr:actionPossessLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -554,6 +573,7 @@ headr:actionHaveLocationTransfer a headr:AddAssertion ;
 
 headr:HaveLocationTransferHead a headr:ReasoningHead ;
     headr:name "have-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternHaveLocationTransfer ;
     headr:hasAction headr:actionHaveLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -568,6 +588,7 @@ headr:actionHaveLocationReverse a headr:AddAssertion ;
 
 headr:HaveLocationReverseHead a headr:ReasoningHead ;
     headr:name "have-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternHaveLocationReverse ;
     headr:hasAction headr:actionHaveLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -587,6 +608,7 @@ headr:actionOppositeLocationTransfer a headr:AddAssertion ;
 
 headr:OppositeLocationTransferHead a headr:ReasoningHead ;
     headr:name "opposite-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternOppositeLocationTransfer ;
     headr:hasAction headr:actionOppositeLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -601,6 +623,7 @@ headr:actionOppositeLocationReverse a headr:AddAssertion ;
 
 headr:OppositeLocationReverseHead a headr:ReasoningHead ;
     headr:name "opposite-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternOppositeLocationReverse ;
     headr:hasAction headr:actionOppositeLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -620,6 +643,7 @@ headr:actionPartOfLocationTransfer a headr:AddAssertion ;
 
 headr:PartOfLocationTransferHead a headr:ReasoningHead ;
     headr:name "partOf-location-transfer" ;
+    headr:ruleCategory headr:BridgeRule ;
     headr:hasPattern headr:patternPartOfLocationTransfer ;
     headr:hasAction headr:actionPartOfLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -634,6 +658,7 @@ headr:actionPartOfLocationReverse a headr:AddAssertion ;
 
 headr:PartOfLocationReverseHead a headr:ReasoningHead ;
     headr:name "partOf-location-reverse" ;
+    headr:ruleCategory headr:BridgeRule ;
     headr:hasPattern headr:patternPartOfLocationReverse ;
     headr:hasAction headr:actionPartOfLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -653,6 +678,7 @@ headr:actionOnLocationTransfer a headr:AddAssertion ;
 
 headr:OnLocationTransferHead a headr:ReasoningHead ;
     headr:name "on-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:enabled false ;
     headr:hasPattern headr:patternOnLocationTransfer ;
     headr:hasAction headr:actionOnLocationTransfer ;
@@ -673,6 +699,7 @@ headr:actionUnderLocationTransfer a headr:AddAssertion ;
 
 headr:UnderLocationTransferHead a headr:ReasoningHead ;
     headr:name "under-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:enabled false ;
     headr:hasPattern headr:patternUnderLocationTransfer ;
     headr:hasAction headr:actionUnderLocationTransfer ;
@@ -698,6 +725,7 @@ headr:actionPoweredByTransitive a headr:AddAssertion ;
 
 headr:PoweredByTransitiveHead a headr:ReasoningHead ;
     headr:name "poweredBy-transitive" ;
+    headr:ruleCategory headr:StructuralRule ;
     headr:hasPattern headr:patternPoweredByTransitive ;
     headr:hasAction headr:actionPoweredByTransitive ;
     headr:hasScorePolicy headr:scoreDependency .
@@ -717,6 +745,7 @@ headr:actionPoweredByChargedBy a headr:AddAssertion ;
 
 headr:PoweredByChargedByHead a headr:ReasoningHead ;
     headr:name "poweredBy-chargedBy" ;
+    headr:ruleCategory headr:BridgeRule ;
     headr:hasPattern headr:patternPoweredByChargedBy ;
     headr:hasAction headr:actionPoweredByChargedBy ;
     headr:hasScorePolicy headr:scoreDependency .
@@ -741,6 +770,7 @@ headr:actionChargedByTransitive a headr:AddAssertion ;
 
 headr:ChargedByTransitiveHead a headr:ReasoningHead ;
     headr:name "chargedBy-transitive" ;
+    headr:ruleCategory headr:StructuralRule ;
     headr:hasPattern headr:patternChargedByTransitive ;
     headr:hasAction headr:actionChargedByTransitive ;
     headr:hasScorePolicy headr:scoreDependency .
@@ -760,6 +790,7 @@ headr:actionInsideToIn a headr:AddAssertion ;
 
 headr:InsideToInHead a headr:ReasoningHead ;
     headr:name "inside-to-in" ;
+    headr:ruleCategory headr:CanonicalizationRule ;
     headr:hasPattern headr:patternInsideToIn ;
     headr:hasAction headr:actionInsideToIn ;
     headr:hasScorePolicy headr:scoreContainment .
@@ -779,6 +810,7 @@ headr:actionLocatedInToIn a headr:AddAssertion ;
 
 headr:LocatedInToInHead a headr:ReasoningHead ;
     headr:name "locatedIn-to-in" ;
+    headr:ruleCategory headr:CanonicalizationRule ;
     headr:hasPattern headr:patternLocatedInToIn ;
     headr:hasAction headr:actionLocatedInToIn ;
     headr:hasScorePolicy headr:scoreContainment .
@@ -798,6 +830,7 @@ headr:actionWornByLocationTransfer a headr:AddAssertion ;
 
 headr:WornByLocationTransferHead a headr:ReasoningHead ;
     headr:name "wornBy-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternWornByLocationTransfer ;
     headr:hasAction headr:actionWornByLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -812,6 +845,7 @@ headr:actionWornByLocationReverse a headr:AddAssertion ;
 
 headr:WornByLocationReverseHead a headr:ReasoningHead ;
     headr:name "wornBy-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternWornByLocationReverse ;
     headr:hasAction headr:actionWornByLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -831,6 +865,7 @@ headr:actionNearLocationTransfer a headr:AddAssertion ;
 
 headr:NearLocationTransferHead a headr:ReasoningHead ;
     headr:name "near-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternNearLocationTransfer ;
     headr:hasAction headr:actionNearLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -845,6 +880,7 @@ headr:actionNearLocationReverse a headr:AddAssertion ;
 
 headr:NearLocationReverseHead a headr:ReasoningHead ;
     headr:name "near-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternNearLocationReverse ;
     headr:hasAction headr:actionNearLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -864,6 +900,7 @@ headr:actionBesideLocationTransfer a headr:AddAssertion ;
 
 headr:BesideLocationTransferHead a headr:ReasoningHead ;
     headr:name "beside-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternBesideLocationTransfer ;
     headr:hasAction headr:actionBesideLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -878,6 +915,7 @@ headr:actionBesideLocationReverse a headr:AddAssertion ;
 
 headr:BesideLocationReverseHead a headr:ReasoningHead ;
     headr:name "beside-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternBesideLocationReverse ;
     headr:hasAction headr:actionBesideLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -897,6 +935,7 @@ headr:actionAlongsideLocationTransfer a headr:AddAssertion ;
 
 headr:AlongsideLocationTransferHead a headr:ReasoningHead ;
     headr:name "alongside-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternAlongsideLocationTransfer ;
     headr:hasAction headr:actionAlongsideLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -911,6 +950,7 @@ headr:actionAlongsideLocationReverse a headr:AddAssertion ;
 
 headr:AlongsideLocationReverseHead a headr:ReasoningHead ;
     headr:name "alongside-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternAlongsideLocationReverse ;
     headr:hasAction headr:actionAlongsideLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -930,6 +970,7 @@ headr:actionNextToLocationTransfer a headr:AddAssertion ;
 
 headr:NextToLocationTransferHead a headr:ReasoningHead ;
     headr:name "nextTo-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternNextToLocationTransfer ;
     headr:hasAction headr:actionNextToLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -944,6 +985,7 @@ headr:actionNextToLocationReverse a headr:AddAssertion ;
 
 headr:NextToLocationReverseHead a headr:ReasoningHead ;
     headr:name "nextTo-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternNextToLocationReverse ;
     headr:hasAction headr:actionNextToLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -963,6 +1005,7 @@ headr:actionColocationLocationTransfer a headr:AddAssertion ;
 
 headr:ColocationLocationTransferHead a headr:ReasoningHead ;
     headr:name "colocation-location-transfer" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternColocationLocationTransfer ;
     headr:hasAction headr:actionColocationLocationTransfer ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -977,6 +1020,7 @@ headr:actionColocationLocationReverse a headr:AddAssertion ;
 
 headr:ColocationLocationReverseHead a headr:ReasoningHead ;
     headr:name "colocation-location-reverse" ;
+    headr:ruleCategory headr:HeuristicRule ;
     headr:hasPattern headr:patternColocationLocationReverse ;
     headr:hasAction headr:actionColocationLocationReverse ;
     headr:hasScorePolicy headr:scoreColocation .
@@ -990,13 +1034,13 @@ headr:patternWearToOn a headr:Pattern ;
     headr:hasTriple headr:tpWearToOn .
 
 headr:actionWearToOn a headr:AddAssertion ;
-    headr:subject headr:varA ;
+    headr:subject headr:varB ;
     headr:predicate headr:constOn ;
-    headr:object headr:varB .
+    headr:object headr:varA .
 
 headr:WearToOnHead a headr:ReasoningHead ;
     headr:name "wear-to-on" ;
+    headr:ruleCategory headr:BridgeRule ;
     headr:hasPattern headr:patternWearToOn ;
     headr:hasAction headr:actionWearToOn ;
-    headr:enabled false ;
     headr:hasScorePolicy headr:scoreSurface .

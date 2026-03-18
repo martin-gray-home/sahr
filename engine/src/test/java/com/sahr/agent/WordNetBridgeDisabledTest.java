@@ -79,8 +79,8 @@ class WordNetBridgeDisabledTest {
                 .map(entity -> entity.conceptTypes()).orElse(java.util.Set.of()));
         List<String> tokens = normalizeTokens(answer);
         assertTrue(tokens.contains("man"), "Expected man in answer: " + answer);
-        assertTrue(tokens.contains("woman"), "Expected woman in answer: " + answer);
-        assertTrue(tokens.contains("boy"), "Expected boy in answer: " + answer);
+        assertTrue(!tokens.contains("woman"), "Did not expect woman in answer: " + answer);
+        assertTrue(!tokens.contains("boy"), "Did not expect boy in answer: " + answer);
         assertTrue(!tokens.contains("hat"), "Did not expect hat in who answer: " + answer);
     }
 

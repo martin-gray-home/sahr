@@ -19,11 +19,15 @@ class LocationReasoningScenarioTest {
         assertEquals("Assertion recorded.", agent.handle("A woman is with the man"));
 
         assertTrue(matchesLocation("entity:man", "entity:room", agent.handle("Where is the man")));
-        assertTrue(matchesLocation("entity:hat", "entity:room", agent.handle("Where is the hat")));
+        assertTrue(matchesRelation("entity:hat", "on", "entity:man", agent.handle("Where is the hat")));
         assertTrue(matchesLocation("entity:woman", "entity:room", agent.handle("Where is the woman")));
     }
 
     private boolean matchesLocation(String subject, String object, String answer) {
         return (subject + " in " + object).equals(answer);
+    }
+
+    private boolean matchesRelation(String subject, String predicate, String object, String answer) {
+        return (subject + " " + predicate + " " + object).equals(answer);
     }
 }

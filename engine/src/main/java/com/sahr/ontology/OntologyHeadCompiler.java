@@ -32,6 +32,11 @@ public final class OntologyHeadCompiler {
     private static final String CONSTANT = NS + "Constant";
     private static final String ADD_ASSERTION = NS + "AddAssertion";
     private static final String EXECUTOR_PARAM = NS + "ExecutorParam";
+    private static final String RULE_CATEGORY = NS + "ruleCategory";
+    private static final String STRUCTURAL_RULE = NS + "StructuralRule";
+    private static final String CANONICALIZATION_RULE = NS + "CanonicalizationRule";
+    private static final String BRIDGE_RULE = NS + "BridgeRule";
+    private static final String HEURISTIC_RULE = NS + "HeuristicRule";
 
     private static final String HAS_PATTERN = NS + "hasPattern";
     private static final String HAS_TRIPLE = NS + "hasTriple";
@@ -52,6 +57,7 @@ public final class OntologyHeadCompiler {
     private static final double META_TRANSITIVE_WEIGHT = 0.75;
     private static final double META_SYMMETRIC_WEIGHT = 0.65;
     private static final double META_INVERSE_WEIGHT = 0.7;
+    private static final double BRIDGE_WEIGHT_MULTIPLIER = 0.85;
 
     private OntologyHeadCompiler() {
     }
@@ -74,6 +80,7 @@ public final class OntologyHeadCompiler {
         OWLObjectProperty hasAction = factory.getOWLObjectProperty(IRI.create(HAS_ACTION));
         OWLObjectProperty hasScorePolicy = factory.getOWLObjectProperty(IRI.create(HAS_SCORE_POLICY));
         OWLObjectProperty hasExecutorParam = factory.getOWLObjectProperty(IRI.create(HAS_EXECUTOR_PARAM));
+        OWLObjectProperty ruleCategoryProp = factory.getOWLObjectProperty(IRI.create(RULE_CATEGORY));
         OWLObjectProperty subjectProp = factory.getOWLObjectProperty(IRI.create(SUBJECT));
         OWLObjectProperty predicateProp = factory.getOWLObjectProperty(IRI.create(PREDICATE));
         OWLObjectProperty objectProp = factory.getOWLObjectProperty(IRI.create(OBJECT));
@@ -93,9 +100,13 @@ public final class OntologyHeadCompiler {
         for (OWLNamedIndividual head : heads) {
             String name = dataPropertyValue(ontology, head, nameProp)
                     .orElse(head.getIRI().getShortForm());
+            RuleCategory category = ruleCategory(ontology, head, ruleCategoryProp).orElse(null);
             boolean enabled = dataPropertyValue(ontology, head, enabledProp)
                     .map(OntologyHeadCompiler::parseBoolean)
                     .orElse(true);
+            if (category == RuleCategory.HEURISTIC) {
+                enabled = false;
+            }
             if (!enabled) {
                 continue;
             }
@@ -168,6 +179,9 @@ public final class OntologyHeadCompiler {
                     .map(OntologyHeadCompiler::parseDouble)
                     .findFirst()
                     .orElse(0.7);
+            if (category == RuleCategory.BRIDGE) {
+                baseWeight = baseWeight * BRIDGE_WEIGHT_MULTIPLIER;
+            }
 
             OntologyHeadDefinition definition = new OntologyHeadDefinition(
                     name,
@@ -402,6 +416,34 @@ public final class OntologyHeadCompiler {
             return iri.substring(idx + 1);
         }
         return iri.replaceAll("[^a-zA-Z0-9]+", "_").toLowerCase(Locale.ROOT);
+    }
+
+    private static Optional<RuleCategory> ruleCategory(OWLOntology ontology,
+                                                       OWLNamedIndividual head,
+                                                       OWLObjectProperty ruleCategoryProp) {
+        for (OWLNamedIndividual value : objectPropertyValues(ontology, head, ruleCategoryProp)) {
+            String iri = value.getIRI().toString();
+            if (STRUCTURAL_RULE.equals(iri) || "StructuralRule".equals(value.getIRI().getShortForm())) {
+                return Optional.of(RuleCategory.STRUCTURAL);
+            }
+            if (CANONICALIZATION_RULE.equals(iri) || "CanonicalizationRule".equals(value.getIRI().getShortForm())) {
+                return Optional.of(RuleCategory.CANONICALIZATION);
+            }
+            if (BRIDGE_RULE.equals(iri) || "BridgeRule".equals(value.getIRI().getShortForm())) {
+                return Optional.of(RuleCategory.BRIDGE);
+            }
+            if (HEURISTIC_RULE.equals(iri) || "HeuristicRule".equals(value.getIRI().getShortForm())) {
+                return Optional.of(RuleCategory.HEURISTIC);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private enum RuleCategory {
+        STRUCTURAL,
+        CANONICALIZATION,
+        BRIDGE,
+        HEURISTIC
     }
 
     private static String signature(OntologyHeadDefinition definition) {
