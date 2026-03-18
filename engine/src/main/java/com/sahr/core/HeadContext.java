@@ -10,20 +10,21 @@ public final class HeadContext {
     private final OntologyService ontology;
     private final com.sahr.nlp.Statement statement;
     private final RuleAssertion rule;
+    private final RuleFrame ruleFrame;
     private final WorkingMemory workingMemory;
     private final com.sahr.nlp.InputFeatures inputFeatures;
     private final SemanticNodeNormalizer semanticNormalizer;
 
     public HeadContext(QueryGoal query, KnowledgeBase graph, OntologyService ontology) {
-        this(query, graph, ontology, null, null, new WorkingMemory(), null, null);
+        this(query, graph, ontology, null, null, null, new WorkingMemory(), null, null);
     }
 
     public HeadContext(QueryGoal query, KnowledgeBase graph, OntologyService ontology, WorkingMemory workingMemory) {
-        this(query, graph, ontology, null, null, workingMemory, null, null);
+        this(query, graph, ontology, null, null, null, workingMemory, null, null);
     }
 
     public HeadContext(QueryGoal query, KnowledgeBase graph, OntologyService ontology, com.sahr.nlp.Statement statement) {
-        this(query, graph, ontology, statement, null, new WorkingMemory(), null, null);
+        this(query, graph, ontology, statement, null, null, new WorkingMemory(), null, null);
     }
 
     public HeadContext(QueryGoal query,
@@ -32,7 +33,7 @@ public final class HeadContext {
                        com.sahr.nlp.Statement statement,
                        RuleAssertion rule,
                        WorkingMemory workingMemory) {
-        this(query, graph, ontology, statement, rule, workingMemory, null, null);
+        this(query, graph, ontology, statement, rule, null, workingMemory, null, null);
     }
 
     public HeadContext(QueryGoal query,
@@ -40,6 +41,7 @@ public final class HeadContext {
                        OntologyService ontology,
                        com.sahr.nlp.Statement statement,
                        RuleAssertion rule,
+                       RuleFrame ruleFrame,
                        WorkingMemory workingMemory,
                        com.sahr.nlp.InputFeatures inputFeatures,
                        SemanticNodeNormalizer semanticNormalizer) {
@@ -48,6 +50,7 @@ public final class HeadContext {
         this.ontology = Objects.requireNonNull(ontology, "ontology");
         this.statement = statement;
         this.rule = rule;
+        this.ruleFrame = ruleFrame;
         this.workingMemory = workingMemory == null ? new WorkingMemory() : workingMemory;
         this.inputFeatures = inputFeatures;
         this.semanticNormalizer = semanticNormalizer;
@@ -71,6 +74,10 @@ public final class HeadContext {
 
     public java.util.Optional<RuleAssertion> rule() {
         return java.util.Optional.ofNullable(rule);
+    }
+
+    public java.util.Optional<RuleFrame> ruleFrame() {
+        return java.util.Optional.ofNullable(ruleFrame);
     }
 
     public WorkingMemory workingMemory() {

@@ -428,7 +428,8 @@ public final class OntologyDefinedHead extends BaseHead {
         @Override
         public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
             int maxDepth = parseInt(definition.executorParam("maxLocationDepth"), 6);
-            return new GraphRetrievalHead(maxDepth).evaluate(context);
+            boolean allowColocation = parseBoolean(definition.executorParam("enableColocation"), false);
+            return new GraphRetrievalHead(maxDepth, allowColocation).evaluate(context);
         }
     }
 
@@ -442,7 +443,8 @@ public final class OntologyDefinedHead extends BaseHead {
 
         @Override
         public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
-            return delegate.evaluate(context);
+            boolean allowColocation = parseBoolean(definition.executorParam("enableColocation"), false);
+            return new SubgoalExpansionHead(allowColocation).evaluate(context);
         }
     }
 
@@ -468,23 +470,39 @@ public final class OntologyDefinedHead extends BaseHead {
 
         @Override
         public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
-            return context.rule()
-                    .map(rule -> {
-                        Map<String, Double> breakdown = new HashMap<>();
-                        breakdown.put("rule_confidence", rule.confidence());
-                        addPolicyBreakdown(breakdown, context, rule.consequent().predicate());
-                        double score = Math.min(1.0, rule.confidence());
-                        return List.of(new ReasoningCandidate(
-                                CandidateType.ASSERTION,
-                                rule,
-                                score,
-                                definition.name(),
-                                List.of(rule.toString()),
-                                breakdown,
-                                0
-                        ));
-                    })
-                    .orElseGet(List::of);
+            java.util.Optional<com.sahr.core.RuleAssertion> rule = context.rule();
+            if (rule.isPresent()) {
+                Map<String, Double> breakdown = new HashMap<>();
+                breakdown.put("rule_confidence", rule.get().confidence());
+                addPolicyBreakdown(breakdown, context, rule.get().consequent().predicate());
+                double score = Math.min(1.0, rule.get().confidence());
+                return List.of(new ReasoningCandidate(
+                        CandidateType.ASSERTION,
+                        rule.get(),
+                        score,
+                        definition.name(),
+                        List.of(rule.get().toString()),
+                        breakdown,
+                        0
+                ));
+            }
+            java.util.Optional<com.sahr.core.RuleFrame> ruleFrame = context.ruleFrame();
+            if (ruleFrame.isPresent()) {
+                Map<String, Double> breakdown = new HashMap<>();
+                breakdown.put("rule_confidence", ruleFrame.get().confidence());
+                addPolicyBreakdown(breakdown, context, ruleFrame.get().consequent().predicate());
+                double score = Math.min(1.0, ruleFrame.get().confidence());
+                return List.of(new ReasoningCandidate(
+                        CandidateType.ASSERTION,
+                        ruleFrame.get(),
+                        score,
+                        definition.name(),
+                        List.of(ruleFrame.get().toString()),
+                        breakdown,
+                        0
+                ));
+            }
+            return List.of();
         }
     }
 
@@ -497,10 +515,8 @@ public final class OntologyDefinedHead extends BaseHead {
         @Override
         public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
             KnowledgeBase graph = context.graph();
-            if (graph.getAllRules().isEmpty() || graph.getAllAssertions().isEmpty()) {
-                return List.of();
-            }
             List<ReasoningCandidate> candidates = new ArrayList<>();
+            if (!graph.getAllRules().isEmpty() && !graph.getAllAssertions().isEmpty()) {
             for (com.sahr.core.RuleAssertion rule : graph.getAllRules()) {
                 RelationAssertion antecedent = rule.antecedent();
                 boolean matched = graph.findByPredicate(antecedent.predicate()).stream()
@@ -531,7 +547,281 @@ public final class OntologyDefinedHead extends BaseHead {
                         1
                 ));
             }
+            }
+            candidates.addAll(expandRuleFrames(graph, context, definition));
             return candidates;
+        }
+
+        private List<ReasoningCandidate> expandRuleFrames(KnowledgeBase graph,
+                                                         HeadContext context,
+                                                         OntologyHeadDefinition definition) {
+            if (graph.getAllRuleFrames().isEmpty() || graph.getAllAssertions().isEmpty()) {
+                return List.of();
+            }
+            List<ReasoningCandidate> candidates = new ArrayList<>();
+            for (com.sahr.core.RuleFrame rule : graph.getAllRuleFrames()) {
+                List<SymbolId> bindings = findBindings(rule, graph);
+                for (SymbolId binding : bindings) {
+                    RelationAssertion consequent = instantiateConsequent(rule.consequent(), binding);
+                    if (consequent == null) {
+                        continue;
+                    }
+                    boolean alreadyPresent = graph.findByPredicate(consequent.predicate()).stream()
+                            .anyMatch(assertion -> assertion.subject().equals(consequent.subject())
+                                    && assertion.object().equals(consequent.object()));
+                    if (alreadyPresent) {
+                        continue;
+                    }
+                    Map<String, Double> breakdown = new HashMap<>();
+                    breakdown.put("rule_confidence", rule.confidence());
+                    addPolicyBreakdown(breakdown, context, consequent.predicate());
+                    double evidenceConfidence = averageAntecedentConfidence(rule, binding, graph);
+                    breakdown.put("evidence_confidence", evidenceConfidence);
+                    double score = Math.min(1.0, (rule.confidence() + evidenceConfidence) / 2.0);
+                    List<String> evidence = new ArrayList<>();
+                    evidence.add("binding " + rule.variable() + "=" + binding);
+                    evidence.addAll(matchedAntecedentEvidence(rule, binding, graph));
+                    evidence.add(rule.toString());
+                    candidates.add(new ReasoningCandidate(
+                            CandidateType.ASSERTION,
+                            new RelationAssertion(consequent.subject(), consequent.predicate(), consequent.object(), score),
+                            score,
+                            definition.name(),
+                            evidence,
+                            breakdown,
+                            2
+                    ));
+                }
+            }
+            return candidates;
+        }
+
+        private List<SymbolId> findBindings(com.sahr.core.RuleFrame rule, KnowledgeBase graph) {
+            List<com.sahr.core.RuleAtom> antecedents = rule.antecedents();
+            if (antecedents.isEmpty()) {
+                return List.of();
+            }
+            List<SymbolId> bindings = new ArrayList<>();
+            com.sahr.core.RuleAtom seed = antecedents.get(0);
+            if ("rdf:type".equals(seed.predicate())) {
+                for (com.sahr.core.EntityNode entity : graph.getAllEntities()) {
+                    if (!matchesType(seed, entity)) {
+                        continue;
+                    }
+                    SymbolId binding = entity.id();
+                    if (allAntecedentsMatch(antecedents, graph, binding)) {
+                        bindings.add(binding);
+                    }
+                }
+            } else {
+                for (RelationAssertion assertion : matchingAssertions(seed.predicate(), graph)) {
+                    SymbolId binding = matchBinding(seed, assertion, null);
+                    if (binding == null) {
+                        continue;
+                    }
+                    if (allAntecedentsMatch(antecedents, graph, binding)) {
+                        bindings.add(binding);
+                    }
+                }
+            }
+            return bindings;
+        }
+
+        private boolean allAntecedentsMatch(List<com.sahr.core.RuleAtom> antecedents,
+                                            KnowledgeBase graph,
+                                            SymbolId binding) {
+            for (com.sahr.core.RuleAtom atom : antecedents) {
+                boolean matched;
+                if ("rdf:type".equals(atom.predicate())) {
+                    matched = graph.findEntity(binding)
+                            .map(entity -> matchesType(atom, entity))
+                            .orElse(false);
+                } else {
+                    matched = matchingAssertions(atom.predicate(), graph).stream()
+                            .anyMatch(assertion -> matchBinding(atom, assertion, binding) != null);
+                }
+                if (!matched) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private SymbolId matchBinding(com.sahr.core.RuleAtom atom,
+                                      RelationAssertion assertion,
+                                      SymbolId binding) {
+            if (!atom.predicate().equals(assertion.predicate())) {
+                return null;
+            }
+            SymbolId nextBinding = binding;
+            nextBinding = matchTerm(atom.subject(), assertion.subject(), nextBinding);
+            if (nextBinding == null) {
+                return null;
+            }
+            nextBinding = matchTerm(atom.object(), assertion.object(), nextBinding);
+            return nextBinding;
+        }
+
+        private SymbolId matchTerm(com.sahr.core.RuleTerm term, SymbolId value, SymbolId binding) {
+            if (term.isVariable()) {
+                if (binding == null) {
+                    return value;
+                }
+                return binding.equals(value) ? binding : null;
+            }
+            if (value == null) {
+                return null;
+            }
+            return term.value().equals(value.value()) ? binding : null;
+        }
+
+        private RelationAssertion instantiateConsequent(com.sahr.core.RuleAtom consequent, SymbolId binding) {
+            SymbolId subject = resolveTerm(consequent.subject(), binding);
+            SymbolId object = resolveTerm(consequent.object(), binding);
+            if (subject == null || object == null) {
+                return null;
+            }
+            return new RelationAssertion(subject, consequent.predicate(), object, 1.0);
+        }
+
+        private SymbolId resolveTerm(com.sahr.core.RuleTerm term, SymbolId binding) {
+            if (term.isVariable()) {
+                return binding;
+            }
+            if (term.value() == null || term.value().isBlank()) {
+                return null;
+            }
+            return new SymbolId(term.value());
+        }
+
+        private double averageAntecedentConfidence(com.sahr.core.RuleFrame rule,
+                                                   SymbolId binding,
+                                                   KnowledgeBase graph) {
+            double total = 0.0;
+            int count = 0;
+            for (com.sahr.core.RuleAtom atom : rule.antecedents()) {
+                if ("rdf:type".equals(atom.predicate())) {
+                    if (graph.findEntity(binding).map(entity -> matchesType(atom, entity)).orElse(false)) {
+                        total += 0.9;
+                        count++;
+                    }
+                    continue;
+                }
+                for (RelationAssertion assertion : matchingAssertions(atom.predicate(), graph)) {
+                    if (matchBinding(atom, assertion, binding) != null) {
+                        total += assertion.confidence();
+                        count++;
+                        break;
+                    }
+                }
+            }
+            if (count == 0) {
+                return rule.confidence();
+            }
+            return total / count;
+        }
+
+        private List<String> matchedAntecedentEvidence(com.sahr.core.RuleFrame rule,
+                                                       SymbolId binding,
+                                                       KnowledgeBase graph) {
+            List<String> evidence = new ArrayList<>();
+            for (com.sahr.core.RuleAtom atom : rule.antecedents()) {
+                if ("rdf:type".equals(atom.predicate())) {
+                    graph.findEntity(binding).ifPresent(entity -> {
+                        if (matchesType(atom, entity)) {
+                            evidence.add(entity.id() + " rdf:type " + atom.object().value());
+                        }
+                    });
+                    continue;
+                }
+                for (RelationAssertion assertion : matchingAssertions(atom.predicate(), graph)) {
+                    if (matchBinding(atom, assertion, binding) != null) {
+                        evidence.add(assertion.toString());
+                        break;
+                    }
+                }
+            }
+            return evidence;
+        }
+
+        private boolean matchesType(com.sahr.core.RuleAtom atom, com.sahr.core.EntityNode entity) {
+            if (entity == null) {
+                return false;
+            }
+            if (!"rdf:type".equals(atom.predicate())) {
+                return false;
+            }
+            String expected = normalizeTypeValue(atom.object());
+            if (expected == null || expected.isBlank()) {
+                return false;
+            }
+            return entity.conceptTypes().stream()
+                    .map(this::normalizeTypeToken)
+                    .anyMatch(type -> type.equalsIgnoreCase(expected));
+        }
+
+        private String normalizeTypeValue(com.sahr.core.RuleTerm term) {
+            if (term == null || term.isVariable()) {
+                return null;
+            }
+            String value = term.value();
+            if (value == null) {
+                return null;
+            }
+            return normalizeTypeToken(value);
+        }
+
+        private String normalizeTypeToken(String value) {
+            if (value == null) {
+                return null;
+            }
+            if (value.startsWith("concept:")) {
+                return value.substring("concept:".length());
+            }
+            if (value.startsWith("entity:")) {
+                return value.substring("entity:".length());
+            }
+            int hashIdx = value.lastIndexOf('#');
+            int slashIdx = value.lastIndexOf('/');
+            int sepIdx = Math.max(hashIdx, slashIdx);
+            if (sepIdx >= 0 && sepIdx + 1 < value.length()) {
+                return value.substring(sepIdx + 1);
+            }
+            return value;
+        }
+
+        private List<RelationAssertion> matchingAssertions(String predicate, KnowledgeBase graph) {
+            if (predicate == null || graph == null) {
+                return List.of();
+            }
+            List<RelationAssertion> direct = graph.findByPredicate(predicate);
+            if (!direct.isEmpty()) {
+                return direct;
+            }
+            String normalized = normalizePredicateToken(predicate);
+            if (normalized == null) {
+                return List.of();
+            }
+            List<RelationAssertion> matches = new ArrayList<>();
+            for (RelationAssertion assertion : graph.getAllAssertions()) {
+                if (normalized.equals(normalizePredicateToken(assertion.predicate()))) {
+                    matches.add(assertion);
+                }
+            }
+            return matches;
+        }
+
+        private String normalizePredicateToken(String predicate) {
+            if (predicate == null) {
+                return null;
+            }
+            int hashIdx = predicate.lastIndexOf('#');
+            int slashIdx = predicate.lastIndexOf('/');
+            int sepIdx = Math.max(hashIdx, slashIdx);
+            if (sepIdx >= 0 && sepIdx + 1 < predicate.length()) {
+                return predicate.substring(sepIdx + 1);
+            }
+            return predicate;
         }
     }
 
@@ -1633,5 +1923,12 @@ public final class OntologyDefinedHead extends BaseHead {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    private static boolean parseBoolean(String raw, boolean fallback) {
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        return Boolean.parseBoolean(raw.trim());
     }
 }

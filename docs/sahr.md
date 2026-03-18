@@ -646,6 +646,26 @@ ad hoc heuristic rules from silently acting as hard entailments:
 `StructuralRule` and `CanonicalizationRule` stay enabled by default,
 `BridgeRule` heads remain enabled but run at lower confidence, and
 `HeuristicRule` heads are disabled by default until explicitly promoted.
+Graph retrieval and subgoal expansion now keep co-location cues off by
+default, so `with`/`near` relations no longer imply `in` unless a
+heuristic rule family is explicitly re-enabled.
+COUNT queries now render empty result sets as `0`, while WHERE queries
+still return "No candidates produced." to preserve the existential
+retrieval semantics.
+A minimal quantified-rule frame is now available for universal rules
+with a single variable, two antecedents, and one consequent. The new
+`RuleFrame` stores rule atoms with explicit variable binding, and a
+targeted `QuantifiedRuleParser` normalizes sentences like “all hats in
+the house are green” into `rdf:type` + `locatedIn` antecedents and a
+`hasAttribute` consequent. Rule forward chaining now applies these
+frames by matching entity types (not just explicit `rdf:type`
+assertions), emits binding evidence in trace data, and drives the first
+end-to-end scenario for inferred attributes.
+Statement ingestion now triggers the propagation closure so newly added
+facts immediately fire rule-forward-chain assertions.
+Yes/no attribute questions (e.g., "Is the hat green") now normalize to
+`hasAttribute` with the attribute bound as a concept, including a
+fallback path that treats copular adjective forms as property queries.
 `QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to

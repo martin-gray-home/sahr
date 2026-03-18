@@ -22,6 +22,16 @@ import java.util.Set;
 
 public final class SubgoalExpansionHead extends BaseHead {
     private static final String EXPECTED_RANGE_LOCATION = "concept:location";
+    private static final boolean DEFAULT_ALLOW_COLOCATION = false;
+    private final boolean allowColocation;
+
+    public SubgoalExpansionHead() {
+        this(DEFAULT_ALLOW_COLOCATION);
+    }
+
+    public SubgoalExpansionHead(boolean allowColocation) {
+        this.allowColocation = allowColocation;
+    }
 
     @Override
     public String getName() {
@@ -30,7 +40,7 @@ public final class SubgoalExpansionHead extends BaseHead {
 
     @Override
     protected String describe(HeadContext context) {
-        return "Proposes WHERE subgoals by following co-location relations.";
+        return "Proposes WHERE subgoals by following location-like relations.";
     }
 
     @Override
@@ -46,6 +56,9 @@ public final class SubgoalExpansionHead extends BaseHead {
 
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
+        if (!allowColocation) {
+            return List.of();
+        }
         Set<String> coLocationPredicates = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION);
         if (coLocationPredicates.isEmpty()) {
             return List.of();

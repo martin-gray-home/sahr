@@ -27,7 +27,7 @@ class SubgoalExpansionHeadTest {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
         OntologyService ontology = new PolicyStubOntology(baseOntology);
-        SubgoalExpansionHead head = new SubgoalExpansionHead();
+        SubgoalExpansionHead head = new SubgoalExpansionHead(true);
 
         SymbolId man = new SymbolId("entity:man");
         SymbolId woman = new SymbolId("entity:woman");

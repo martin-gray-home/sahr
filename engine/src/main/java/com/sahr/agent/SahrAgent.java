@@ -76,6 +76,7 @@ public final class SahrAgent {
     private final SimpleQueryParser parser;
     private final StatementParser statementParser;
     private final RuleParser ruleParser;
+    private final com.sahr.nlp.QuantifiedRuleParser quantifiedRuleParser;
     private final TermMapper termMapper;
     private final PredicateResolver predicateResolver;
     private final SemanticNodeNormalizer semanticNormalizer;
@@ -129,6 +130,7 @@ public final class SahrAgent {
         this.parser = parser;
         this.statementParser = statementParser;
         this.ruleParser = new RuleParser(statementParser);
+        this.quantifiedRuleParser = new com.sahr.nlp.QuantifiedRuleParser();
         this.termMapper = termMapper;
         this.predicateResolver = new PredicateResolver(Map.of());
         this.semanticNormalizer = new SemanticNodeNormalizer(termMapper);
@@ -317,16 +319,24 @@ public final class SahrAgent {
         QueryGoal query = selectQueryCandidate(normalizedInput);
         long parseEnd = timing ? System.nanoTime() : 0L;
         long ruleStart = timing ? System.nanoTime() : 0L;
-        Optional<RuleStatement> ruleStatement = (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
+        Optional<com.sahr.core.RuleFrame> quantifiedRule = (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
+                ? quantifiedRuleParser.parse(normalizedInput).map(this::mapRuleFrame)
+                : Optional.empty();
+        Optional<RuleStatement> ruleStatement = quantifiedRule.isPresent()
+                ? Optional.empty()
+                : (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
                 ? ruleParser.parse(normalizedInput).map(this::mapRuleStatement)
                 : Optional.empty();
         long ruleEnd = timing ? System.nanoTime() : 0L;
         if (ruleStatement.isPresent()) {
             questionLike = false;
         }
+        if (quantifiedRule.isPresent()) {
+            questionLike = false;
+        }
         Optional<RuleAssertion> rule = ruleStatement.map(this::toRuleAssertion);
         long statementStart = timing ? System.nanoTime() : 0L;
-        Optional<Statement> statement = (questionLike || rule.isPresent())
+        Optional<Statement> statement = (questionLike || rule.isPresent() || quantifiedRule.isPresent())
                 ? Optional.empty()
                 : statementParser.parse(normalizedInput).map(this::mapStatement);
         long statementEnd = timing ? System.nanoTime() : 0L;
@@ -341,6 +351,7 @@ public final class SahrAgent {
         try {
             if (!isQuestion(query)) {
                 HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), rule.orElse(null),
+                        quantifiedRule.orElse(null),
                         workingMemory, features, semanticNormalizer);
                 long answerStart = timing ? System.nanoTime() : 0L;
                 String result = handleSingle(context, query, questionLike, features);
@@ -795,7 +806,7 @@ public final class SahrAgent {
         if (query == null) {
             return List.of();
         }
-        HeadContext context = new HeadContext(query, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
+        HeadContext context = new HeadContext(query, graph, ontology, null, null, null, workingMemory, null, semanticNormalizer);
         return reasoner.heads().stream()
                 .map(head -> head.explain(context))
                 .toList();
@@ -815,6 +826,9 @@ public final class SahrAgent {
         String subject = mapEntity(query.subject());
         String object = mapEntity(query.object());
         String predicate = predicateResolver.resolvePredicate(query.predicate(), termMapper, ontology, this::lemmatizePredicate);
+        if (isAttributePredicate(predicate) && object != null && object.startsWith("entity:")) {
+            object = "concept:" + stripPrefix(object);
+        }
         String discourse = query.discourseModifier();
 
         QueryGoal mapped = new QueryGoal(
@@ -901,6 +915,27 @@ public final class SahrAgent {
             return false;
         }
         return value.startsWith("http://") || value.startsWith("https://");
+    }
+
+    private boolean isAttributePredicate(String predicate) {
+        if (predicate == null || predicate.isBlank()) {
+            return false;
+        }
+        String local = localPredicateName(predicate);
+        return "hasattribute".equalsIgnoreCase(local);
+    }
+
+    private String localPredicateName(String predicate) {
+        if (predicate == null) {
+            return "";
+        }
+        int hashIdx = predicate.lastIndexOf('#');
+        int slashIdx = predicate.lastIndexOf('/');
+        int sepIdx = Math.max(hashIdx, slashIdx);
+        if (sepIdx >= 0 && sepIdx + 1 < predicate.length()) {
+            return predicate.substring(sepIdx + 1);
+        }
+        return predicate;
     }
 
     private java.util.List<ReasoningCandidate> preferPersonLikeAnswers(java.util.List<ReasoningCandidate> answers,
@@ -1531,6 +1566,13 @@ public final class SahrAgent {
             logIngested("rule", rule.toString(), null, null, null);
             return added ? ApplyResult.added("Rule recorded.") : ApplyResult.existing("Rule already known.");
         }
+        if (payload instanceof com.sahr.core.RuleFrame) {
+            com.sahr.core.RuleFrame rule = (com.sahr.core.RuleFrame) payload;
+            boolean added = addRuleFrameIfNew(rule);
+            logger.fine(() -> "Applied rule frame payload: " + rule);
+            logIngested("rule_frame", rule.toString(), null, null, null);
+            return added ? ApplyResult.added("Rule recorded.") : ApplyResult.existing("Rule already known.");
+        }
         if (payload instanceof RelationAssertion) {
             RelationAssertion assertion = (RelationAssertion) payload;
             AssertionRecord record = buildAssertionRecord(
@@ -1636,6 +1678,9 @@ public final class SahrAgent {
         }
         int recordCount = records.size();
         logger.fine(() -> "Applied statement batch assertions: " + recordCount);
+        if (addedAny) {
+            runPropagationClosure();
+        }
         return addedAny ? ApplyResult.added("Assertion recorded.") : ApplyResult.existing("Assertion already known.");
     }
 
@@ -1776,12 +1821,26 @@ public final class SahrAgent {
         return query.type() == QueryGoal.Type.YESNO;
     }
 
+    private boolean isCount(QueryGoal query) {
+        return query.type() == QueryGoal.Type.COUNT;
+    }
+
+    private String noCandidatesAnswer(QueryGoal query) {
+        if (isYesNo(query)) {
+            return "Unknown.";
+        }
+        if (isCount(query)) {
+            return "0";
+        }
+        return "No candidates produced.";
+    }
+
     private String resolveQuestionAfterAssertion(QueryGoal query, int maxIterations) {
         for (int i = 0; i < maxIterations; i++) {
-            HeadContext followUpContext = new HeadContext(query, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
+            HeadContext followUpContext = new HeadContext(query, graph, ontology, null, null, null, workingMemory, null, semanticNormalizer);
             List<ReasoningCandidate> followUp = withReadPhase(() -> reasoner.reason(followUpContext));
             if (followUp.isEmpty()) {
-                return isYesNo(query) ? "Unknown." : "No candidates produced.";
+                return noCandidatesAnswer(query);
             }
             ReasoningCandidate winner = followUp.get(0);
             trace.addEntry(new ReasoningTraceEntry(query, followUp, winner));
@@ -1817,15 +1876,12 @@ public final class SahrAgent {
         if (question) {
             List<ReasoningCandidate> questionCandidates = filterQueryResolutionCandidates(candidates);
             if (questionCandidates.isEmpty()) {
-                return isYesNo(query) ? "Unknown." : "No candidates produced.";
+                return noCandidatesAnswer(query);
             }
             candidates = questionCandidates;
         }
         if (candidates.isEmpty()) {
-            if (isYesNo(query)) {
-                return "Unknown.";
-            }
-            return "No candidates produced.";
+            return noCandidatesAnswer(query);
         }
         ReasoningCandidate winner = selectStatementCandidate(context, query, candidates)
                 .orElse(candidates.get(0));
@@ -1905,6 +1961,7 @@ public final class SahrAgent {
                     ontology,
                     current.goalId().equals(root.goalId()) ? statement : null,
                     current.goalId().equals(root.goalId()) ? rule : null,
+                    null,
                     workingMemory,
                     features,
                     semanticNormalizer
@@ -1947,7 +2004,7 @@ public final class SahrAgent {
                         if (fallback != null) {
                             return fallback;
                         }
-                        return isYesNo(root) ? "Unknown." : "No candidates produced.";
+                        return noCandidatesAnswer(root);
                     }
                     continue;
                 }
@@ -1972,7 +2029,7 @@ public final class SahrAgent {
                             System.nanoTime() - iterationStart);
                 }
                 if (current.goalId().equals(root.goalId())) {
-                    return isYesNo(root) ? "Unknown." : "No candidates produced.";
+                    return noCandidatesAnswer(root);
                 }
                 continue;
             }
@@ -2355,7 +2412,7 @@ public final class SahrAgent {
         if (answerComposer.isRelationshipQuestion(goal)) {
             return "No candidates produced.";
         }
-        HeadContext context = new HeadContext(goal, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
+        HeadContext context = new HeadContext(goal, graph, ontology, null, null, null, workingMemory, null, semanticNormalizer);
         long headStart = planTiming ? System.nanoTime() : 0L;
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         if (planTiming) {
@@ -2448,7 +2505,7 @@ public final class SahrAgent {
             if (whereFallback != null) {
                 return whereFallback;
             }
-            return isYesNo(goal) ? "Unknown." : "No candidates produced.";
+            return noCandidatesAnswer(goal);
         }
         long selectStart = planTiming ? System.nanoTime() : 0L;
         ReasoningCandidate winner = answerRanker.selectBestAnswerCandidate(answers);
@@ -2970,6 +3027,25 @@ public final class SahrAgent {
         return new RuleAssertion(antecedent, consequent, confidence);
     }
 
+    private com.sahr.core.RuleFrame mapRuleFrame(com.sahr.core.RuleFrame rule) {
+        if (rule == null) {
+            return null;
+        }
+        java.util.List<com.sahr.core.RuleAtom> antecedents = rule.antecedents().stream()
+                .map(this::mapRuleAtom)
+                .toList();
+        com.sahr.core.RuleAtom consequent = mapRuleAtom(rule.consequent());
+        return new com.sahr.core.RuleFrame(rule.variable(), antecedents, consequent, rule.confidence());
+    }
+
+    private com.sahr.core.RuleAtom mapRuleAtom(com.sahr.core.RuleAtom atom) {
+        if (atom == null) {
+            return null;
+        }
+        String predicate = predicateResolver.resolvePredicate(atom.predicate(), termMapper, ontology, this::lemmatizePredicate);
+        return new com.sahr.core.RuleAtom(atom.subject(), predicate, atom.object());
+    }
+
     private RelationAssertion statementToAssertion(Statement statement) {
         return new RelationAssertion(statement.subject(), statement.predicate(), statement.object(), statement.confidence());
     }
@@ -2984,6 +3060,19 @@ public final class SahrAgent {
             }
         }
         graph.addRule(rule);
+        return true;
+    }
+
+    private boolean addRuleFrameIfNew(com.sahr.core.RuleFrame rule) {
+        if (rule == null) {
+            return false;
+        }
+        for (com.sahr.core.RuleFrame existing : graph.getAllRuleFrames()) {
+            if (existing.equals(rule)) {
+                return false;
+            }
+        }
+        graph.addRuleFrame(rule);
         return true;
     }
 
@@ -3210,7 +3299,7 @@ public final class SahrAgent {
     }
 
     private void runPropagationClosure() {
-        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, workingMemory, null, semanticNormalizer);
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, null, workingMemory, null, semanticNormalizer);
         int totalAdded = 0;
 
         for (int i = 0; i < MAX_PROPAGATION_ITERATIONS; i++) {
@@ -3257,7 +3346,7 @@ public final class SahrAgent {
         if (features == null) {
             return new IntentDecision(IntentType.UNKNOWN, 0.0, List.of());
         }
-        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, workingMemory, features, semanticNormalizer);
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, ontology, null, null, null, workingMemory, features, semanticNormalizer);
         List<ReasoningCandidate> candidates = withReadPhase(() -> reasoner.reason(context));
         IntentDecision winner = null;
         double bestScore = -1.0;

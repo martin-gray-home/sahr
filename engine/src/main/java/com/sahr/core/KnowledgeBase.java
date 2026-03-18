@@ -12,6 +12,8 @@ public interface KnowledgeBase {
 
     void addRule(RuleAssertion rule);
 
+    void addRuleFrame(RuleFrame rule);
+
     List<RelationAssertion> findBySubject(SymbolId subject);
 
     List<RelationAssertion> findByPredicate(String predicate);
@@ -25,6 +27,8 @@ public interface KnowledgeBase {
     List<AssertionRecord> findAssertionRecords(AssertionFilter filter);
 
     List<RuleAssertion> getAllRules();
+
+    List<RuleFrame> getAllRuleFrames();
 
     Optional<EntityNode> findEntity(SymbolId id);
 

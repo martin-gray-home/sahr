@@ -496,6 +496,10 @@ public final class SimpleQueryParser {
         if (preposition.isPresent()) {
             return preposition;
         }
+        Optional<QueryGoal> attributeFallback = parseYesNoAttributeFallback(tokens);
+        if (attributeFallback.isPresent()) {
+            return attributeFallback;
+        }
         Annotation doc = new Annotation(input);
         CoreNlpPipeline.get().annotate(doc);
         for (CoreMap sentence : doc.get(CoreAnnotations.SentencesAnnotation.class)) {
@@ -511,6 +515,9 @@ public final class SimpleQueryParser {
                 CoreLabel subject = edge.getDependent().backingLabel();
                 CoreLabel verb = edge.getGovernor().backingLabel();
                 CoreLabel object = findDependent(graph, edge.getGovernor(), "obj");
+                if (object == null) {
+                    object = findDependent(graph, edge.getGovernor(), "acomp");
+                }
                 String subjectToken = normalizeCompoundToken(graph, subject);
                 if (subjectToken.isEmpty()) {
                     continue;
@@ -528,10 +535,37 @@ public final class SimpleQueryParser {
                     }
                     objectText = withDeterminer(graph, object);
                 }
+                if ("be".equals(predicate) && objectToken != null
+                        && AttributeTermLexicon.isPropertyTerm(objectToken)) {
+                    return Optional.of(QueryGoal.yesNo(subjectToken, "hasAttribute", objectToken, null,
+                            subjectText, objectText, predicateText));
+                }
                 return Optional.of(QueryGoal.yesNo(subjectToken, predicate, objectToken, null, subjectText, objectText, predicateText));
             }
         }
         return Optional.empty();
+    }
+
+    private Optional<QueryGoal> parseYesNoAttributeFallback(List<String> tokens) {
+        if (tokens.size() < 3) {
+            return Optional.empty();
+        }
+        String attribute = tokens.get(tokens.size() - 1);
+        if (!AttributeTermLexicon.isPropertyTerm(attribute)) {
+            return Optional.empty();
+        }
+        List<String> subjectTokens = new java.util.ArrayList<>(tokens.subList(1, tokens.size() - 1));
+        subjectTokens.removeIf(token -> "the".equals(token) || "a".equals(token) || "an".equals(token));
+        if (subjectTokens.isEmpty()) {
+            return Optional.empty();
+        }
+        String subjectRaw = String.join(" ", subjectTokens);
+        String subject = normalizeToken(subjectRaw);
+        if (subject.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(QueryGoal.yesNo(subject, "hasAttribute", attribute, null,
+                subjectRaw, attribute, "is " + attribute));
     }
 
     private Optional<QueryGoal> parseWhObjectQuery(SemanticGraph graph) {

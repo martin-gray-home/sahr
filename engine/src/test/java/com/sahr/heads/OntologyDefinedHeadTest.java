@@ -9,6 +9,10 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.SymbolId;
 import com.sahr.core.RuleAssertion;
+import com.sahr.core.EntityNode;
+import com.sahr.core.RuleAtom;
+import com.sahr.core.RuleFrame;
+import com.sahr.core.RuleTerm;
 import com.sahr.ontology.OntologyHeadCompiler;
 import com.sahr.ontology.InMemoryOntologyService;
 import com.sahr.semantic.model.InferencePolicy;
@@ -146,6 +150,48 @@ class OntologyDefinedHeadTest {
                 candidate.payload() instanceof RelationAssertion
                         && ((RelationAssertion) candidate.payload()).predicate().equals("stop")
                         && ((RelationAssertion) candidate.payload()).subject().value().equals("entity:device")));
+    }
+
+    @Test
+    void appliesQuantifiedRuleFramesOverAssertions() throws Exception {
+        OWLOntology ontology = loadTestOntology();
+        List<OntologyHeadDefinition> definitions = OntologyHeadCompiler.compile(ontology);
+        OntologyDefinedHead head = new OntologyDefinedHead(definitions);
+
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addEntity(new EntityNode(new SymbolId("entity:hat"), "hat", Set.of("hat")));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:hat"),
+                "rdf:type",
+                new SymbolId("concept:hat"),
+                0.9
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:hat"),
+                "in",
+                new SymbolId("entity:house"),
+                0.9
+        ));
+
+        RuleFrame rule = new RuleFrame(
+                "x",
+                List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "rdf:type", RuleTerm.constant("concept:hat")),
+                        new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.constant("entity:house"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "hasAttribute", RuleTerm.constant("concept:green")),
+                0.85
+        );
+        graph.addRuleFrame(rule);
+
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, new InMemoryOntologyService());
+        List<ReasoningCandidate> candidates = head.evaluate(context);
+
+        assertTrue(candidates.stream().anyMatch(candidate ->
+                candidate.payload() instanceof RelationAssertion
+                        && ((RelationAssertion) candidate.payload()).predicate().equals("hasAttribute")
+                        && ((RelationAssertion) candidate.payload()).subject().value().equals("entity:hat")
+                        && ((RelationAssertion) candidate.payload()).object().value().equals("concept:green")));
     }
 
     private OWLOntology loadTestOntology() throws Exception {

@@ -38,6 +38,12 @@ public final class GuardedKnowledgeBase implements KnowledgeBase {
     }
 
     @Override
+    public void addRuleFrame(RuleFrame rule) {
+        phases.assertUpdatePhase("addRuleFrame");
+        delegate.addRuleFrame(rule);
+    }
+
+    @Override
     public List<RelationAssertion> findBySubject(SymbolId subject) {
         return delegate.findBySubject(subject);
     }
@@ -70,6 +76,11 @@ public final class GuardedKnowledgeBase implements KnowledgeBase {
     @Override
     public List<RuleAssertion> getAllRules() {
         return delegate.getAllRules();
+    }
+
+    @Override
+    public List<RuleFrame> getAllRuleFrames() {
+        return delegate.getAllRuleFrames();
     }
 
     @Override

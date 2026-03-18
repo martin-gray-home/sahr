@@ -24,14 +24,21 @@ import java.util.Map;
 
 public final class GraphRetrievalHead extends BaseHead {
     private static final int DEFAULT_MAX_LOCATION_DEPTH = 6;
+    private static final boolean DEFAULT_ALLOW_COLOCATION = false;
     private final int maxLocationDepth;
+    private final boolean allowColocation;
 
     public GraphRetrievalHead() {
-        this(DEFAULT_MAX_LOCATION_DEPTH);
+        this(DEFAULT_MAX_LOCATION_DEPTH, DEFAULT_ALLOW_COLOCATION);
     }
 
     public GraphRetrievalHead(int maxLocationDepth) {
+        this(maxLocationDepth, DEFAULT_ALLOW_COLOCATION);
+    }
+
+    public GraphRetrievalHead(int maxLocationDepth, boolean allowColocation) {
         this.maxLocationDepth = Math.max(1, maxLocationDepth);
+        this.allowColocation = allowColocation;
     }
 
     @Override
@@ -41,7 +48,7 @@ public final class GraphRetrievalHead extends BaseHead {
 
     @Override
     protected String describe(HeadContext context) {
-        return "Retrieves location answers, following short location chains and colocation cues.";
+        return "Retrieves location answers, following short location chains.";
     }
 
     @Override
@@ -81,7 +88,9 @@ public final class GraphRetrievalHead extends BaseHead {
         Map<SymbolId, List<RelationAssertion>> adjacency = buildAdjacency(graph, locationPredicates);
         java.util.Set<String> emitted = new java.util.HashSet<>();
         List<RelationAssertion> locationAssertions = collectLocationAssertions(graph, locationPredicates);
-        java.util.Set<String> expandedCoLocation = HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION);
+        java.util.Set<String> expandedCoLocation = allowColocation
+                ? HeadOntology.expandFamilyWithInverses(ontology, HeadOntology.COLOCATION)
+                : java.util.Set.of();
         int suppressedChain = 0;
         int suppressedColocation = 0;
 
@@ -210,81 +219,83 @@ public final class GraphRetrievalHead extends BaseHead {
                 breakdowns.add(breakdown);
         }
 
-        for (RelationAssertion relation : graph.getAllAssertions()) {
-            if (!expandedCoLocation.contains(relation.predicate())) {
-                continue;
-            }
-            for (RelationAssertion location : locationAssertions) {
-                SymbolId inferredSubject = null;
-                if (relation.subject().equals(location.subject())) {
-                    inferredSubject = relation.object();
-                } else if (relation.object().equals(location.subject())) {
-                    inferredSubject = relation.subject();
-                }
-                if (inferredSubject == null) {
+        if (allowColocation) {
+            for (RelationAssertion relation : graph.getAllAssertions()) {
+                if (!expandedCoLocation.contains(relation.predicate())) {
                     continue;
                 }
-                if (directSubjects.contains(inferredSubject)) {
-                    suppressedColocation++;
-                    continue;
-                }
-                if (!matchesType(graph, ontology, compatibility, inferredSubject,
-                        requestedType, canonicalRequestedType, requestedEntity)) {
-                    continue;
-                }
-                String key = inferredSubject.value() + "|colocated|" + location.object().value();
-                if (!emitted.add(key)) {
-                    continue;
-                }
+                for (RelationAssertion location : locationAssertions) {
+                    SymbolId inferredSubject = null;
+                    if (relation.subject().equals(location.subject())) {
+                        inferredSubject = relation.object();
+                    } else if (relation.object().equals(location.subject())) {
+                        inferredSubject = relation.subject();
+                    }
+                    if (inferredSubject == null) {
+                        continue;
+                    }
+                    if (directSubjects.contains(inferredSubject)) {
+                        suppressedColocation++;
+                        continue;
+                    }
+                    if (!matchesType(graph, ontology, compatibility, inferredSubject,
+                            requestedType, canonicalRequestedType, requestedEntity)) {
+                        continue;
+                    }
+                    String key = inferredSubject.value() + "|colocated|" + location.object().value();
+                    if (!emitted.add(key)) {
+                        continue;
+                    }
 
-                double queryMatch = 1.0;
-                double entityMatch = 1.0;
-                double ontologySupport = requestedType == null ? 0.5 : 1.0;
-                double graphConfidence = averageConfidence(relation.confidence(), location.confidence());
-                double memoryFocus = memory.isActiveEntity(inferredSubject) ? 1.0 : 0.6;
-                double colocationPenalty = 0.1;
-                double familyPreference = familyPreference(location.predicate(), surfacePredicates,
-                        containmentPredicates, locationPredicates);
-                double score = normalize(queryMatch, entityMatch, ontologySupport,
-                        Math.max(0.0, graphConfidence - colocationPenalty), memoryFocus, familyPreference);
+                    double queryMatch = 1.0;
+                    double entityMatch = 1.0;
+                    double ontologySupport = requestedType == null ? 0.5 : 1.0;
+                    double graphConfidence = averageConfidence(relation.confidence(), location.confidence());
+                    double memoryFocus = memory.isActiveEntity(inferredSubject) ? 1.0 : 0.6;
+                    double colocationPenalty = 0.1;
+                    double familyPreference = familyPreference(location.predicate(), surfacePredicates,
+                            containmentPredicates, locationPredicates);
+                    double score = normalize(queryMatch, entityMatch, ontologySupport,
+                            Math.max(0.0, graphConfidence - colocationPenalty), memoryFocus, familyPreference);
 
-                Map<String, Double> breakdown = new HashMap<>();
-                breakdown.put("query_match", queryMatch);
-                breakdown.put("entity_type_match", entityMatch);
-                breakdown.put("ontology_support", ontologySupport);
-                breakdown.put("graph_confidence", graphConfidence);
-                breakdown.put("colocation_penalty", colocationPenalty);
-                breakdown.put("working_memory_focus", memoryFocus);
-                breakdown.put("where_family_preference", familyPreference);
-                breakdown.put("where_path_colocation", 1.0);
-                breakdown.put("where_chain_length", 1.0);
-                annotateFamilyBreakdown(breakdown, location.predicate(), surfacePredicates,
-                        containmentPredicates, locationPredicates, expandedCoLocation);
-                annotatePolicyBreakdown(breakdown, ontology, location.predicate(), inversePolicyApplied);
+                    Map<String, Double> breakdown = new HashMap<>();
+                    breakdown.put("query_match", queryMatch);
+                    breakdown.put("entity_type_match", entityMatch);
+                    breakdown.put("ontology_support", ontologySupport);
+                    breakdown.put("graph_confidence", graphConfidence);
+                    breakdown.put("colocation_penalty", colocationPenalty);
+                    breakdown.put("working_memory_focus", memoryFocus);
+                    breakdown.put("where_family_preference", familyPreference);
+                    breakdown.put("where_path_colocation", 1.0);
+                    breakdown.put("where_chain_length", 1.0);
+                    annotateFamilyBreakdown(breakdown, location.predicate(), surfacePredicates,
+                            containmentPredicates, locationPredicates, expandedCoLocation);
+                    annotatePolicyBreakdown(breakdown, ontology, location.predicate(), inversePolicyApplied);
 
-                RelationAssertion inferred = new RelationAssertion(
-                        inferredSubject,
-                        location.predicate(),
-                        location.object(),
-                        Math.max(0.0, graphConfidence - colocationPenalty)
-                );
-                candidates.add(new ReasoningCandidate(
-                        CandidateType.ANSWER,
-                        new com.sahr.core.QueryResult(
-                                com.sahr.core.QueryOperator.RETRIEVE,
-                                List.of(),
-                                0L,
-                                true,
-                                List.of(relation.toString(), location.toString()),
-                                List.of(inferred)
-                        ),
-                        score,
-                        getName(),
-                        List.of(relation.toString(), location.toString()),
-                        breakdown,
-                        1
-                ));
-                breakdowns.add(breakdown);
+                    RelationAssertion inferred = new RelationAssertion(
+                            inferredSubject,
+                            location.predicate(),
+                            location.object(),
+                            Math.max(0.0, graphConfidence - colocationPenalty)
+                    );
+                    candidates.add(new ReasoningCandidate(
+                            CandidateType.ANSWER,
+                            new com.sahr.core.QueryResult(
+                                    com.sahr.core.QueryOperator.RETRIEVE,
+                                    List.of(),
+                                    0L,
+                                    true,
+                                    List.of(relation.toString(), location.toString()),
+                                    List.of(inferred)
+                            ),
+                            score,
+                            getName(),
+                            List.of(relation.toString(), location.toString()),
+                            breakdown,
+                            1
+                    ));
+                    breakdowns.add(breakdown);
+                }
             }
         }
 
