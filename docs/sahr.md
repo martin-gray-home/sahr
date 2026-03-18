@@ -638,6 +638,9 @@ WHERE-style heads (graph retrieval, alignment) now return structured
 facts (`RelationAssertion`) inside `QueryResult` instead of building
 surface strings; predicate display labels are resolved only at render
 time.
+WHERE selection now applies an explicit family preference that ranks
+containment and location predicates above surface-contact predicates to
+stabilize location answers when multiple true facts exist.
 Relation queries that target people now return raw entity identifiers
 (e.g., `entity:woman`) instead of English clauses to keep head behavior
 stable while the new query frame path is being adopted. When a relation

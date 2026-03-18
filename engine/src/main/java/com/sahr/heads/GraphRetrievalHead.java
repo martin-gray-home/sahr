@@ -101,9 +101,12 @@ public final class GraphRetrievalHead extends BaseHead {
             double queryMatch = 1.0;
             double entityMatch = 1.0;
             double ontologySupport = requestedType == null ? 0.5 : 1.0;
+            double familyPreference = familyPreference(assertion.predicate(), surfacePredicates,
+                    containmentPredicates, locationPredicates);
             double graphConfidence = assertion.confidence();
             double memoryFocus = memory.isActiveEntity(assertion.subject()) ? 1.0 : 0.7;
-            double score = normalize(queryMatch, entityMatch, ontologySupport, graphConfidence, memoryFocus);
+            double score = normalize(queryMatch, entityMatch, ontologySupport,
+                    graphConfidence, memoryFocus, familyPreference);
 
             Map<String, Double> breakdown = new HashMap<>();
             breakdown.put("query_match", queryMatch);
@@ -111,6 +114,7 @@ public final class GraphRetrievalHead extends BaseHead {
             breakdown.put("ontology_support", ontologySupport);
             breakdown.put("graph_confidence", graphConfidence);
             breakdown.put("working_memory_focus", memoryFocus);
+            breakdown.put("where_family_preference", familyPreference);
             breakdown.put("where_path_direct", 1.0);
             breakdown.put("where_chain_length", 1.0);
             annotateFamilyBreakdown(breakdown, assertion.predicate(), surfacePredicates,
@@ -161,8 +165,10 @@ public final class GraphRetrievalHead extends BaseHead {
                 double memoryFocus = memory.isActiveEntity(assertion.subject()) ? 1.0 : 0.6;
                 double depthPenalty = Math.max(0.0, 0.05 * (path.size() - 1));
                 double depthAdjusted = Math.max(0.0, graphConfidence - depthPenalty);
+                double familyPreference = familyPreference(path.get(path.size() - 1).predicate(),
+                        surfacePredicates, containmentPredicates, locationPredicates);
                 double score = normalize(queryMatch, entityMatch, ontologySupport,
-                        depthAdjusted, memoryFocus);
+                        depthAdjusted, memoryFocus, familyPreference);
 
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("query_match", queryMatch);
@@ -171,6 +177,7 @@ public final class GraphRetrievalHead extends BaseHead {
                 breakdown.put("graph_confidence", graphConfidence);
                 breakdown.put("depth_penalty", depthPenalty);
                 breakdown.put("working_memory_focus", memoryFocus);
+                breakdown.put("where_family_preference", familyPreference);
                 breakdown.put("where_path_chain", 1.0);
                 breakdown.put("where_chain_length", (double) path.size());
                 annotateFamilyBreakdown(breakdown, path.get(path.size() - 1).predicate(), surfacePredicates,
@@ -236,8 +243,10 @@ public final class GraphRetrievalHead extends BaseHead {
                 double graphConfidence = averageConfidence(relation.confidence(), location.confidence());
                 double memoryFocus = memory.isActiveEntity(inferredSubject) ? 1.0 : 0.6;
                 double colocationPenalty = 0.1;
+                double familyPreference = familyPreference(location.predicate(), surfacePredicates,
+                        containmentPredicates, locationPredicates);
                 double score = normalize(queryMatch, entityMatch, ontologySupport,
-                        Math.max(0.0, graphConfidence - colocationPenalty), memoryFocus);
+                        Math.max(0.0, graphConfidence - colocationPenalty), memoryFocus, familyPreference);
 
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("query_match", queryMatch);
@@ -246,6 +255,7 @@ public final class GraphRetrievalHead extends BaseHead {
                 breakdown.put("graph_confidence", graphConfidence);
                 breakdown.put("colocation_penalty", colocationPenalty);
                 breakdown.put("working_memory_focus", memoryFocus);
+                breakdown.put("where_family_preference", familyPreference);
                 breakdown.put("where_path_colocation", 1.0);
                 breakdown.put("where_chain_length", 1.0);
                 annotateFamilyBreakdown(breakdown, location.predicate(), surfacePredicates,
@@ -352,6 +362,25 @@ public final class GraphRetrievalHead extends BaseHead {
             }
         }
         return false;
+    }
+
+    private double familyPreference(String predicate,
+                                    java.util.Set<String> surfacePredicates,
+                                    java.util.Set<String> containmentPredicates,
+                                    java.util.Set<String> locationPredicates) {
+        if (predicate == null) {
+            return 0.5;
+        }
+        if (containmentPredicates.contains(predicate)) {
+            return 1.0;
+        }
+        if (locationPredicates.contains(predicate)) {
+            return 0.9;
+        }
+        if (surfacePredicates.contains(predicate)) {
+            return 0.7;
+        }
+        return 0.5;
     }
 
     private double policyScore(InferencePolicyStrength strength) {
