@@ -637,6 +637,10 @@ the hat", and "what is in the house" so the canonical frame is stable.
 An agent-path regression probe now asserts that the same canonical
 relation frames are produced when going through the full `SahrAgent`
 execution path, preventing REPL drift from reintroducing self-binding.
+The wear→on predicate bridge is now enabled in the ontology reasoning
+heads (with correct argument inversion), and a scenario test asserts
+that "The man is wearing a hat" answers "What is on the man" and
+"What is the hat on" correctly.
 `QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to

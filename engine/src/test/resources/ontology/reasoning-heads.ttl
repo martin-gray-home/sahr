@@ -987,13 +987,13 @@ headr:patternWearToOn a headr:Pattern ;
     headr:hasTriple headr:tpWearToOn .
 
 headr:actionWearToOn a headr:AddAssertion ;
-    headr:subject headr:varA ;
+    headr:subject headr:varB ;
     headr:predicate headr:constOn ;
-    headr:object headr:varB .
+    headr:object headr:varA .
 
 headr:WearToOnHead a headr:ReasoningHead ;
     headr:name "wear-to-on" ;
     headr:hasPattern headr:patternWearToOn ;
     headr:hasAction headr:actionWearToOn ;
-    headr:enabled false ;
+    headr:enabled true ;
     headr:hasScorePolicy headr:scoreSurface .

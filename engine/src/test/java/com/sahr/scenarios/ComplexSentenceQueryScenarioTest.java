@@ -37,6 +37,7 @@ class ComplexSentenceQueryScenarioTest {
                 "entity:woman in entity:room");
         assertAnyOf(agent.handle("Where is the man"),
                 "entity:man in entity:room",
+                "entity:man under entity:hat",
                 "entity:man on entity:hat",
                 "entity:man wear entity:hat");
         assertAnyOf(agent.handle("Where is the hat"),
