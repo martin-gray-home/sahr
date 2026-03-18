@@ -53,4 +53,25 @@ class QueryNormalizerTest {
         assertEquals("green", frame.object());
         assertEquals(QueryFrame.TargetSlot.SUBJECT, frame.targetSlot());
     }
+
+    @Test
+    void normalizesAttributeWhIntoRelationFrameForPropertyTerm() {
+        QueryGoal query = parser.parse("What is tall");
+        QueryFrame frame = normalizer.normalize(query, QueryOperator.RETRIEVE, null);
+
+        assertNull(frame.subject());
+        assertEquals("hasAttribute", frame.predicate());
+        assertEquals("tall", frame.object());
+        assertEquals(QueryFrame.TargetSlot.SUBJECT, frame.targetSlot());
+    }
+
+    @Test
+    void doesNotPromoteNounToAttributeFrame() {
+        QueryGoal query = parser.parse("What is chair");
+        QueryFrame frame = normalizer.normalize(query, QueryOperator.RETRIEVE, null);
+
+        assertEquals(QueryOperator.RETRIEVE, frame.operator());
+        org.junit.jupiter.api.Assertions.assertNotEquals("hasAttribute", frame.predicate(),
+                "Expected non-attribute predicate for noun term");
+    }
 }

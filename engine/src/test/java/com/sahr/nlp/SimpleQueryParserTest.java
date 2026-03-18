@@ -86,6 +86,17 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesAttributeWhQueryFromIsPropertyTerm() {
+        QueryGoal query = parser.parse("What is tall");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertNull(query.subject());
+        assertEquals("hasAttribute", query.predicate());
+        assertEquals("tall", query.object());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromWhSubjectPattern() {
         QueryGoal query = parser.parse("Who is wearing a hat");
 

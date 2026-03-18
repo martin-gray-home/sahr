@@ -5,6 +5,7 @@ import com.sahr.core.InMemoryKnowledgeBase;
 import com.sahr.core.SahrReasoner;
 import com.sahr.heads.OntologyDefinedHead;
 import com.sahr.heads.OntologyHeadDefinition;
+import com.sahr.nlp.OntologyAttributeTermResolver;
 import com.sahr.nlp.SimpleQueryParser;
 import com.sahr.nlp.StatementParser;
 import com.sahr.nlp.TermMapper;
@@ -31,10 +32,11 @@ public final class SahrTestAgentFactory {
             heads.addAll(List.of(extraHeads));
         }
         SahrReasoner reasoner = new SahrReasoner(heads);
-        SimpleQueryParser parser = new SimpleQueryParser(true);
+        var ontologyService = OwlOntologyTestSupport.buildOntologyService();
+        SimpleQueryParser parser = new SimpleQueryParser(true, new OntologyAttributeTermResolver(ontologyService));
         StatementParser statementParser = new StatementParser(true);
         TermMapper effectiveMapper = mapper == null ? OwlOntologyTestSupport.buildTermMapper() : mapper;
-        return new SahrAgent(graph, OwlOntologyTestSupport.buildOntologyService(), reasoner, parser, statementParser,
+        return new SahrAgent(graph, ontologyService, reasoner, parser, statementParser,
                 effectiveMapper);
     }
 

@@ -20,10 +20,14 @@ public final class SimpleQueryParser {
     private static final Set<String> YESNO_PREFIXES = Set.of("is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "would", "will");
     private static final Set<String> PREPOSITION_RELATIONS = Set.of("on", "under", "above", "over", "below", "with", "in", "inside", "opposite");
     private static final Set<String> COLOCATION_SYNONYMS = Set.of("near", "beside", "alongside", "next");
-    private static final Set<String> COLOR_MODIFIERS = Set.of("red", "blue", "green", "black", "white");
     private static final Morphology MORPHOLOGY = new Morphology();
 
     private final boolean ontologyDriven;
+    private final AttributeTermResolver attributeTermResolver;
+
+    public interface AttributeTermResolver {
+        boolean isAttributeTerm(String term, boolean adjectiveHint);
+    }
 
     public static final class ParsedQuery {
         private final QueryGoal query;
@@ -48,7 +52,14 @@ public final class SimpleQueryParser {
     }
 
     public SimpleQueryParser(boolean ontologyDriven) {
+        this(ontologyDriven, (term, adjectiveHint) -> AttributeTermLexicon.isPropertyTerm(term));
+    }
+
+    public SimpleQueryParser(boolean ontologyDriven, AttributeTermResolver attributeTermResolver) {
         this.ontologyDriven = ontologyDriven;
+        this.attributeTermResolver = attributeTermResolver == null
+                ? (term, adjectiveHint) -> AttributeTermLexicon.isPropertyTerm(term)
+                : attributeTermResolver;
     }
 
     public boolean isOntologyDriven() {
@@ -71,7 +82,7 @@ public final class SimpleQueryParser {
         }
 
         String discourse = findDiscourseModifier(tokenize(normalized));
-        Optional<QueryGoal> attribute = parseAttributeQuery(normalized);
+        Optional<QueryGoal> attribute = parseAttributeQuery(input, normalized);
         if (attribute.isPresent()) {
             return new ParsedQuery(applyDiscourseModifier(attribute.get(), discourse), "parser-attribute");
         }
@@ -366,7 +377,7 @@ public final class SimpleQueryParser {
         return Optional.of(QueryGoal.relation(subjectToken, predicate, null, expectedTypeForWh("what")));
     }
 
-    private Optional<QueryGoal> parseAttributeQuery(String normalized) {
+    private Optional<QueryGoal> parseAttributeQuery(String input, String normalized) {
         if (!normalized.startsWith("what ")) {
             return Optional.empty();
         }
@@ -382,7 +393,7 @@ public final class SimpleQueryParser {
                 return Optional.empty();
             }
             String normalizedAttribute = normalizeToken(remainder);
-            if (COLOR_MODIFIERS.contains(normalizedAttribute)) {
+            if (isAttributeLikeTerm(input, normalizedAttribute)) {
                 return Optional.of(QueryGoal.relation(null, "hasAttribute", normalizedAttribute, expectedTypeForWh("what")));
             }
             return Optional.empty();
@@ -403,6 +414,35 @@ public final class SimpleQueryParser {
             return Optional.empty();
         }
         return Optional.of(QueryGoal.attribute(subject, attribute));
+    }
+
+    private boolean isAttributeLikeTerm(String input, String term) {
+        if (term == null || term.isBlank()) {
+            return false;
+        }
+        boolean adjectiveHint = ontologyDriven && isAdjectiveToken(input, term);
+        return attributeTermResolver.isAttributeTerm(term, adjectiveHint);
+    }
+
+    private boolean isAdjectiveToken(String input, String term) {
+        if (input == null || input.isBlank()) {
+            return false;
+        }
+        Annotation doc = new Annotation(input);
+        CoreNlpPipeline.get().annotate(doc);
+        for (CoreMap sentence : doc.get(CoreAnnotations.SentencesAnnotation.class)) {
+            for (CoreLabel token : sentence.get(CoreAnnotations.TokensAnnotation.class)) {
+                String normalized = normalizeToken(token.lemma() == null ? token.word() : token.lemma());
+                if (!term.equals(normalized)) {
+                    continue;
+                }
+                String pos = token.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+                if (pos != null && pos.startsWith("JJ")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private Optional<QueryGoal> parseCountQuery(String normalized) {
@@ -432,7 +472,7 @@ public final class SimpleQueryParser {
         }
         String object = tokens.get(objectIndex);
         String modifier = null;
-        if (objectIndex > 0 && COLOR_MODIFIERS.contains(tokens.get(objectIndex - 1))) {
+        if (objectIndex > 0 && AttributeTermLexicon.isPropertyTerm(tokens.get(objectIndex - 1))) {
             modifier = tokens.get(objectIndex - 1);
         }
         return Optional.of(QueryGoal.count(null, predicate, object, subjectType, modifier));
@@ -740,7 +780,7 @@ public final class SimpleQueryParser {
         String modifier = null;
         if (objectToken.contains("_")) {
             String[] parts = objectToken.split("_", 2);
-            if (parts.length == 2 && COLOR_MODIFIERS.contains(parts[0])) {
+            if (parts.length == 2 && AttributeTermLexicon.isPropertyTerm(parts[0])) {
                 modifier = parts[0];
             }
         }
@@ -1162,7 +1202,7 @@ public final class SimpleQueryParser {
                 return null;
             }
         }
-        if (!COLOR_MODIFIERS.contains(prev)) {
+        if (!AttributeTermLexicon.isPropertyTerm(prev)) {
             return null;
         }
         return prev;
@@ -1174,7 +1214,7 @@ public final class SimpleQueryParser {
             return new SubjectModifier(null, null);
         }
         String candidate = tokens.get(first);
-        if (COLOR_MODIFIERS.contains(candidate)) {
+        if (AttributeTermLexicon.isPropertyTerm(candidate)) {
             int next = firstContentIndexAfter(tokens, first);
             if (next >= 0) {
                 String phrase = nounPhraseFrom(tokens, next, tokens.size());

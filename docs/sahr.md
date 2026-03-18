@@ -624,6 +624,13 @@ subject position instead of duplicating the anchor entity.
 The parser now maps “what is <color>” into a `hasAttribute` relation
 query (unknown subject, color object) so attribute questions form a
 canonical relation frame.
+Attribute-term detection now uses a staged resolver: a curated property
+lexicon plus ontology-backed adjective terms (using POS as a supporting
+signal), so “what is <adjective>” does not rely solely on color names or
+unbounded adjective matching.
+Query normalization tests now cover a property adjective ("what is tall")
+and a noun guardrail ("what is chair") to ensure the frame is only
+promoted to `hasAttribute` when the staged resolver supports it.
 `QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to
