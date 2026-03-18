@@ -75,6 +75,17 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesAttributeWhQueryFromIsColor() {
+        QueryGoal query = parser.parse("What is green");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertNull(query.subject());
+        assertEquals("hasAttribute", query.predicate());
+        assertEquals("green", query.object());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
     void parsesRelationQueryFromWhSubjectPattern() {
         QueryGoal query = parser.parse("Who is wearing a hat");
 

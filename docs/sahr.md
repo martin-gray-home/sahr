@@ -618,6 +618,12 @@ interface instead of performing local ontology/lemmatizer lookups.
 `QueryNormalizer` now owns wildcard YES/NO handling and target-slot
 selection, keeping surface parsing separate from canonical query-frame
 construction.
+`QueryNormalizer` now treats WH tokens as unbound slots for relation
+queries so frames like “what is on the man” bind the unknown to the
+subject position instead of duplicating the anchor entity.
+The parser now maps “what is <color>” into a `hasAttribute` relation
+query (unknown subject, color object) so attribute questions form a
+canonical relation frame.
 `QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to

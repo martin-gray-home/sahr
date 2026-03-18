@@ -12,6 +12,15 @@ public final class QueryNormalizer {
             "somebody",
             "anybody"
     );
+    private static final Set<String> WH_TOKENS = Set.of(
+            "who",
+            "what",
+            "where",
+            "when",
+            "why",
+            "how",
+            "which"
+    );
 
     public QueryFrame normalize(QueryGoal query, QueryOperator operator, String expectedType) {
         QueryOperator resolvedOperator = operator == null ? operatorFor(query) : operator;
@@ -24,13 +33,11 @@ public final class QueryNormalizer {
             modifier = null;
         }
 
-        if (query != null && query.type() == QueryGoal.Type.YESNO) {
-            if (isWildcard(subject)) {
-                subject = null;
-            }
-            if (isWildcard(object)) {
-                object = null;
-            }
+        if (isWildcard(subject) || isWhToken(subject)) {
+            subject = null;
+        }
+        if (isWildcard(object) || isWhToken(object)) {
+            object = null;
         }
 
         QueryFrame.TargetSlot targetSlot = QueryFrame.TargetSlot.ANY;
@@ -76,6 +83,19 @@ public final class QueryNormalizer {
             normalized = normalized.substring("concept:".length());
         }
         return WILDCARD_TOKENS.contains(normalized);
+    }
+
+    private boolean isWhToken(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("entity:")) {
+            normalized = normalized.substring("entity:".length());
+        } else if (normalized.startsWith("concept:")) {
+            normalized = normalized.substring("concept:".length());
+        }
+        return WH_TOKENS.contains(normalized);
     }
 
     private boolean isDiscourseModifier(String modifier) {

@@ -377,6 +377,14 @@ public final class SimpleQueryParser {
             return Optional.empty();
         }
         if (split <= 5) {
+            String remainder = normalized.substring(split + 4).trim();
+            if (remainder.isBlank()) {
+                return Optional.empty();
+            }
+            String normalizedAttribute = normalizeToken(remainder);
+            if (COLOR_MODIFIERS.contains(normalizedAttribute)) {
+                return Optional.of(QueryGoal.relation(null, "hasAttribute", normalizedAttribute, expectedTypeForWh("what")));
+            }
             return Optional.empty();
         }
         String attribute = normalized.substring(5, split).trim();
