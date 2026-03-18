@@ -75,6 +75,28 @@ class SimpleQueryParserTest {
     }
 
     @Test
+    void parsesRelationQueryFromTrailingPreposition() {
+        QueryGoal query = parser.parse("What is the hat on");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("hat", query.subject());
+        assertEquals("on", query.predicate());
+        assertNull(query.object());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
+    void parsesRelationQueryFromUnderPattern() {
+        QueryGoal query = parser.parse("What is under the hat");
+
+        assertEquals(QueryGoal.Type.RELATION, query.type());
+        assertEquals("hat", query.object());
+        assertEquals("under", query.predicate());
+        assertNull(query.subject());
+        assertEquals("entity", query.expectedType());
+    }
+
+    @Test
     void parsesAttributeWhQueryFromIsColor() {
         QueryGoal query = parser.parse("What is green");
 
@@ -206,16 +228,6 @@ class SimpleQueryParserTest {
         assertEquals("man", query.subject());
         assertEquals("hat", query.object());
         assertEquals("wear", query.predicate());
-    }
-
-    @Test
-    void parsesRelationQueryFromUnderPattern() {
-        QueryGoal query = parser.parse("What is under the hat");
-
-        assertEquals(QueryGoal.Type.RELATION, query.type());
-        assertEquals("hat", query.object());
-        assertEquals("under", query.predicate());
-        assertEquals("entity", query.expectedType());
     }
 
     @Test

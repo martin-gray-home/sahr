@@ -631,6 +631,12 @@ unbounded adjective matching.
 Query normalization tests now cover a property adjective ("what is tall")
 and a noun guardrail ("what is chair") to ensure the frame is only
 promoted to `hasAttribute` when the staged resolver supports it.
+Relation-query normalization tests now assert explicit unknown-slot
+binding for "what is on the man", "what is the hat on", "what is under
+the hat", and "what is in the house" so the canonical frame is stable.
+An agent-path regression probe now asserts that the same canonical
+relation frames are produced when going through the full `SahrAgent`
+execution path, preventing REPL drift from reintroducing self-binding.
 `QueryExecutor` now owns predicate resolution (via `PredicateResolver`),
 subproperty/inverse expansion, retrieval, type filtering, and operator
 application, returning a structured `QueryResult` that can be adapted to

@@ -44,6 +44,17 @@ class QueryNormalizerTest {
     }
 
     @Test
+    void normalizesWhInQueryIntoSubjectSlot() {
+        QueryGoal query = parser.parse("What is in the house");
+        QueryFrame frame = normalizer.normalize(query, QueryOperator.RETRIEVE, null);
+
+        assertNull(frame.subject());
+        assertEquals("in", frame.predicate());
+        assertEquals("house", frame.object());
+        assertEquals(QueryFrame.TargetSlot.SUBJECT, frame.targetSlot());
+    }
+
+    @Test
     void normalizesAttributeWhIntoRelationFrame() {
         QueryGoal query = parser.parse("What is green");
         QueryFrame frame = normalizer.normalize(query, QueryOperator.RETRIEVE, null);
