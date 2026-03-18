@@ -16,6 +16,7 @@ import com.sahr.support.HeadOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RelationQueryHeadTest {
     private final RelationQueryHead head = new RelationQueryHead();
@@ -142,6 +143,9 @@ class RelationQueryHeadTest {
         HeadContext countContext = new HeadContext(countQuery, graph, ontology);
         List<ReasoningCandidate> countCandidates = head.evaluate(countContext);
         assertFalse(countCandidates.isEmpty());
-        assertEquals("1", countCandidates.get(0).payload());
+        Object payload = countCandidates.get(0).payload();
+        assertTrue(payload instanceof com.sahr.core.QueryResult);
+        com.sahr.core.QueryResult result = (com.sahr.core.QueryResult) payload;
+        assertEquals(1L, result.count());
     }
 }

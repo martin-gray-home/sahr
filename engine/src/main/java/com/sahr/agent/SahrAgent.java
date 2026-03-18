@@ -44,6 +44,8 @@ import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
 import com.sahr.ontology.SahrAnnotationVocabulary;
 import com.sahr.core.PredicateResolver;
+import com.sahr.core.QueryBinding;
+import com.sahr.core.QueryResult;
 import edu.stanford.nlp.process.Morphology;
 
 import java.util.ArrayList;
@@ -1784,6 +1786,11 @@ public final class SahrAgent {
                 logger.fine(() -> "Follow-up winner type=" + winner.type()
                         + " producedBy=" + winner.producedBy()
                         + " score=" + winner.score());
+                if (winner.payload() instanceof QueryResult) {
+                    String formatted = formatQueryResultAnswer(query, (QueryResult) winner.payload());
+                    recordAnswerIfPossible(query, formatted);
+                    return formatAnswerWithEvidence(formatted, followUp, winner);
+                }
                 String multiAnswer = buildMultiAnswer(query, followUp);
                 if (multiAnswer != null) {
                     recordAnswerValues(query, extractAnswerValues(followUp));
@@ -1837,12 +1844,70 @@ public final class SahrAgent {
                 return formatAnswerWithEvidence(multiAnswer, candidates, winner);
             }
         }
-        String result = applyCandidate(winner);
+        String result;
+        if (CandidateType.ANSWER.equals(winner.type()) && winner.payload() instanceof QueryResult) {
+            result = formatQueryResultAnswer(query, (QueryResult) winner.payload());
+            recordAnswerIfPossible(query, result);
+            return formatAnswerWithEvidence(result, candidates, winner);
+        }
+        result = applyCandidate(winner);
         if (CandidateType.ANSWER.equals(winner.type())) {
             recordAnswerIfPossible(query, winner.payload());
             return formatAnswerWithEvidence(result, candidates, winner);
         }
         return result;
+    }
+
+    private String formatQueryResultAnswer(QueryGoal query, QueryResult result) {
+        if (result == null) {
+            return "No candidates produced.";
+        }
+        return switch (result.operator()) {
+            case COUNT -> String.valueOf(result.count());
+            case EXISTS -> formatYesNoResult(query, result);
+            default -> result.bindings().isEmpty()
+                    ? "No candidates produced."
+                    : result.bindings().get(0).answer().value();
+        };
+    }
+
+    private String formatYesNoResult(QueryGoal query, QueryResult result) {
+        if (result == null || !result.exists() || result.bindings().isEmpty()) {
+            return "No.";
+        }
+        QueryBinding binding = result.bindings().get(0);
+        return formatYesNoAnswer(query, binding);
+    }
+
+    private String formatYesNoAnswer(QueryGoal query, QueryBinding binding) {
+        String subjectText = query.subjectText() != null ? query.subjectText() : binding.subject().toString();
+        String objectText = query.objectText() != null ? query.objectText() : binding.object().toString();
+        String predicateText = query.predicateText() != null ? query.predicateText() : binding.predicate();
+        if (binding.matchType() == com.sahr.core.PredicateMatchType.INVERSE) {
+            subjectText = query.subjectText() != null ? query.subjectText() : binding.answer().value();
+            objectText = query.objectText() != null ? query.objectText() : binding.object().value();
+            predicateText = query.predicateText() != null ? query.predicateText() : query.predicate();
+        }
+        predicateText = normalizePredicateText(predicateText);
+        return "Yes, " + subjectText + " " + predicateText + " " + objectText;
+    }
+
+    private String normalizePredicateText(String predicateText) {
+        if (predicateText == null || predicateText.isBlank()) {
+            return "is";
+        }
+        if ("on".equals(predicateText) || "under".equals(predicateText)
+                || "above".equals(predicateText) || "below".equals(predicateText)) {
+            return "is " + predicateText;
+        }
+        if (predicateText.startsWith("http://") || predicateText.startsWith("https://")) {
+            int idx = Math.max(predicateText.lastIndexOf('#'), predicateText.lastIndexOf('/'));
+            if (idx >= 0 && idx < predicateText.length() - 1) {
+                return predicateText.substring(idx + 1).replace('_', ' ');
+            }
+            return predicateText;
+        }
+        return predicateText.replace('_', ' ');
     }
 
     private java.util.Optional<ReasoningCandidate> selectStatementCandidate(HeadContext context,
@@ -2111,6 +2176,28 @@ public final class SahrAgent {
                                 System.nanoTime() - iterationStart);
                     }
                     return multiAnswer;
+                }
+                if (winner.payload() instanceof QueryResult) {
+                    String formatted = formatQueryResultAnswer(root, (QueryResult) winner.payload());
+                    recordAnswerIfPossible(root, formatted);
+                    workingMemory.popGoal();
+                    answerEnd = subgoalTiming ? System.nanoTime() : 0L;
+                    if (subgoalTiming) {
+                        logSubgoalTiming("answer",
+                                current,
+                                processed,
+                                queue.size(),
+                                candidateCount,
+                                filteredCount,
+                                winner,
+                                reasonEnd - reasonStart,
+                                filterEnd - filterStart,
+                                selectEnd - selectStart,
+                                0L,
+                                answerEnd - answerStart,
+                                System.nanoTime() - iterationStart);
+                    }
+                    return formatted;
                 }
                 recordAnswerIfPossible(root, winner.payload());
                 workingMemory.popGoal();

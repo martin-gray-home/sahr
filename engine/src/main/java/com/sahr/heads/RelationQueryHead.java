@@ -86,16 +86,49 @@ public final class RelationQueryHead extends BaseHead {
         if (query.type() == QueryGoal.Type.YESNO) {
             QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.EXISTS, expectedType);
             QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
-            if (result.exists() && !result.bindings().isEmpty()) {
-                return List.of(buildYesAnswer(query, result.bindings().get(0)));
+            if (!result.exists() || result.bindings().isEmpty()) {
+                return List.of();
             }
-            return List.of();
+            Map<String, Double> breakdown = new HashMap<>();
+            breakdown.put("query_match", 1.0);
+            if (!result.bindings().isEmpty()) {
+                QueryBinding binding = result.bindings().get(0);
+                breakdown.put("graph_confidence", binding.confidence());
+                policyStrengthScore(binding.policyStrength()).ifPresent(value -> {
+                    breakdown.put("policy_strength", value);
+                    breakdown.put("policy_applied", 1.0);
+                    addPolicyRuleBreakdown(breakdown, binding.matchType());
+                });
+            }
+            double score = result.bindings().isEmpty()
+                    ? normalize(1.0, 0.8)
+                    : normalize(1.0, result.bindings().get(0).confidence());
+            return List.of(new ReasoningCandidate(
+                    CandidateType.ANSWER,
+                    result,
+                    score,
+                    getName(),
+                    result.evidence(),
+                    breakdown,
+                    0
+            ));
         }
 
         if (query.type() == QueryGoal.Type.COUNT) {
             QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.COUNT, expectedType);
             QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
-            return List.of(buildCountAnswer(result.count(), frame.predicate()));
+            Map<String, Double> breakdown = new HashMap<>();
+            breakdown.put("query_match", 1.0);
+            breakdown.put("count", (double) result.count());
+            return List.of(new ReasoningCandidate(
+                    CandidateType.ANSWER,
+                    result,
+                    normalize(1.0, 0.8),
+                    getName(),
+                    result.evidence(),
+                    breakdown,
+                    0
+            ));
         }
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
@@ -133,22 +166,6 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         return candidates;
-    }
-
-    private ReasoningCandidate buildCountAnswer(long count, String predicate) {
-        double score = normalize(1.0, 0.8);
-        Map<String, Double> breakdown = new HashMap<>();
-        breakdown.put("query_match", 1.0);
-        breakdown.put("count", (double) count);
-        return new ReasoningCandidate(
-                CandidateType.ANSWER,
-                String.valueOf(count),
-                score,
-                getName(),
-                List.of("count:" + predicate),
-                breakdown,
-                0
-        );
     }
 
     private double memoryFocus(WorkingMemory memory, SymbolId subject, SymbolId object, SymbolId answer) {
@@ -253,58 +270,6 @@ public final class RelationQueryHead extends BaseHead {
         normalized = normalized.replaceAll("[^a-z0-9]+", "_");
         normalized = normalized.replaceAll("^_+", "").replaceAll("_+$", "");
         return normalized;
-    }
-
-    private ReasoningCandidate buildYesAnswer(QueryGoal query, QueryBinding binding) {
-        String subjectText = query.subjectText() != null ? query.subjectText() : binding.subject().toString();
-        String objectText = query.objectText() != null ? query.objectText() : binding.object().toString();
-        String predicateText = query.predicateText() != null ? query.predicateText() : binding.predicate();
-        if (binding.matchType() == com.sahr.core.PredicateMatchType.INVERSE) {
-            subjectText = query.subjectText() != null ? query.subjectText() : binding.answer().value();
-            objectText = query.objectText() != null ? query.objectText() : binding.object().value();
-            predicateText = query.predicateText() != null ? query.predicateText() : query.predicate();
-        }
-        predicateText = normalizePredicateText(predicateText);
-
-        String answer = "Yes, " + subjectText + " " + predicateText + " " + objectText;
-
-        Map<String, Double> breakdown = new HashMap<>();
-        breakdown.put("query_match", 1.0);
-        breakdown.put("graph_confidence", binding.confidence());
-        policyStrengthScore(binding.policyStrength()).ifPresent(value -> {
-            breakdown.put("policy_strength", value);
-            breakdown.put("policy_applied", 1.0);
-            addPolicyRuleBreakdown(breakdown, binding.matchType());
-        });
-        double score = normalize(1.0, binding.confidence());
-
-        return new ReasoningCandidate(
-                CandidateType.ANSWER,
-                answer,
-                score,
-                getName(),
-                List.of(binding.evidence()),
-                breakdown,
-                0
-        );
-    }
-
-    private String normalizePredicateText(String predicateText) {
-        if (predicateText == null || predicateText.isBlank()) {
-            return "is";
-        }
-        if ("on".equals(predicateText) || "under".equals(predicateText)
-                || "above".equals(predicateText) || "below".equals(predicateText)) {
-            return "is " + predicateText;
-        }
-        if (predicateText.startsWith("http://") || predicateText.startsWith("https://")) {
-            int idx = Math.max(predicateText.lastIndexOf('#'), predicateText.lastIndexOf('/'));
-            if (idx >= 0 && idx < predicateText.length() - 1) {
-                return predicateText.substring(idx + 1).replace('_', ' ');
-            }
-            return predicateText;
-        }
-        return predicateText.replace('_', ' ');
     }
 
     private double queryMatchScore(com.sahr.core.PredicateMatchType type, InferencePolicyStrength policyStrength) {
