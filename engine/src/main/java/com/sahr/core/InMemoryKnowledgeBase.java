@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 public final class InMemoryKnowledgeBase implements KnowledgeBase {
     private final Map<SymbolId, EntityNode> entities = new ConcurrentHashMap<>();
     private final List<AssertionRecord> assertionRecords = new ArrayList<>();
-    private final List<RuleAssertion> rules = new ArrayList<>();
     private final List<RuleFrame> ruleFrames = new ArrayList<>();
     private final AtomicLong version = new AtomicLong();
 
@@ -53,8 +52,7 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
 
     @Override
     public void addRule(RuleAssertion rule) {
-        rules.add(rule);
-        version.incrementAndGet();
+        addRuleFrame(RuleFrames.fromLegacyRuleAssertion(rule));
     }
 
     @Override
@@ -111,7 +109,10 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
 
     @Override
     public List<RuleAssertion> getAllRules() {
-        return new ArrayList<>(rules);
+        return ruleFrames.stream()
+                .map(RuleFrames::toLegacyRuleAssertion)
+                .flatMap(Optional::stream)
+                .collect(Collectors.toList());
     }
 
     @Override

@@ -6,43 +6,13 @@ import java.util.List;
 import java.util.Set;
 
 public final class RuleDerivationService {
+    private static final SymbolId GROUND_RULE_BINDING = new SymbolId("__ground_rule__");
+
     public List<RuleDerivation> derive(KnowledgeBase graph) {
         if (graph == null) {
             return List.of();
         }
-        List<RuleDerivation> derivations = new ArrayList<>();
-        derivations.addAll(deriveRuleAssertions(graph));
-        derivations.addAll(deriveRuleFrames(graph));
-        return derivations;
-    }
-
-    private List<RuleDerivation> deriveRuleAssertions(KnowledgeBase graph) {
-        if (graph.getAllRules().isEmpty() || graph.getAllAssertions().isEmpty()) {
-            return List.of();
-        }
-        List<RuleDerivation> derivations = new ArrayList<>();
-        for (RuleAssertion rule : graph.getAllRules()) {
-            RelationAssertion antecedent = rule.antecedent();
-            boolean matched = matchingAssertions(antecedent.predicate(), graph).stream()
-                    .anyMatch(assertion -> assertion.subject().equals(antecedent.subject())
-                            && assertion.object().equals(antecedent.object()));
-            if (!matched) {
-                continue;
-            }
-            RelationAssertion consequent = rule.consequent();
-            if (alreadyPresent(consequent, graph)) {
-                continue;
-            }
-            derivations.add(new RuleDerivation(
-                    new RelationAssertion(consequent.subject(), consequent.predicate(), consequent.object(),
-                            Math.min(1.0, (rule.confidence() + antecedent.confidence()) / 2.0)),
-                    List.of(antecedent.toString(), rule.toString()),
-                    rule.confidence(),
-                    antecedent.confidence(),
-                    1
-            ));
-        }
-        return derivations;
+        return deriveRuleFrames(graph);
     }
 
     private List<RuleDerivation> deriveRuleFrames(KnowledgeBase graph) {
@@ -85,6 +55,11 @@ public final class RuleDerivationService {
         List<RuleAtom> antecedents = rule.antecedents();
         if (antecedents.isEmpty()) {
             return List.of();
+        }
+        if (!RuleFrames.usesVariable(rule)) {
+            return allAntecedentsMatch(antecedents, graph, GROUND_RULE_BINDING)
+                    ? List.of(GROUND_RULE_BINDING)
+                    : List.of();
         }
         Set<SymbolId> bindings = new LinkedHashSet<>();
         RuleAtom seed = antecedents.get(0);

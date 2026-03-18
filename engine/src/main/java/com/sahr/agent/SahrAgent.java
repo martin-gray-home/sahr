@@ -23,6 +23,8 @@ import com.sahr.core.RelationAssertion;
 import com.sahr.core.RuleDerivation;
 import com.sahr.core.RuleDerivationService;
 import com.sahr.core.RuleAssertion;
+import com.sahr.core.RuleFrame;
+import com.sahr.core.RuleFrames;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
 import com.sahr.core.GuardedKnowledgeBase;
@@ -323,24 +325,21 @@ public final class SahrAgent {
         QueryGoal query = selectQueryCandidate(normalizedInput);
         long parseEnd = timing ? System.nanoTime() : 0L;
         long ruleStart = timing ? System.nanoTime() : 0L;
-        Optional<com.sahr.core.RuleFrame> quantifiedRule = (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
+        Optional<RuleFrame> quantifiedRule = (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
                 ? quantifiedRuleParser.parse(normalizedInput).map(this::mapRuleFrame)
                 : Optional.empty();
-        Optional<RuleStatement> ruleStatement = quantifiedRule.isPresent()
+        Optional<RuleFrame> legacyRule = quantifiedRule.isPresent()
                 ? Optional.empty()
                 : (!questionLike || isRuleIntent(intentDecision) || allowRuleParse)
                 ? ruleParser.parse(normalizedInput).map(this::mapRuleStatement)
                 : Optional.empty();
+        Optional<RuleFrame> ruleFrame = quantifiedRule.isPresent() ? quantifiedRule : legacyRule;
         long ruleEnd = timing ? System.nanoTime() : 0L;
-        if (ruleStatement.isPresent()) {
+        if (ruleFrame.isPresent()) {
             questionLike = false;
         }
-        if (quantifiedRule.isPresent()) {
-            questionLike = false;
-        }
-        Optional<RuleAssertion> rule = ruleStatement.map(this::toRuleAssertion);
         long statementStart = timing ? System.nanoTime() : 0L;
-        Optional<Statement> statement = (questionLike || rule.isPresent() || quantifiedRule.isPresent())
+        Optional<Statement> statement = (questionLike || ruleFrame.isPresent())
                 ? Optional.empty()
                 : statementParser.parse(normalizedInput).map(this::mapStatement);
         long statementEnd = timing ? System.nanoTime() : 0L;
@@ -354,8 +353,8 @@ public final class SahrAgent {
 
         try {
             if (!isQuestion(query)) {
-                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), rule.orElse(null),
-                        quantifiedRule.orElse(null),
+                HeadContext context = new HeadContext(query, graph, ontology, statement.orElse(null), null,
+                        ruleFrame.orElse(null),
                         workingMemory, features, semanticNormalizer);
                 long answerStart = timing ? System.nanoTime() : 0L;
                 String result = handleSingle(context, query, questionLike, features);
@@ -374,7 +373,7 @@ public final class SahrAgent {
                 return result;
             }
             long answerStart = timing ? System.nanoTime() : 0L;
-            String result = handleWithSubgoals(query, statement.orElse(null), questionLike, rule.orElse(null), features);
+            String result = handleWithSubgoals(query, statement.orElse(null), questionLike, ruleFrame.orElse(null), features);
             long answerEnd = timing ? System.nanoTime() : 0L;
             if (timing) {
                 logHandleTiming("question", normalizedInput,
@@ -1943,7 +1942,7 @@ public final class SahrAgent {
     private String handleWithSubgoals(QueryGoal root,
                                       Statement statement,
                                       boolean questionLike,
-                                      RuleAssertion rule,
+                                      RuleFrame ruleFrame,
                                       InputFeatures features) {
         java.util.ArrayDeque<QueryGoal> queue = new java.util.ArrayDeque<>();
         java.util.Set<com.sahr.core.QueryKey> seen = new java.util.HashSet<>();
@@ -1964,8 +1963,8 @@ public final class SahrAgent {
                     graph,
                     ontology,
                     current.goalId().equals(root.goalId()) ? statement : null,
-                    current.goalId().equals(root.goalId()) ? rule : null,
                     null,
+                    current.goalId().equals(root.goalId()) ? ruleFrame : null,
                     workingMemory,
                     features,
                     semanticNormalizer
@@ -3018,17 +3017,17 @@ public final class SahrAgent {
         workingMemory.recordAnswer(key, answer);
     }
 
-    private RuleStatement mapRuleStatement(RuleStatement rule) {
+    private RuleFrame mapRuleStatement(RuleStatement rule) {
         Statement antecedent = mapStatement(rule.antecedent());
         Statement consequent = mapStatement(rule.consequent());
-        return new RuleStatement(antecedent, consequent, rule.confidence());
-    }
-
-    private RuleAssertion toRuleAssertion(RuleStatement rule) {
-        RelationAssertion antecedent = statementToAssertion(rule.antecedent());
-        RelationAssertion consequent = statementToAssertion(rule.consequent());
-        double confidence = averageConfidence(antecedent.confidence(), consequent.confidence());
-        return new RuleAssertion(antecedent, consequent, confidence);
+        RelationAssertion antecedentAssertion = statementToAssertion(antecedent);
+        RelationAssertion consequentAssertion = statementToAssertion(consequent);
+        double confidence = averageConfidence(antecedentAssertion.confidence(), consequentAssertion.confidence());
+        return RuleFrames.fromLegacyRuleAssertion(new RuleAssertion(
+                antecedentAssertion,
+                consequentAssertion,
+                confidence
+        ));
     }
 
     private com.sahr.core.RuleFrame mapRuleFrame(com.sahr.core.RuleFrame rule) {
@@ -3058,13 +3057,7 @@ public final class SahrAgent {
         if (rule == null) {
             return false;
         }
-        for (RuleAssertion existing : graph.getAllRules()) {
-            if (rulesEqual(existing, rule)) {
-                return false;
-            }
-        }
-        graph.addRule(rule);
-        return true;
+        return addRuleFrameIfNew(RuleFrames.fromLegacyRuleAssertion(rule));
     }
 
     private boolean addRuleFrameIfNew(com.sahr.core.RuleFrame rule) {

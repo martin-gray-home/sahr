@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuleDerivationServiceTest {
     @Test
-    void derivesLegacyRuleAssertions() {
+    void derivesLegacyRuleAssertionsViaSharedRuleFrames() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         RuleDerivationService service = new RuleDerivationService();
 
@@ -28,6 +28,9 @@ class RuleDerivationServiceTest {
         );
         graph.addAssertion(antecedent);
         graph.addRule(new RuleAssertion(antecedent, consequent, 0.85));
+
+        assertEquals(1, graph.getAllRuleFrames().size());
+        assertEquals(1, graph.getAllRules().size());
 
         List<RuleDerivation> derivations = service.derive(graph);
 

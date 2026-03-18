@@ -667,6 +667,13 @@ rule-forward-chain heads and by propagation closure inside `SahrAgent`.
 That makes variable binding, antecedent matching, consequent
 instantiation, and rule evidence assembly a single execution seam rather
 than duplicated logic in multiple layers.
+Legacy single-antecedent `RuleAssertion` storage now collapses onto that
+same seam: `KnowledgeBase.addRule(...)` stores a compatibility
+`RuleFrame`, legacy rule parsing is normalized into `RuleFrame` before
+head dispatch, and `KnowledgeBase.getAllRules()` is now just a temporary
+adapter view over legacy-compatible ground `RuleFrame` entries. That
+keeps old explanation/search code working while the canonical rule model
+is now shared-frame-first rather than dual-stored.
 Statement ingestion now triggers the propagation closure so newly added
 facts immediately fire rule-forward-chain assertions.
 Yes/no attribute questions (e.g., "Is the hat green") now normalize to

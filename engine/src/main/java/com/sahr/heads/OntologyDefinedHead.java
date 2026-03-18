@@ -472,22 +472,6 @@ public final class OntologyDefinedHead extends BaseHead {
 
         @Override
         public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
-            java.util.Optional<com.sahr.core.RuleAssertion> rule = context.rule();
-            if (rule.isPresent()) {
-                Map<String, Double> breakdown = new HashMap<>();
-                breakdown.put("rule_confidence", rule.get().confidence());
-                addPolicyBreakdown(breakdown, context, rule.get().consequent().predicate());
-                double score = Math.min(1.0, rule.get().confidence());
-                return List.of(new ReasoningCandidate(
-                        CandidateType.ASSERTION,
-                        rule.get(),
-                        score,
-                        definition.name(),
-                        List.of(rule.get().toString()),
-                        breakdown,
-                        0
-                ));
-            }
             java.util.Optional<com.sahr.core.RuleFrame> ruleFrame = context.ruleFrame();
             if (ruleFrame.isPresent()) {
                 Map<String, Double> breakdown = new HashMap<>();
