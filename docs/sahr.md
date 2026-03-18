@@ -641,6 +641,10 @@ time.
 WHERE selection now applies an explicit family preference that ranks
 containment and location predicates above surface-contact predicates to
 stabilize location answers when multiple true facts exist.
+Scenario tests now assert the preferred containment/location choice for
+WHERE queries to lock the policy in.
+WHERE rendering now normalizes containment predicates (e.g., `inside`,
+`locatedIn`) to the canonical surface form `in` for stable output.
 Relation queries that target people now return raw entity identifiers
 (e.g., `entity:woman`) instead of English clauses to keep head behavior
 stable while the new query frame path is being adopted. When a relation

@@ -23,40 +23,26 @@ class ComplexSentenceQueryScenarioTest {
 
         assertAnyOf(agent.handle("Where is the dog"),
                 "entity:dog in entity:box",
-                "entity:dog inside entity:box",
-                "entity:red_dog in entity:box",
-                "entity:red_dog inside entity:box");
+                "entity:red_dog in entity:box");
         assertAnyOf(agent.handle("Where is the box"),
-                "entity:box in entity:room",
-                "entity:box inside entity:room");
+                "entity:box in entity:room");
         assertAnyOf(agent.handle("Where is the cat"),
-                "entity:cat in entity:box",
                 "entity:cat in entity:room",
-                "entity:cat under entity:table",
-                "entity:cat inside entity:room",
-                "entity:black_cat in entity:box",
-                "entity:black_cat inside entity:box",
-                "entity:black_cat under entity:table",
-                "No candidates produced.");
+                "entity:black_cat in entity:room");
         assertAnyOf(agent.handle("Where is the table"),
                 "entity:table in entity:room",
-                "entity:table inside entity:room",
-                "entity:table in entity:box",
-                "entity:table inside entity:box");
+                "entity:table in entity:box");
         assertAnyOf(agent.handle("Where is the woman"),
                 "entity:woman on entity:chair",
-                "entity:woman in entity:room",
-                "entity:woman inside entity:room");
+                "entity:woman in entity:room");
         assertAnyOf(agent.handle("Where is the man"),
                 "entity:man in entity:room",
-                "entity:man inside entity:room",
                 "entity:man on entity:hat",
                 "entity:man wear entity:hat");
         assertAnyOf(agent.handle("Where is the hat"),
                 "entity:hat on entity:man",
                 "entity:hat under entity:man",
-                "entity:hat in entity:room",
-                "entity:hat inside entity:room");
+                "entity:hat in entity:room");
 
         assertAnyOf(agent.handle("Who is with the dog"),
                 "entity:cat",

@@ -95,7 +95,7 @@ class ReasoningScenarioSuiteTest {
         assertEquals("Assertion recorded.", agent.handle("The woman is with the man"));
         String answer = agent.handle("Where is the woman");
         boolean ok = "entity:woman in entity:room".equals(answer)
-                || "entity:woman inside entity:room".equals(answer);
+                || "entity:woman in entity:room".equals(answer);
         assertTrue(ok, "Unexpected location answer: " + answer);
     }
 
