@@ -1866,7 +1866,7 @@ public final class SahrAgent {
             case COUNT -> String.valueOf(result.count());
             case EXISTS -> formatYesNoResult(query, result);
             default -> result.bindings().isEmpty()
-                    ? "No candidates produced."
+                    ? formatFactResult(result)
                     : result.bindings().get(0).answer().value();
         };
     }
@@ -1890,6 +1890,28 @@ public final class SahrAgent {
         }
         predicateText = normalizePredicateText(predicateText);
         return "Yes, " + subjectText + " " + predicateText + " " + objectText;
+    }
+
+    private String formatFactResult(QueryResult result) {
+        if (result == null || result.facts().isEmpty()) {
+            return "No candidates produced.";
+        }
+        RelationAssertion fact = result.facts().get(0);
+        return formatFactTriple(fact);
+    }
+
+    private String formatFactTriple(RelationAssertion fact) {
+        if (fact == null) {
+            return "No candidates produced.";
+        }
+        String predicate = localName(fact.predicate());
+        if (predicate.isBlank()) {
+            predicate = fact.predicate();
+        }
+        if ("inside".equals(predicate) || "locatedin".equals(predicate)) {
+            predicate = "in";
+        }
+        return fact.subject().value() + " " + predicate + " " + fact.object().value();
     }
 
     private String normalizePredicateText(String predicateText) {
@@ -2941,20 +2963,34 @@ public final class SahrAgent {
     }
 
     private void applyAnswerAsAssertion(Object payload) {
-        if (!(payload instanceof String)) {
+        RelationAssertion assertion = null;
+        if (payload instanceof String) {
+            String text = ((String) payload).trim();
+            String[] parts = text.split("\\s+");
+            if (parts.length < 3) {
+                return;
+            }
+            assertion = new RelationAssertion(
+                    new SymbolId(parts[0]),
+                    parts[1],
+                    new SymbolId(parts[2]),
+                    0.8
+            );
+        } else if (payload instanceof QueryResult) {
+            QueryResult result = (QueryResult) payload;
+            if (!result.facts().isEmpty()) {
+                RelationAssertion fact = result.facts().get(0);
+                assertion = new RelationAssertion(
+                        fact.subject(),
+                        fact.predicate(),
+                        fact.object(),
+                        fact.confidence()
+                );
+            }
+        }
+        if (assertion == null) {
             return;
         }
-        String text = ((String) payload).trim();
-        String[] parts = text.split("\\s+");
-        if (parts.length < 3) {
-            return;
-        }
-        RelationAssertion assertion = new RelationAssertion(
-                new SymbolId(parts[0]),
-                parts[1],
-                new SymbolId(parts[2]),
-                0.8
-        );
         AssertionRecord record = buildAssertionRecord(
                 assertion.subject(),
                 assertion.predicate(),

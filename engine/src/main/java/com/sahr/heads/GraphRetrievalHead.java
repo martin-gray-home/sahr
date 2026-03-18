@@ -117,11 +117,16 @@ public final class GraphRetrievalHead extends BaseHead {
                     containmentPredicates, locationPredicates, expandedCoLocation);
             annotatePolicyBreakdown(breakdown, ontology, assertion.predicate(), inversePolicyApplied);
 
-            String answer = assertion.subject() + " " + displayPredicate(assertion.predicate()) + " " + assertion.object();
-
             candidates.add(new ReasoningCandidate(
                     CandidateType.ANSWER,
-                    answer,
+                    new com.sahr.core.QueryResult(
+                            com.sahr.core.QueryOperator.RETRIEVE,
+                            List.of(),
+                            0L,
+                            true,
+                            List.of(assertion.toString()),
+                            List.of(assertion)
+                    ),
                     score,
                     getName(),
                     List.of(assertion.toString()),
@@ -172,11 +177,23 @@ public final class GraphRetrievalHead extends BaseHead {
                         containmentPredicates, locationPredicates, expandedCoLocation);
                 annotatePolicyBreakdown(breakdown, ontology, path.get(path.size() - 1).predicate(), inversePolicyApplied);
 
-                String answer = assertion.subject() + " " + displayPredicate(path.get(path.size() - 1).predicate()) + " " + terminal;
+                RelationAssertion inferred = new RelationAssertion(
+                        assertion.subject(),
+                        path.get(path.size() - 1).predicate(),
+                        terminal,
+                        depthAdjusted
+                );
 
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ANSWER,
-                        answer,
+                        new com.sahr.core.QueryResult(
+                                com.sahr.core.QueryOperator.RETRIEVE,
+                                List.of(),
+                                0L,
+                                true,
+                                buildEvidence(path),
+                                List.of(inferred)
+                        ),
                         score,
                         getName(),
                         buildEvidence(path),
@@ -235,10 +252,22 @@ public final class GraphRetrievalHead extends BaseHead {
                         containmentPredicates, locationPredicates, expandedCoLocation);
                 annotatePolicyBreakdown(breakdown, ontology, location.predicate(), inversePolicyApplied);
 
-                String answer = inferredSubject + " " + displayPredicate(location.predicate()) + " " + location.object();
+                RelationAssertion inferred = new RelationAssertion(
+                        inferredSubject,
+                        location.predicate(),
+                        location.object(),
+                        Math.max(0.0, graphConfidence - colocationPenalty)
+                );
                 candidates.add(new ReasoningCandidate(
                         CandidateType.ANSWER,
-                        answer,
+                        new com.sahr.core.QueryResult(
+                                com.sahr.core.QueryOperator.RETRIEVE,
+                                List.of(),
+                                0L,
+                                true,
+                                List.of(relation.toString(), location.toString()),
+                                List.of(inferred)
+                        ),
                         score,
                         getName(),
                         List.of(relation.toString(), location.toString()),

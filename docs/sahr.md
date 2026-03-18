@@ -634,6 +634,10 @@ but must not perform operator semantics, graph traversal for these modes,
 result filtering, or natural-language shaping.
 Invariant: natural-language rendering of `QueryResult` belongs in
 `SahrAgent` (or a dedicated renderer), never in heads.
+WHERE-style heads (graph retrieval, alignment) now return structured
+facts (`RelationAssertion`) inside `QueryResult` instead of building
+surface strings; predicate display labels are resolved only at render
+time.
 Relation queries that target people now return raw entity identifiers
 (e.g., `entity:woman`) instead of English clauses to keep head behavior
 stable while the new query frame path is being adopted. When a relation

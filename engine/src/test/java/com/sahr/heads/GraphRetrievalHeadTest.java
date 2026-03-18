@@ -4,6 +4,7 @@ import com.sahr.core.HeadContext;
 import com.sahr.core.InMemoryKnowledgeBase;
 import com.sahr.core.OntologyService;
 import com.sahr.core.QueryGoal;
+import com.sahr.core.QueryResult;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
@@ -51,9 +52,16 @@ class GraphRetrievalHeadTest {
                 new WorkingMemory()
         ));
 
-        assertTrue(candidates.stream().anyMatch(candidate ->
-                "entity:apple inside entity:basket".equals(candidate.payload())
-                        || "entity:apple in entity:basket".equals(candidate.payload())));
+        assertTrue(candidates.stream().anyMatch(candidate -> {
+            if (!(candidate.payload() instanceof QueryResult result)) {
+                return false;
+            }
+            return result.facts().stream().anyMatch(fact ->
+                    "entity:apple".equals(fact.subject().value())
+                            && "entity:basket".equals(fact.object().value())
+                            && ("inside".equals(localName(fact.predicate()))
+                            || "in".equals(localName(fact.predicate()))));
+        }));
     }
 
     @Test
@@ -85,6 +93,16 @@ class GraphRetrievalHeadTest {
         assertTrue(candidates.stream().anyMatch(candidate ->
                 candidate.scoreBreakdown() != null
                         && candidate.scoreBreakdown().containsKey("policy_rule_inverse")));
+    }
+
+    private static String localName(String predicate) {
+        if (predicate == null) {
+            return "";
+        }
+        int hashIdx = predicate.lastIndexOf('#');
+        int slashIdx = predicate.lastIndexOf('/');
+        int idx = Math.max(hashIdx, slashIdx);
+        return (idx >= 0 ? predicate.substring(idx + 1) : predicate).toLowerCase(java.util.Locale.ROOT);
     }
 
     private static final class PolicyStubOntology implements OntologyService, PropertyPolicyProvider {

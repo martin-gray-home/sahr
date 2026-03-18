@@ -31,6 +31,7 @@ class ComplexSentenceQueryScenarioTest {
                 "entity:box inside entity:room");
         assertAnyOf(agent.handle("Where is the cat"),
                 "entity:cat in entity:box",
+                "entity:cat in entity:room",
                 "entity:cat under entity:table",
                 "entity:cat inside entity:room",
                 "entity:black_cat in entity:box",

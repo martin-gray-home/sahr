@@ -76,11 +76,16 @@ public final class QueryAlignmentHead extends BaseHead {
                 breakdown.put(policySignal.ruleKey(), 1.0);
             }
 
-            String answer = assertion.subject() + " " + displayPredicate(assertion.predicate()) + " " + assertion.object();
-
             candidates.add(new ReasoningCandidate(
                     CandidateType.ANSWER,
-                    answer,
+                    new com.sahr.core.QueryResult(
+                            com.sahr.core.QueryOperator.RETRIEVE,
+                            List.of(),
+                            0L,
+                            true,
+                            List.of(assertion.toString()),
+                            List.of(assertion)
+                    ),
                     score,
                     getName(),
                     List.of(assertion.toString()),
