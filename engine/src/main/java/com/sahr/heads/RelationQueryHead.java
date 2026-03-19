@@ -14,7 +14,6 @@ import com.sahr.core.QueryResult;
 import com.sahr.core.PredicateResolver;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.SymbolId;
-import com.sahr.core.WorkingMemory;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
 import com.sahr.semantic.model.InferencePolicyStrength;
 
@@ -78,7 +77,6 @@ public final class RelationQueryHead extends BaseHead {
         OntologyService ontology = context.ontology();
         String expectedType = canonicalExpectedType(ontology, query.expectedType());
         KnowledgeBase graph = context.graph();
-        WorkingMemory memory = context.workingMemory();
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         SymbolId subject = subjectBinding == null || subjectBinding.isBlank() ? null : new SymbolId(subjectBinding);
         SymbolId object = objectBinding == null || objectBinding.isBlank() ? null : new SymbolId(objectBinding);
@@ -140,14 +138,12 @@ public final class RelationQueryHead extends BaseHead {
             double queryMatch = queryMatchScore(binding.matchType(), binding.policyStrength());
             double typeMatch = expectedType == null ? 0.5 : 1.0;
             double graphConfidence = binding.confidence();
-            double memoryFocus = memoryFocus(memory, subject, object, answer);
-            double score = normalize(queryMatch, typeMatch, graphConfidence, memoryFocus);
+            double score = normalize(queryMatch, typeMatch, graphConfidence);
 
             Map<String, Double> breakdown = new HashMap<>();
             breakdown.put("query_match", queryMatch);
             breakdown.put("entity_type_match", typeMatch);
             breakdown.put("graph_confidence", graphConfidence);
-            breakdown.put("working_memory_focus", memoryFocus);
             policyStrengthScore(binding.policyStrength()).ifPresent(value -> {
                 breakdown.put("policy_strength", value);
                 breakdown.put("policy_applied", 1.0);
@@ -166,23 +162,6 @@ public final class RelationQueryHead extends BaseHead {
         }
 
         return candidates;
-    }
-
-    private double memoryFocus(WorkingMemory memory, SymbolId subject, SymbolId object, SymbolId answer) {
-        if (memory == null) {
-            return 0.6;
-        }
-        double focus = 0.6;
-        if (object != null && memory.isActiveEntity(object)) {
-            focus = Math.max(focus, 0.8);
-        }
-        if (subject != null && memory.isActiveEntity(subject)) {
-            focus = Math.max(focus, 0.9);
-        }
-        if (memory.isActiveEntity(answer)) {
-            focus = Math.max(focus, 1.0);
-        }
-        return focus;
     }
 
     private String canonicalExpectedType(OntologyService ontology, String expectedType) {

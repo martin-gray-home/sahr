@@ -225,6 +225,12 @@ Current first implementation:
 • keep the signal advisory only: it can reorder equivalent candidates, but it does not change truth, entailment, or rule firing  
 • avoid double-counting by staying neutral for heads that already inject a local working-memory bias until that bias is later consolidated
 
+Current refinement:
+
+• relation, attribute, and where-answer heads should no longer own separate working-memory scoring policy  
+• shared symbolic attention now scores not only answer candidates, but also control candidates such as subgoals, query plans, and assertions  
+• candidate selection applies a small top-k working-set focus before softmax so the highest-ranked symbolic hypotheses receive extra attention without hard pruning
+
 Keep hard boundaries:
 
 • scores guide search and ranking  

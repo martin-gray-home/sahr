@@ -85,6 +85,84 @@ class SymbolicAttentionScorerTest {
     }
 
     @Test
+    void scoresAttributeAnswersUsingSharedWorkingMemoryAttention() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
+        SymbolicAttentionScorer scorer = new SymbolicAttentionScorer();
+        WorkingMemory workingMemory = new WorkingMemory();
+
+        SymbolId hat = new SymbolId("entity:hat");
+        workingMemory.addActiveEntity(hat);
+
+        QueryGoal query = QueryGoal.attribute("entity:hat", "color");
+        HeadContext context = new HeadContext(query, graph, ontology, workingMemory);
+
+        ReasoningCandidate focused = new ReasoningCandidate(
+                CandidateType.ANSWER,
+                "green",
+                0.8,
+                "test-head",
+                List.of("entity:hat hasAttribute entity:green"),
+                java.util.Map.of("graph_confidence", 0.8),
+                0
+        );
+        ReasoningCandidate unfocused = new ReasoningCandidate(
+                CandidateType.ANSWER,
+                "green",
+                0.8,
+                "test-head",
+                List.of("entity:coat hasAttribute entity:green"),
+                java.util.Map.of("graph_confidence", 0.8),
+                0
+        );
+
+        SymbolicAttentionScorer.QueryMatchResult focusedMatch = scorer.score(context, focused);
+        SymbolicAttentionScorer.QueryMatchResult unfocusedMatch = scorer.score(context, unfocused);
+
+        assertTrue(focusedMatch.queryMatchScore() > unfocusedMatch.queryMatchScore());
+    }
+
+    @Test
+    void scoresSubgoalCandidatesAgainstGoalStackAndWorkingMemory() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
+        SymbolicAttentionScorer scorer = new SymbolicAttentionScorer();
+        WorkingMemory workingMemory = new WorkingMemory();
+
+        QueryGoal current = QueryGoal.relation("entity:man", "wear", null, null);
+        workingMemory.pushGoal(current);
+        workingMemory.addActiveEntity(new SymbolId("entity:man"));
+
+        HeadContext context = new HeadContext(current, graph, ontology, workingMemory);
+
+        ReasoningCandidate aligned = new ReasoningCandidate(
+                CandidateType.SUBGOAL,
+                QueryGoal.relation("entity:man", "wear", null, null).withParent(current.goalId(), current.depth() + 1),
+                0.7,
+                "test-head",
+                List.of("entity:man wear entity:hat"),
+                java.util.Map.of("query_score", 0.7),
+                1
+        );
+        ReasoningCandidate unrelated = new ReasoningCandidate(
+                CandidateType.SUBGOAL,
+                QueryGoal.relation("entity:woman", "carry", null, null).withParent(current.goalId(), current.depth() + 1),
+                0.7,
+                "test-head",
+                List.of("entity:woman carry entity:box"),
+                java.util.Map.of("query_score", 0.7),
+                1
+        );
+
+        SymbolicAttentionScorer.QueryMatchResult alignedMatch = scorer.score(context, aligned);
+        SymbolicAttentionScorer.QueryMatchResult unrelatedMatch = scorer.score(context, unrelated);
+
+        assertTrue(alignedMatch.queryMatchScore() > unrelatedMatch.queryMatchScore());
+        assertTrue(alignedMatch.breakdown(0.7, 0.7).get("attention_goal_stack_focus")
+                > unrelatedMatch.breakdown(0.7, 0.7).get("attention_goal_stack_focus"));
+    }
+
+    @Test
     void prefersExpectedTypeMatchForRelationAnswers() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
@@ -124,7 +202,7 @@ class SymbolicAttentionScorerTest {
     }
 
     @Test
-    void usesNeutralQueryMatchForNonAnswerCandidates() {
+    void usesNeutralQueryMatchForUnsupportedNonAnswerCandidates() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
         SymbolicAttentionScorer scorer = new SymbolicAttentionScorer();
@@ -133,13 +211,8 @@ class SymbolicAttentionScorerTest {
         HeadContext context = new HeadContext(query, graph, ontology);
 
         ReasoningCandidate assertionCandidate = new ReasoningCandidate(
-                CandidateType.ASSERTION,
-                new RelationAssertion(
-                        new SymbolId("entity:hat"),
-                        "locatedIn",
-                        new SymbolId("entity:room"),
-                        0.9
-                ),
+                CandidateType.ACTION,
+                "look",
                 0.7,
                 "test-head",
                 List.of("entity:hat locatedIn entity:room"),

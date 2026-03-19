@@ -23,7 +23,7 @@ public final class SymbolicAttentionScorer {
             return QueryMatchResult.neutral(1.0);
         }
         if (candidate.type() != CandidateType.ANSWER) {
-            return QueryMatchResult.neutral(NEUTRAL_QUERY_MATCH);
+            return scoreControlCandidate(context, candidate, query);
         }
 
         switch (query.type()) {
@@ -33,9 +33,24 @@ public final class SymbolicAttentionScorer {
                 return scoreRelation(context, candidate, query);
             case YESNO:
                 return QueryMatchResult.full();
+            case ATTRIBUTE:
+                return scoreAttribute(context, candidate, query);
             default:
                 return QueryMatchResult.neutral(NEUTRAL_QUERY_MATCH);
         }
+    }
+
+    private QueryMatchResult scoreControlCandidate(HeadContext context, ReasoningCandidate candidate, QueryGoal query) {
+        if (candidate.type() != CandidateType.SUBGOAL
+                && candidate.type() != CandidateType.QUERY_PLAN
+                && candidate.type() != CandidateType.ASSERTION) {
+            return QueryMatchResult.neutral(NEUTRAL_QUERY_MATCH);
+        }
+        WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus = workingMemoryAttentionScorer.score(context, candidate);
+        double entityMatch = matchControlEntities(candidate, query);
+        double relationMatch = matchControlPredicate(context, candidate, query);
+        double typeMatch = candidate.type() == CandidateType.QUERY_PLAN ? 1.0 : 0.9;
+        return QueryMatchResult.of(entityMatch, relationMatch, typeMatch, memoryFocus);
     }
 
     private QueryMatchResult scoreWhere(HeadContext context, ReasoningCandidate candidate, QueryGoal query) {
@@ -68,11 +83,150 @@ public final class SymbolicAttentionScorer {
         return QueryMatchResult.of(entityMatch, relationMatch.score(), typeMatch, memoryFocus, relationMatch.policy());
     }
 
+    private QueryMatchResult scoreAttribute(HeadContext context, ReasoningCandidate candidate, QueryGoal query) {
+        Optional<Triple> triple = extractTripleFromEvidence(candidate);
+        if (triple.isEmpty()) {
+            return QueryMatchResult.neutral(NEUTRAL_QUERY_MATCH);
+        }
+        double entityMatch = query.subject() != null && query.subject().equals(triple.get().subject) ? 1.0 : DEFAULT_ENTITY_MATCH;
+        double relationMatch = "hasAttribute".equals(triple.get().predicate) ? 1.0 : DEFAULT_RELATION_MATCH;
+        WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus = memoryFocus(context, candidate);
+        return QueryMatchResult.of(entityMatch, relationMatch, 1.0, memoryFocus);
+    }
+
     private WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus(HeadContext context, ReasoningCandidate candidate) {
         if (candidate.scoreBreakdown().containsKey("working_memory_focus")) {
             return WorkingMemoryAttentionScorer.MemoryFocusResult.neutral();
         }
         return workingMemoryAttentionScorer.score(context, candidate);
+    }
+
+    private double matchControlEntities(ReasoningCandidate candidate, QueryGoal query) {
+        if (query == null) {
+            return DEFAULT_ENTITY_MATCH;
+        }
+        Set<String> expected = new HashSet<>();
+        if (query.subject() != null && !query.subject().isBlank()) {
+            expected.add(query.subject());
+        }
+        if (query.object() != null && !query.object().isBlank()) {
+            expected.add(query.object());
+        }
+        if (expected.isEmpty()) {
+            return DEFAULT_ENTITY_MATCH;
+        }
+        Set<String> found = extractCandidateEntityIds(candidate);
+        if (found.isEmpty()) {
+            return DEFAULT_ENTITY_MATCH;
+        }
+        for (String value : expected) {
+            if (found.contains(value)) {
+                return 1.0;
+            }
+        }
+        return 0.6;
+    }
+
+    private double matchControlPredicate(HeadContext context, ReasoningCandidate candidate, QueryGoal query) {
+        String expectedPredicate = query == null ? null : query.predicate();
+        Set<String> predicates = extractCandidatePredicates(candidate);
+        if (predicates.isEmpty()) {
+            return DEFAULT_RELATION_MATCH;
+        }
+        if (expectedPredicate == null || expectedPredicate.isBlank()) {
+            if (query != null && query.type() == QueryGoal.Type.WHERE) {
+                for (String predicate : predicates) {
+                    if (isLocationPredicate(context.ontology(), predicate)) {
+                        return 1.0;
+                    }
+                }
+            }
+            return DEFAULT_RELATION_MATCH;
+        }
+        for (String predicate : predicates) {
+            if (predicate.equals(expectedPredicate)) {
+                return 1.0;
+            }
+        }
+        return 0.7;
+    }
+
+    private Set<String> extractCandidateEntityIds(ReasoningCandidate candidate) {
+        Set<String> entities = new HashSet<>();
+        if (candidate.payload() instanceof RelationAssertion assertion) {
+            entities.add(assertion.subject().value());
+            entities.add(assertion.object().value());
+        }
+        if (candidate.payload() instanceof QueryGoal goal) {
+            if (goal.subject() != null && !goal.subject().isBlank()) {
+                entities.add(goal.subject());
+            }
+            if (goal.object() != null && !goal.object().isBlank()) {
+                entities.add(goal.object());
+            }
+        }
+        if (candidate.payload() instanceof QueryPlan plan) {
+            if (plan.goal().subject() != null && !plan.goal().subject().isBlank()) {
+                entities.add(plan.goal().subject());
+            }
+            if (plan.goal().object() != null && !plan.goal().object().isBlank()) {
+                entities.add(plan.goal().object());
+            }
+        }
+        if (candidate.payload() instanceof RuleFrame ruleFrame) {
+            collectRuleFrameEntities(ruleFrame, entities);
+        }
+        parseEvidenceTriples(candidate, (subject, predicate, object) -> {
+            entities.add(subject);
+            entities.add(object);
+        });
+        return entities;
+    }
+
+    private Set<String> extractCandidatePredicates(ReasoningCandidate candidate) {
+        Set<String> predicates = new HashSet<>();
+        if (candidate.payload() instanceof RelationAssertion assertion) {
+            predicates.add(assertion.predicate());
+        }
+        if (candidate.payload() instanceof QueryGoal goal && goal.predicate() != null && !goal.predicate().isBlank()) {
+            predicates.add(goal.predicate());
+        }
+        if (candidate.payload() instanceof QueryPlan plan
+                && plan.goal().predicate() != null
+                && !plan.goal().predicate().isBlank()) {
+            predicates.add(plan.goal().predicate());
+        }
+        if (candidate.payload() instanceof RuleFrame ruleFrame) {
+            for (RuleAtom atom : ruleFrame.antecedents()) {
+                predicates.add(atom.predicate());
+            }
+            predicates.add(ruleFrame.consequent().predicate());
+        }
+        parseEvidenceTriples(candidate, (subject, predicate, object) -> predicates.add(predicate));
+        return predicates;
+    }
+
+    private void collectRuleFrameEntities(RuleFrame ruleFrame, Set<String> entities) {
+        for (RuleAtom atom : ruleFrame.antecedents()) {
+            if (!atom.subject().isVariable()) {
+                entities.add(atom.subject().value());
+            }
+            if (!atom.object().isVariable()) {
+                entities.add(atom.object().value());
+            }
+        }
+        if (!ruleFrame.consequent().subject().isVariable()) {
+            entities.add(ruleFrame.consequent().subject().value());
+        }
+        if (!ruleFrame.consequent().object().isVariable()) {
+            entities.add(ruleFrame.consequent().object().value());
+        }
+    }
+
+    private void parseEvidenceTriples(ReasoningCandidate candidate, TripleConsumer consumer) {
+        for (String evidence : candidate.evidence()) {
+            parseTriple(evidence).ifPresent(triple -> consumer.accept(triple.subject, triple.predicate, triple.object));
+        }
     }
 
     private double matchEntityType(KnowledgeBase graph, OntologyService ontology, String subject, String requestedType) {
@@ -360,6 +514,7 @@ public final class SymbolicAttentionScorer {
         private final double workingMemoryFocus;
         private final double activeEntityFocus;
         private final double recentAssertionFocus;
+        private final double goalStackFocus;
         private final double queryMatchScore;
         private final PolicySignal policySignal;
 
@@ -377,6 +532,7 @@ public final class SymbolicAttentionScorer {
             this.workingMemoryFocus = clamp(safeFocus.focus());
             this.activeEntityFocus = clamp(safeFocus.activeEntityFocus());
             this.recentAssertionFocus = clamp(safeFocus.recentAssertionFocus());
+            this.goalStackFocus = clamp(safeFocus.goalStackFocus());
             this.queryMatchScore = clamp(this.entityMatch * this.relationMatch * this.typeMatch * this.workingMemoryFocus);
             this.policySignal = policySignal;
         }
@@ -438,6 +594,7 @@ public final class SymbolicAttentionScorer {
             breakdown.put("attention_working_memory_focus", workingMemoryFocus);
             breakdown.put("attention_active_entity_focus", activeEntityFocus);
             breakdown.put("attention_recent_assertion_focus", recentAssertionFocus);
+            breakdown.put("attention_goal_stack_focus", goalStackFocus);
             breakdown.put("attention_query_match", queryMatchScore);
             breakdown.put("attention_head_score", headScore);
             breakdown.put("attention_final_score", finalScore);
@@ -476,5 +633,10 @@ public final class SymbolicAttentionScorer {
     }
 
     private record PolicySignal(String ruleKey, double score) {
+    }
+
+    @FunctionalInterface
+    private interface TripleConsumer {
+        void accept(String subject, String predicate, String object);
     }
 }

@@ -105,4 +105,47 @@ class SahrReasonerAttentionTest {
         assertEquals("hat", results.get(0).payload());
         assertTrue(results.get(0).score() > results.get(1).score());
     }
+
+    @Test
+    void topKWorkingSetFocusAnnotatesOnlyHighestRankedCandidates() {
+        SymbolicAttentionHead head = new SymbolicAttentionHead() {
+            @Override
+            public String getName() {
+                return "test-head";
+            }
+
+            @Override
+            public List<ReasoningCandidate> evaluate(HeadContext context) {
+                return List.of(
+                        candidate("a", 0.90),
+                        candidate("b", 0.85),
+                        candidate("c", 0.80),
+                        candidate("d", 0.75),
+                        candidate("e", 0.70),
+                        candidate("f", 0.65)
+                );
+            }
+
+            private ReasoningCandidate candidate(String payload, double score) {
+                return new ReasoningCandidate(
+                        CandidateType.ANSWER,
+                        payload,
+                        score,
+                        getName(),
+                        List.of("entity:" + payload + " locatedIn entity:room"),
+                        Map.of("graph_confidence", score),
+                        0
+                );
+            }
+        };
+
+        SahrReasoner reasoner = new SahrReasoner(List.of(head));
+        HeadContext context = new HeadContext(QueryGoal.unknown(), new InMemoryKnowledgeBase(), HeadOntologyTestSupport.createPolicyOntology());
+
+        List<ReasoningCandidate> results = reasoner.reason(context);
+
+        assertTrue(results.get(0).scoreBreakdown().containsKey("attention_working_set_focus"));
+        assertTrue(results.get(4).scoreBreakdown().containsKey("attention_working_set_focus"));
+        assertTrue(!results.get(5).scoreBreakdown().containsKey("attention_working_set_focus"));
+    }
 }

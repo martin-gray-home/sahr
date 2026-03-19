@@ -8,10 +8,13 @@ import java.util.Optional;
 
 final class CandidateSelector {
     private static final String ONTOLOGY_SUPPORT_KEY = "ontology_support";
+    private static final int WORKING_SET_SIZE = 5;
+    private static final double WORKING_SET_BONUS_MAX = 0.05;
 
     List<ReasoningCandidate> rank(HeadContext context, List<ReasoningCandidate> candidates) {
         List<ReasoningCandidate> filtered = filterDiscourseExclusions(context, candidates);
-        List<ReasoningCandidate> normalized = applySoftmax(filtered);
+        List<ReasoningCandidate> focused = applyWorkingSetFocus(filtered);
+        List<ReasoningCandidate> normalized = applySoftmax(focused);
         normalized.sort(candidateComparator());
         return normalized;
     }
@@ -31,6 +34,39 @@ final class CandidateSelector {
                 .thenComparingInt(candidate -> candidate.evidence().size()).reversed()
                 .thenComparingInt(ReasoningCandidate::inferenceDepth)
                 .thenComparing(ReasoningCandidate::producedBy);
+    }
+
+    private List<ReasoningCandidate> applyWorkingSetFocus(List<ReasoningCandidate> candidates) {
+        if (candidates.size() <= 1) {
+            return candidates;
+        }
+        List<IndexedCandidate> ranked = new ArrayList<>(candidates.size());
+        for (int i = 0; i < candidates.size(); i++) {
+            ranked.add(new IndexedCandidate(i, candidates.get(i)));
+        }
+        ranked.sort((left, right) -> candidateComparator().compare(left.candidate, right.candidate));
+
+        double[] focusByIndex = new double[candidates.size()];
+        for (int rank = 0; rank < ranked.size() && rank < WORKING_SET_SIZE; rank++) {
+            focusByIndex[ranked.get(rank).index] = clamp(1.0 - (rank * 0.2));
+        }
+
+        List<ReasoningCandidate> focused = new ArrayList<>(candidates.size());
+        for (int i = 0; i < candidates.size(); i++) {
+            ReasoningCandidate candidate = candidates.get(i);
+            double focus = focusByIndex[i];
+            if (focus == 0.0) {
+                focused.add(candidate);
+                continue;
+            }
+            double adjustedScore = clamp(candidate.score() + (WORKING_SET_BONUS_MAX * focus));
+            Map<String, Double> extra = new java.util.HashMap<>(candidate.scoreBreakdown());
+            extra.put("attention_pre_working_set_score", candidate.score());
+            extra.put("attention_working_set_focus", focus);
+            extra.put("attention_working_set_bonus", WORKING_SET_BONUS_MAX * focus);
+            focused.add(candidate.withAttentionScores(candidate.queryMatchScore(), adjustedScore, extra));
+        }
+        return focused;
     }
 
     private List<ReasoningCandidate> applySoftmax(List<ReasoningCandidate> candidates) {
@@ -105,5 +141,8 @@ final class CandidateSelector {
             return 1.0;
         }
         return value;
+    }
+
+    private record IndexedCandidate(int index, ReasoningCandidate candidate) {
     }
 }

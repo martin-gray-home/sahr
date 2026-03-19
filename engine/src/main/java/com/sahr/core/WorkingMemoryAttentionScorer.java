@@ -19,9 +19,10 @@ final class WorkingMemoryAttentionScorer {
         CandidateSignal signal = CandidateSignal.from(candidate);
         double activeEntityFocus = scoreActiveEntities(memory.activeEntityOrder(), signal.entities());
         double recentAssertionFocus = scoreRecentAssertions(memory.recentAssertions(), signal);
-        double strongestSignal = Math.max(activeEntityFocus, recentAssertionFocus);
+        double goalStackFocus = scoreGoalStack(memory.goalStack(), signal);
+        double strongestSignal = Math.max(activeEntityFocus, Math.max(recentAssertionFocus, goalStackFocus));
         double focus = BASELINE_MEMORY_FOCUS + ((1.0 - BASELINE_MEMORY_FOCUS) * strongestSignal);
-        return new MemoryFocusResult(clamp(focus), activeEntityFocus, recentAssertionFocus);
+        return new MemoryFocusResult(clamp(focus), activeEntityFocus, recentAssertionFocus, goalStackFocus);
     }
 
     private boolean isEmpty(WorkingMemory memory) {
@@ -67,6 +68,33 @@ final class WorkingMemoryAttentionScorer {
         return best;
     }
 
+    private double scoreGoalStack(List<QueryGoal> goalStack, CandidateSignal signal) {
+        if (goalStack == null || goalStack.isEmpty()) {
+            return 0.0;
+        }
+        double best = 0.0;
+        for (int i = 0; i < goalStack.size(); i++) {
+            QueryGoal goal = goalStack.get(i);
+            if (goal == null) {
+                continue;
+            }
+            double recency = 1.0 - Math.min(0.7, i * 0.15);
+            if (signal.goalTypes().contains(goal.type())) {
+                best = Math.max(best, 0.6 * recency);
+            }
+            if (goal.predicate() != null && signal.predicates().contains(goal.predicate())) {
+                best = Math.max(best, 1.0 * recency);
+            }
+            if (goal.subject() != null && signal.entities().contains(new SymbolId(goal.subject()))) {
+                best = Math.max(best, 0.9 * recency);
+            }
+            if (goal.object() != null && signal.entities().contains(new SymbolId(goal.object()))) {
+                best = Math.max(best, 0.85 * recency);
+            }
+        }
+        return clamp(best);
+    }
+
     private double clamp(double value) {
         if (value < 0.0) {
             return 0.0;
@@ -77,9 +105,12 @@ final class WorkingMemoryAttentionScorer {
         return value;
     }
 
-    record MemoryFocusResult(double focus, double activeEntityFocus, double recentAssertionFocus) {
+    record MemoryFocusResult(double focus,
+                             double activeEntityFocus,
+                             double recentAssertionFocus,
+                             double goalStackFocus) {
         static MemoryFocusResult neutral() {
-            return new MemoryFocusResult(NEUTRAL_MEMORY_FOCUS, 0.0, 0.0);
+            return new MemoryFocusResult(NEUTRAL_MEMORY_FOCUS, 0.0, 0.0, 0.0);
         }
     }
 
@@ -87,23 +118,38 @@ final class WorkingMemoryAttentionScorer {
         private final Set<SymbolId> entities;
         private final Set<String> predicates;
         private final Set<String> triples;
+        private final Set<QueryGoal.Type> goalTypes;
 
-        private CandidateSignal(Set<SymbolId> entities, Set<String> predicates, Set<String> triples) {
+        private CandidateSignal(Set<SymbolId> entities,
+                                Set<String> predicates,
+                                Set<String> triples,
+                                Set<QueryGoal.Type> goalTypes) {
             this.entities = entities;
             this.predicates = predicates;
             this.triples = triples;
+            this.goalTypes = goalTypes;
         }
 
         static CandidateSignal from(ReasoningCandidate candidate) {
             Set<SymbolId> entities = new HashSet<>();
             Set<String> predicates = new HashSet<>();
             Set<String> triples = new HashSet<>();
+            Set<QueryGoal.Type> goalTypes = new HashSet<>();
 
             if (candidate.payload() instanceof SymbolId symbolId) {
                 entities.add(symbolId);
             }
             if (candidate.payload() instanceof RelationAssertion assertion) {
                 addAssertion(assertion, entities, predicates, triples);
+            }
+            if (candidate.payload() instanceof QueryGoal goal) {
+                addGoal(goal, entities, predicates, goalTypes);
+            }
+            if (candidate.payload() instanceof QueryPlan plan) {
+                addGoal(plan.goal(), entities, predicates, goalTypes);
+            }
+            if (candidate.payload() instanceof RuleFrame ruleFrame) {
+                addRuleFrame(ruleFrame, entities, predicates);
             }
             if (candidate.payload() instanceof QueryResult result) {
                 for (RelationAssertion fact : result.facts()) {
@@ -140,7 +186,7 @@ final class WorkingMemoryAttentionScorer {
                     triples.add(triple.key());
                 });
             }
-            return new CandidateSignal(Set.copyOf(entities), Set.copyOf(predicates), Set.copyOf(triples));
+            return new CandidateSignal(Set.copyOf(entities), Set.copyOf(predicates), Set.copyOf(triples), Set.copyOf(goalTypes));
         }
 
         Set<SymbolId> entities() {
@@ -149,6 +195,10 @@ final class WorkingMemoryAttentionScorer {
 
         Set<String> predicates() {
             return predicates;
+        }
+
+        Set<QueryGoal.Type> goalTypes() {
+            return goalTypes;
         }
 
         boolean containsTriple(String subject, String predicate, String object) {
@@ -166,6 +216,52 @@ final class WorkingMemoryAttentionScorer {
             entities.add(assertion.object());
             predicates.add(assertion.predicate());
             triples.add(assertion.subject().value() + "|" + assertion.predicate() + "|" + assertion.object().value());
+        }
+
+        private static void addGoal(QueryGoal goal,
+                                    Set<SymbolId> entities,
+                                    Set<String> predicates,
+                                    Set<QueryGoal.Type> goalTypes) {
+            if (goal == null) {
+                return;
+            }
+            goalTypes.add(goal.type());
+            if (goal.subject() != null && !goal.subject().isBlank()) {
+                entities.add(new SymbolId(goal.subject()));
+            }
+            if (goal.object() != null && !goal.object().isBlank()) {
+                entities.add(new SymbolId(goal.object()));
+            }
+            if (goal.predicate() != null && !goal.predicate().isBlank()) {
+                predicates.add(goal.predicate());
+            }
+        }
+
+        private static void addRuleFrame(RuleFrame ruleFrame,
+                                         Set<SymbolId> entities,
+                                         Set<String> predicates) {
+            if (ruleFrame == null) {
+                return;
+            }
+            for (RuleAtom atom : ruleFrame.antecedents()) {
+                addRuleAtom(atom, entities, predicates);
+            }
+            addRuleAtom(ruleFrame.consequent(), entities, predicates);
+        }
+
+        private static void addRuleAtom(RuleAtom atom,
+                                        Set<SymbolId> entities,
+                                        Set<String> predicates) {
+            if (atom == null) {
+                return;
+            }
+            predicates.add(atom.predicate());
+            if (!atom.subject().isVariable()) {
+                entities.add(new SymbolId(atom.subject().value()));
+            }
+            if (!atom.object().isVariable()) {
+                entities.add(new SymbolId(atom.object().value()));
+            }
         }
 
         private static java.util.Optional<Triple> parseTriple(String text) {

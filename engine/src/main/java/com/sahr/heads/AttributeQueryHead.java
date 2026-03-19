@@ -10,7 +10,6 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.RelationAssertion;
 import com.sahr.core.SymbolId;
-import com.sahr.core.WorkingMemory;
 import com.sahr.semantic.model.InferencePolicyStrength;
 
 import java.util.ArrayList;
@@ -41,7 +40,6 @@ public final class AttributeQueryHead extends BaseHead {
         SymbolId subject = new SymbolId(query.subject());
         KnowledgeBase graph = context.graph();
         OntologyService ontology = context.ontology();
-        WorkingMemory memory = context.workingMemory();
         java.util.Set<String> attributePredicates = HeadOntology.expandFamily(ontology, HeadOntology.ATTRIBUTE_RELATION);
         if (attributePredicates.isEmpty()) {
             return List.of();
@@ -49,10 +47,10 @@ public final class AttributeQueryHead extends BaseHead {
         boolean inversePolicyApplied = inversePolicyApplied(ontology, attributePredicates);
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
-        addAttributeCandidates(candidates, graph, subject, attributePredicates, ontology, memory, inversePolicyApplied);
+        addAttributeCandidates(candidates, graph, subject, attributePredicates, ontology, inversePolicyApplied);
         if (candidates.isEmpty() && subject.value().startsWith("entity:")) {
             SymbolId conceptSubject = new SymbolId("concept:" + subject.value().substring("entity:".length()));
-            addAttributeCandidates(candidates, graph, conceptSubject, attributePredicates, ontology, memory, inversePolicyApplied);
+            addAttributeCandidates(candidates, graph, conceptSubject, attributePredicates, ontology, inversePolicyApplied);
         }
         return candidates;
     }
@@ -62,7 +60,6 @@ public final class AttributeQueryHead extends BaseHead {
                                         SymbolId subject,
                                         java.util.Set<String> attributePredicates,
                                         OntologyService ontology,
-                                        WorkingMemory memory,
                                         boolean inversePolicyApplied) {
         for (RelationAssertion assertion : graph.findBySubject(subject)) {
             if (!attributePredicates.contains(assertion.predicate())) {
@@ -70,12 +67,10 @@ public final class AttributeQueryHead extends BaseHead {
             }
             String objectValue = assertion.object().value().replace("entity:", "");
             String answer = objectValue;
-            double memoryFocus = memory != null && memory.isActiveEntity(subject) ? 1.0 : 0.6;
-            double score = normalize(assertion.confidence(), memoryFocus);
+            double score = normalize(assertion.confidence());
 
             Map<String, Double> breakdown = new HashMap<>();
             breakdown.put("graph_confidence", assertion.confidence());
-            breakdown.put("working_memory_focus", memoryFocus);
             annotatePolicyBreakdown(breakdown, ontology, assertion.predicate(), inversePolicyApplied);
 
             candidates.add(new ReasoningCandidate(
