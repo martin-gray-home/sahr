@@ -253,7 +253,9 @@ public final class CommandProcessor {
         List<String> parts = new ArrayList<>();
         for (SymbolicWorkingSet.IncludedAssertion assertion : assertions) {
             parts.add(formatWorkingSetItem(
-                    appendOrigin(assertion.assertion().toString(), agent.describeSegmentOrigin(assertion.assertion())),
+                    appendMetadata(assertion.assertion().toString(),
+                            agent.describeSegmentOrigin(assertion.assertion()),
+                            agent.describeAssertionSupport(assertion.assertion())),
                     assertion.reasons(),
                     assertion.usedByWinner(),
                     assertion.winnerReasons()
@@ -269,7 +271,7 @@ public final class CommandProcessor {
         List<String> parts = new ArrayList<>();
         for (SymbolicWorkingSet.IncludedRule rule : rules) {
             parts.add(formatWorkingSetItem(
-                    appendOrigin(rule.rule().toString(), agent.describeSegmentOrigin(rule.rule())),
+                    appendMetadata(rule.rule().toString(), agent.describeSegmentOrigin(rule.rule())),
                     rule.reasons(),
                     rule.usedByWinner(),
                     rule.winnerReasons()
@@ -294,11 +296,18 @@ public final class CommandProcessor {
         return builder.toString();
     }
 
-    private String appendOrigin(String label, String origin) {
-        if (origin == null || origin.isBlank()) {
-            return label;
+    private String appendMetadata(String label, String... metadata) {
+        StringBuilder builder = new StringBuilder(label);
+        if (metadata == null) {
+            return builder.toString();
         }
-        return label + " " + origin;
+        for (String item : metadata) {
+            if (item == null || item.isBlank()) {
+                continue;
+            }
+            builder.append(" ").append(item);
+        }
+        return builder.toString();
     }
 
     private String formatSegmentOrigin(com.sahr.core.InputSegmentOrigin origin) {

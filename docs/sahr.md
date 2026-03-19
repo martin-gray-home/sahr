@@ -250,6 +250,12 @@ Current visibility step:
 • reasoning trace records which segment produced the final traced query step  
 • `:explain --verbose` surfaces segment origin on evidence and working-set items so compositional reasoning can be reviewed segment-by-segment rather than inferred indirectly
 
+Current derivation-link step:
+
+• rule derivation now preserves supporting assertion ids, not only textual evidence  
+• derived assertion provenance stores those support ids so support graphs can be inspected after propagation  
+• `:explain --verbose` can now show both where evidence came from (segment) and which prior symbolic assertions directly supported a derived result
+
 ## Phase 3. Add Symbolic Attention Over Working Memory
 
 Goal:

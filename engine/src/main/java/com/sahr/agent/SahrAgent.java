@@ -861,6 +861,16 @@ public final class SahrAgent {
                 .orElse("");
     }
 
+    String describeAssertionSupport(RelationAssertion assertion) {
+        if (assertion == null) {
+            return "";
+        }
+        return findAssertionRecord(assertion)
+                .map(AssertionRecord::provenance)
+                .map(this::formatSupportIds)
+                .orElse("");
+    }
+
     String describeSegmentOrigin(RuleFrame rule) {
         if (rule == null) {
             return "";
@@ -884,23 +894,27 @@ public final class SahrAgent {
             return item;
         }
         String segmentOrigin = "";
+        String support = "";
         if (item.startsWith("rule(")) {
             segmentOrigin = formatSegmentOrigin(ruleSegmentOrigins.get(item));
         } else {
             String[] parts = item.trim().split("\\s+");
             if (parts.length >= 3) {
-                segmentOrigin = describeSegmentOrigin(new RelationAssertion(
+                RelationAssertion assertion = new RelationAssertion(
                         new SymbolId(parts[0]),
                         parts[1],
                         new SymbolId(parts[2]),
                         1.0
-                ));
+                );
+                segmentOrigin = describeSegmentOrigin(assertion);
+                support = describeAssertionSupport(assertion);
             }
         }
-        if (segmentOrigin.isBlank()) {
+        String suffix = joinNonBlank(segmentOrigin, support);
+        if (suffix.isBlank()) {
             return item;
         }
-        return item + " " + segmentOrigin;
+        return item + " " + suffix;
     }
 
     private Optional<AssertionRecord> findAssertionRecord(RelationAssertion assertion) {
@@ -923,6 +937,26 @@ public final class SahrAgent {
             return "[segment:" + origin.label() + "]";
         }
         return "[segment:" + origin.label() + " text=\"" + text.replace("\"", "'") + "\"]";
+    }
+
+    private String formatSupportIds(AssertionProvenance provenance) {
+        if (provenance == null || provenance.supportingAssertionIds().isEmpty()) {
+            return "";
+        }
+        return "[supports:" + String.join(",", provenance.supportingAssertionIds()) + "]";
+    }
+
+    private String joinNonBlank(String left, String right) {
+        if ((left == null || left.isBlank()) && (right == null || right.isBlank())) {
+            return "";
+        }
+        if (left == null || left.isBlank()) {
+            return right;
+        }
+        if (right == null || right.isBlank()) {
+            return left;
+        }
+        return left + " " + right;
     }
 
     public void resetWorkingMemory() {
@@ -3533,7 +3567,7 @@ public final class SahrAgent {
                         assertion.object(),
                         assertion.confidence(),
                         AssertionLayer.INFERRED,
-                        buildProvenance(AssertionSource.HEAD, "rule-forward-chain", AssertionMode.DERIVED, null, derivation.evidence())
+                        buildProvenance(AssertionSource.HEAD, "rule-forward-chain", AssertionMode.DERIVED, null, derivation.supportingAssertionIds())
                 );
                 if (addAssertionRecordIfNew(record)) {
                     addedThisRound++;

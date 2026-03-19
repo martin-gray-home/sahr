@@ -2,6 +2,8 @@ package com.sahr.agent;
 
 import com.sahr.core.InMemoryKnowledgeBase;
 import com.sahr.core.QueryGoal;
+import com.sahr.core.AssertionLayer;
+import com.sahr.core.AssertionRecord;
 import com.sahr.core.SymbolId;
 import com.sahr.support.SahrTestAgentFactory;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,13 @@ class MultiSentenceCompositionTest {
                 .anyMatch(assertion -> "entity:hat".equals(assertion.subject().value())
                         && assertion.predicate().toLowerCase().contains("hasattribute")
                         && "concept:green".equals(assertion.object().value())));
+        AssertionRecord derived = graph.getAssertionRecords().stream()
+                .filter(record -> record.layer() == AssertionLayer.INFERRED)
+                .filter(record -> "entity:hat".equals(record.subject().value()))
+                .filter(record -> record.predicate().toLowerCase().contains("hasattribute"))
+                .findFirst()
+                .orElse(null);
+        assertTrue(derived != null && !derived.provenance().supportingAssertionIds().isEmpty());
         assertTrue(agent.lastTraceEntry().isPresent());
         assertNotEquals(QueryGoal.Type.UNKNOWN, agent.lastTraceEntry().orElseThrow().query().type());
     }
@@ -38,6 +47,7 @@ class MultiSentenceCompositionTest {
         String explain = new CommandProcessor(agent).handle(":explain --depth 3 --verbose").output();
         assertTrue(explain.contains("[segment:s3/3"), explain);
         assertTrue(explain.contains("[segment:s2/3"), explain);
+        assertTrue(explain.contains("[supports:"), explain);
         assertTrue(explain.contains("entity:hat in entity:house"), explain);
     }
 

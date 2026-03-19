@@ -57,10 +57,12 @@ public final class RuleDerivationService {
                 evidence.add("binding " + rule.variable() + "=" + binding);
                 evidence.addAll(matchedAntecedentEvidence(rule, binding, graph));
                 evidence.add(rule.toString());
+                List<String> supportingAssertionIds = matchedAntecedentAssertionIds(rule, binding, graph);
                 derivations.add(new RuleDerivation(
                         new RelationAssertion(consequent.subject(), consequent.predicate(), consequent.object(),
                                 Math.min(1.0, (rule.confidence() + evidenceConfidence) / 2.0)),
                         evidence,
+                        supportingAssertionIds,
                         rule.confidence(),
                         evidenceConfidence,
                         2
@@ -230,6 +232,50 @@ public final class RuleDerivationService {
             }
         }
         return evidence;
+    }
+
+    private List<String> matchedAntecedentAssertionIds(RuleFrame rule,
+                                                       SymbolId binding,
+                                                       KnowledgeBase graph) {
+        List<String> ids = new ArrayList<>();
+        for (RuleAtom atom : rule.antecedents()) {
+            AssertionRecord matched = matchedAntecedentRecord(atom, binding, graph);
+            if (matched != null) {
+                ids.add(matched.id());
+            }
+        }
+        return ids;
+    }
+
+    private AssertionRecord matchedAntecedentRecord(RuleAtom atom,
+                                                    SymbolId binding,
+                                                    KnowledgeBase graph) {
+        if (atom == null || graph == null) {
+            return null;
+        }
+        SymbolId subject = resolveTermForFilter(atom.subject(), binding);
+        SymbolId object = resolveTermForFilter(atom.object(), binding);
+        if ("rdf:type".equals(atom.predicate())) {
+            return graph.findAssertionRecords(AssertionFilter.of(subject, atom.predicate(), object, Set.of())).stream()
+                    .findFirst()
+                    .orElse(null);
+        }
+        return graph.findAssertionRecords(AssertionFilter.of(subject, atom.predicate(), object, Set.of())).stream()
+                .findFirst()
+                .orElse(null);
+    }
+
+    private SymbolId resolveTermForFilter(RuleTerm term, SymbolId binding) {
+        if (term == null) {
+            return null;
+        }
+        if (term.isVariable()) {
+            return GROUND_RULE_BINDING.equals(binding) ? null : binding;
+        }
+        if (term.value() == null || term.value().isBlank()) {
+            return null;
+        }
+        return new SymbolId(term.value());
     }
 
     private boolean matchesType(RuleAtom atom, EntityNode entity) {
