@@ -17,4 +17,14 @@ class QuantifiedRuleInsertionTest {
         assertEquals(1, graph.getAllRuleFrames().size());
         assertTrue(graph.getAllAssertions().isEmpty(), "Expected no assertions created from rule insertion.");
     }
+
+    @Test
+    void recordsConditionalRuleFrameWithoutAssertions() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Rule recorded.", agent.handle("If a hat is in the house, then it is green"));
+        assertEquals(1, graph.getAllRuleFrames().size());
+        assertTrue(graph.getAllAssertions().isEmpty(), "Expected no assertions created from rule insertion.");
+    }
 }

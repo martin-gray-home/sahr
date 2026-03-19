@@ -27,4 +27,22 @@ class QuantifiedRuleParserTest {
         assertEquals("hasAttribute", rule.get().consequent().predicate());
         assertEquals("concept:green", rule.get().consequent().object().value());
     }
+
+    @Test
+    void parsesConditionalInAttributeRule() {
+        QuantifiedRuleParser parser = new QuantifiedRuleParser();
+        Optional<RuleFrame> rule = parser.parse("If a hat is in the house, then it is green.");
+
+        assertTrue(rule.isPresent());
+        assertEquals("x", rule.get().variable());
+        assertEquals(2, rule.get().antecedents().size());
+        RuleAtom typeAtom = rule.get().antecedents().get(0);
+        RuleAtom inAtom = rule.get().antecedents().get(1);
+        assertEquals("rdf:type", typeAtom.predicate());
+        assertEquals("concept:hat", typeAtom.object().value());
+        assertEquals("in", inAtom.predicate());
+        assertEquals("entity:house", inAtom.object().value());
+        assertEquals("hasAttribute", rule.get().consequent().predicate());
+        assertEquals("concept:green", rule.get().consequent().object().value());
+    }
 }

@@ -15,6 +15,9 @@ public final class QuantifiedRuleParser {
     private static final Pattern ALL_IN_ARE_PATTERN = Pattern.compile(
             "^all\\s+([a-z0-9_]+)\\s+in\\s+(?:the\\s+)?([a-z0-9_]+)\\s+are\\s+([a-z0-9_]+)$",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONDITIONAL_IN_ATTRIBUTE_PATTERN = Pattern.compile(
+            "^if\\s+(?:a|an|the)\\s+([a-z0-9_]+)\\s+is\\s+in\\s+(?:the\\s+)?([a-z0-9_]+),?\\s+then\\s+(?:it|the\\s+([a-z0-9_]+))\\s+is\\s+([a-z0-9_]+)$",
+            Pattern.CASE_INSENSITIVE);
     private static final Morphology MORPHOLOGY = new Morphology();
 
     private static final String PREDICATE_TYPE = "rdf:type";
@@ -30,19 +33,42 @@ public final class QuantifiedRuleParser {
             return Optional.empty();
         }
         String normalized = trimmed.replaceAll("[\\.!?]+$", "").trim();
+        Optional<RuleFrame> quantified = parseAllInAreRule(normalized);
+        if (quantified.isPresent()) {
+            return quantified;
+        }
+        return parseConditionalInAttributeRule(normalized);
+    }
+
+    private Optional<RuleFrame> parseAllInAreRule(String normalized) {
         Matcher matcher = ALL_IN_ARE_PATTERN.matcher(normalized);
         if (!matcher.matches()) {
             return Optional.empty();
         }
-        String subjectPlural = matcher.group(1);
-        String containerRaw = matcher.group(2);
-        String attributeRaw = matcher.group(3);
-        if (subjectPlural == null || containerRaw == null || attributeRaw == null) {
+        String subject = singularize(matcher.group(1));
+        String container = normalizeToken(matcher.group(2));
+        String attribute = normalizeToken(matcher.group(3));
+        return buildContainmentAttributeRule(subject, container, attribute);
+    }
+
+    private Optional<RuleFrame> parseConditionalInAttributeRule(String normalized) {
+        Matcher matcher = CONDITIONAL_IN_ATTRIBUTE_PATTERN.matcher(normalized);
+        if (!matcher.matches()) {
             return Optional.empty();
         }
-        String subject = singularize(subjectPlural);
-        String container = normalizeToken(containerRaw);
-        String attribute = normalizeToken(attributeRaw);
+        String subject = singularize(matcher.group(1));
+        String repeatedSubject = normalizeToken(matcher.group(3));
+        if (!repeatedSubject.isBlank() && !repeatedSubject.equals(subject)) {
+            return Optional.empty();
+        }
+        String container = normalizeToken(matcher.group(2));
+        String attribute = normalizeToken(matcher.group(4));
+        return buildContainmentAttributeRule(subject, container, attribute);
+    }
+
+    private Optional<RuleFrame> buildContainmentAttributeRule(String subject,
+                                                              String container,
+                                                              String attribute) {
         if (subject.isBlank() || container.isBlank() || attribute.isBlank()) {
             return Optional.empty();
         }

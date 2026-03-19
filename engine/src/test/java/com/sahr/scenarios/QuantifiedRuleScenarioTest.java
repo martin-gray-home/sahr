@@ -43,4 +43,24 @@ class QuantifiedRuleScenarioTest {
         String yesNo = agent.handle("Is the hat green");
         assertTrue(yesNo.startsWith("Yes"), "Expected yes/no confirmation, got: " + yesNo);
     }
+
+    @Test
+    void infersAttributeFromConditionalRuleFrame() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Rule recorded.", agent.handle("If a hat is in the house, then it is green"));
+        assertEquals(1, graph.getAllRuleFrames().size());
+        assertEquals("Assertion recorded.", agent.handle("The hat is in the house"));
+
+        String consequentPredicate = graph.getAllRuleFrames().get(0).consequent().predicate();
+        assertTrue(graph.findByPredicate(consequentPredicate).stream()
+                        .anyMatch(assertion -> "entity:hat".equals(assertion.subject().value())
+                                && "concept:green".equals(assertion.object().value())),
+                "Expected derived hasAttribute assertion after conditional rule forward chaining.");
+        assertEquals("entity:hat", agent.handle("What is green"));
+
+        String yesNo = agent.handle("Is the hat green");
+        assertTrue(yesNo.startsWith("Yes"), "Expected yes/no confirmation, got: " + yesNo);
+    }
 }

@@ -661,6 +661,10 @@ the house are green” into `rdf:type` + `locatedIn` antecedents and a
 frames by matching entity types (not just explicit `rdf:type`
 assertions), emits binding evidence in trace data, and drives the first
 end-to-end scenario for inferred attributes.
+That same canonical rule path now also accepts one narrow conditional
+family: sentences like “if a hat is in the house, then it is green”
+normalize into the same `RuleFrame` rather than creating a separate
+rule-execution path.
 `RuleFrame` execution now runs through a shared core
 `RuleDerivationService`, which is used both by ontology-driven
 rule-forward-chain heads and by propagation closure inside `SahrAgent`.
