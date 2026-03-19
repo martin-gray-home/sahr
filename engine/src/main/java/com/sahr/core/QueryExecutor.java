@@ -3,6 +3,7 @@ package com.sahr.core;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -19,6 +20,29 @@ public final class QueryExecutor {
                                KnowledgeBase graph,
                                OntologyService ontology,
                                SemanticTypeCompatibilityService compatibility) {
+        return execute(frame, graph, graph, ontology, compatibility);
+    }
+
+    public QueryResult execute(QueryFrame frame,
+                               KnowledgeBase graph,
+                               KnowledgeBase focusedGraph,
+                               OntologyService ontology,
+                               SemanticTypeCompatibilityService compatibility) {
+        if (frame == null || graph == null || ontology == null || compatibility == null) {
+            return new QueryResult(QueryOperator.RETRIEVE, List.of(), 0L, false, List.of());
+        }
+        QueryResult focused = executeSingle(frame, focusedGraph == null ? graph : focusedGraph, ontology, compatibility);
+        if (!(focusedGraph instanceof FocusedKnowledgeBase focusedView) || !focusedView.isReduced()) {
+            return focused;
+        }
+        QueryResult full = executeSingle(frame, graph, ontology, compatibility);
+        return merge(frame.operator(), focused, full);
+    }
+
+    private QueryResult executeSingle(QueryFrame frame,
+                                      KnowledgeBase graph,
+                                      OntologyService ontology,
+                                      SemanticTypeCompatibilityService compatibility) {
         if (frame == null || graph == null || ontology == null || compatibility == null) {
             return new QueryResult(QueryOperator.RETRIEVE, List.of(), 0L, false, List.of());
         }
@@ -87,6 +111,45 @@ public final class QueryExecutor {
                     .count();
         }
         return new QueryResult(frame.operator(), bindings, count, exists, evidence);
+    }
+
+    private QueryResult merge(QueryOperator operator, QueryResult focused, QueryResult full) {
+        List<QueryBinding> bindings = new ArrayList<>();
+        Set<String> seenBindings = new HashSet<>();
+        mergeBindings(bindings, seenBindings, focused.bindings());
+        mergeBindings(bindings, seenBindings, full.bindings());
+
+        List<String> evidence = new ArrayList<>();
+        LinkedHashSet<String> seenEvidence = new LinkedHashSet<>();
+        mergeEvidence(evidence, seenEvidence, focused.evidence());
+        mergeEvidence(evidence, seenEvidence, full.evidence());
+
+        boolean exists = !bindings.isEmpty();
+        long count = operator == QueryOperator.COUNT
+                ? bindings.stream().map(binding -> binding.answer().value()).distinct().count()
+                : full.count();
+        return new QueryResult(operator, bindings, count, exists, evidence);
+    }
+
+    private void mergeBindings(List<QueryBinding> bindings, Set<String> seenBindings, List<QueryBinding> source) {
+        for (QueryBinding binding : source) {
+            String key = binding.subject().value()
+                    + "|" + binding.predicate()
+                    + "|" + binding.object().value()
+                    + "|" + binding.answer().value();
+            if (!seenBindings.add(key)) {
+                continue;
+            }
+            bindings.add(binding);
+        }
+    }
+
+    private void mergeEvidence(List<String> evidence, Set<String> seenEvidence, List<String> source) {
+        for (String item : source) {
+            if (seenEvidence.add(item)) {
+                evidence.add(item);
+            }
+        }
     }
 
     private boolean modifierSatisfied(KnowledgeBase graph,

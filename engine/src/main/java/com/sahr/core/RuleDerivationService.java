@@ -15,6 +15,31 @@ public final class RuleDerivationService {
         return deriveRuleFrames(graph);
     }
 
+    public List<RuleDerivation> derive(KnowledgeBase graph, KnowledgeBase focusedGraph) {
+        if (graph == null) {
+            return List.of();
+        }
+        if (!(focusedGraph instanceof FocusedKnowledgeBase focusedView) || !focusedView.isReduced()) {
+            return derive(graph);
+        }
+        List<RuleDerivation> prioritized = deriveRuleFrames(focusedGraph);
+        List<RuleDerivation> complete = deriveRuleFrames(graph);
+        if (prioritized.isEmpty()) {
+            return complete;
+        }
+        List<RuleDerivation> merged = new ArrayList<>(prioritized);
+        Set<String> seen = new LinkedHashSet<>();
+        for (RuleDerivation derivation : prioritized) {
+            seen.add(derivationKey(derivation));
+        }
+        for (RuleDerivation derivation : complete) {
+            if (seen.add(derivationKey(derivation))) {
+                merged.add(derivation);
+            }
+        }
+        return merged;
+    }
+
     private List<RuleDerivation> deriveRuleFrames(KnowledgeBase graph) {
         if (graph.getAllRuleFrames().isEmpty() || graph.getAllAssertions().isEmpty()) {
             return List.of();
@@ -43,6 +68,11 @@ public final class RuleDerivationService {
             }
         }
         return derivations;
+    }
+
+    private String derivationKey(RuleDerivation derivation) {
+        RelationAssertion assertion = derivation.assertion();
+        return assertion.subject().value() + "|" + assertion.predicate() + "|" + assertion.object().value();
     }
 
     private boolean alreadyPresent(RelationAssertion assertion, KnowledgeBase graph) {

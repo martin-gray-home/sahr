@@ -27,6 +27,8 @@ import com.sahr.core.RuleFrame;
 import com.sahr.core.RuleFrames;
 import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
+import com.sahr.core.SymbolicWorkingSet;
+import com.sahr.core.SymbolicWorkingSetBuilder;
 import com.sahr.core.GuardedKnowledgeBase;
 import com.sahr.core.WorkingMemory;
 import com.sahr.core.ReasoningPhase;
@@ -98,6 +100,7 @@ public final class SahrAgent {
     private final AnswerComposer answerComposer;
     private final LanguageCandidateProducer languageCandidateProducer;
     private final RuleDerivationService ruleDerivationService;
+    private final SymbolicWorkingSetBuilder workingSetBuilder;
     private final java.util.concurrent.atomic.AtomicLong assertionSequence = new java.util.concurrent.atomic.AtomicLong();
     private String lastInput;
 
@@ -175,6 +178,7 @@ public final class SahrAgent {
         this.answerRanker = new AnswerRanker(annotationResolver);
         this.answerRealizer = new AnswerRealizer(this::localName);
         this.ruleDerivationService = new RuleDerivationService();
+        this.workingSetBuilder = new SymbolicWorkingSetBuilder();
         this.explanationChains = new ExplanationChainBuilder(
                 this.graph,
                 this.ontology,
@@ -3297,7 +3301,9 @@ public final class SahrAgent {
 
         for (int i = 0; i < MAX_PROPAGATION_ITERATIONS; i++) {
             int addedThisRound = 0;
-            for (RuleDerivation derivation : ruleDerivationService.derive(graph)) {
+            SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
+            KnowledgeBase focusedGraph = workingSet.view();
+            for (RuleDerivation derivation : ruleDerivationService.derive(graph, focusedGraph)) {
                 if (totalAdded >= MAX_DERIVED_ASSERTIONS) {
                     return;
                 }

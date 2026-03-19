@@ -10,6 +10,8 @@ import com.sahr.core.RuleDerivation;
 import com.sahr.core.RuleDerivationService;
 import com.sahr.core.SymbolId;
 import com.sahr.core.PropertyPolicyProvider;
+import com.sahr.core.SymbolicWorkingSetBuilder;
+import com.sahr.core.SymbolicWorkingSet;
 import com.sahr.ontology.SemanticNodeNormalizer;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
 import com.sahr.semantic.model.InferencePolicy;
@@ -494,6 +496,7 @@ public final class OntologyDefinedHead extends BaseHead {
 
     private static final class RuleForwardChainExecutor implements OntologyHeadExecutor {
         private final RuleDerivationService derivationService = new RuleDerivationService();
+        private final SymbolicWorkingSetBuilder workingSetBuilder = new SymbolicWorkingSetBuilder();
 
         @Override
         public String type() {
@@ -503,8 +506,10 @@ public final class OntologyDefinedHead extends BaseHead {
         @Override
         public List<ReasoningCandidate> execute(HeadContext context, OntologyHeadDefinition definition) {
             KnowledgeBase graph = context.graph();
+            SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
+            KnowledgeBase focusedGraph = workingSet.view();
             List<ReasoningCandidate> candidates = new ArrayList<>();
-            for (RuleDerivation derivation : derivationService.derive(graph)) {
+            for (RuleDerivation derivation : derivationService.derive(graph, focusedGraph)) {
                 Map<String, Double> breakdown = new HashMap<>();
                 breakdown.put("rule_confidence", derivation.ruleConfidence());
                 breakdown.put("evidence_confidence", derivation.evidenceConfidence());

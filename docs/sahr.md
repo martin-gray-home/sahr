@@ -231,6 +231,12 @@ Current refinement:
 • shared symbolic attention now scores not only answer candidates, but also control candidates such as subgoals, query plans, and assertions  
 • candidate selection applies a small top-k working-set focus before softmax so the highest-ranked symbolic hypotheses receive extra attention without hard pruning
 
+Current execution step:
+
+• build a focused symbolic read view over entities, assertions, and rules before execution  
+• let `QueryExecutor` and rule derivation consume that focused view explicitly  
+• preserve truth semantics by merging focused results with full-graph results rather than treating focus as hard pruning
+
 Keep hard boundaries:
 
 • scores guide search and ranking  

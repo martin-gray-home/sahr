@@ -14,6 +14,9 @@ import com.sahr.core.QueryResult;
 import com.sahr.core.PredicateResolver;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.SymbolId;
+import com.sahr.core.KnowledgeBase;
+import com.sahr.core.SymbolicWorkingSetBuilder;
+import com.sahr.core.SymbolicWorkingSet;
 import com.sahr.ontology.SemanticTypeCompatibilityService;
 import com.sahr.semantic.model.InferencePolicyStrength;
 
@@ -29,6 +32,7 @@ public final class RelationQueryHead extends BaseHead {
     private final PredicateResolver predicateResolver;
     private final QueryExecutor queryExecutor;
     private final QueryNormalizer queryNormalizer;
+    private final SymbolicWorkingSetBuilder workingSetBuilder;
 
     public RelationQueryHead() {
         this(Map.of());
@@ -39,6 +43,7 @@ public final class RelationQueryHead extends BaseHead {
         this.predicateResolver = new PredicateResolver(this.predicateAliases);
         this.queryExecutor = new QueryExecutor(predicateResolver);
         this.queryNormalizer = new QueryNormalizer();
+        this.workingSetBuilder = new SymbolicWorkingSetBuilder();
     }
 
     @Override
@@ -77,13 +82,15 @@ public final class RelationQueryHead extends BaseHead {
         OntologyService ontology = context.ontology();
         String expectedType = canonicalExpectedType(ontology, query.expectedType());
         KnowledgeBase graph = context.graph();
+        SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
+        KnowledgeBase focusedGraph = workingSet.view();
         SemanticTypeCompatibilityService compatibility = new SemanticTypeCompatibilityService(ontology);
         SymbolId subject = subjectBinding == null || subjectBinding.isBlank() ? null : new SymbolId(subjectBinding);
         SymbolId object = objectBinding == null || objectBinding.isBlank() ? null : new SymbolId(objectBinding);
 
         if (query.type() == QueryGoal.Type.YESNO) {
             QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.EXISTS, expectedType);
-            QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
+            QueryResult result = queryExecutor.execute(frame, graph, focusedGraph, ontology, compatibility);
             if (!result.exists() || result.bindings().isEmpty()) {
                 return List.of();
             }
@@ -114,7 +121,7 @@ public final class RelationQueryHead extends BaseHead {
 
         if (query.type() == QueryGoal.Type.COUNT) {
             QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.COUNT, expectedType);
-            QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
+            QueryResult result = queryExecutor.execute(frame, graph, focusedGraph, ontology, compatibility);
             Map<String, Double> breakdown = new HashMap<>();
             breakdown.put("query_match", 1.0);
             breakdown.put("count", (double) result.count());
@@ -131,7 +138,7 @@ public final class RelationQueryHead extends BaseHead {
 
         List<ReasoningCandidate> candidates = new ArrayList<>();
         QueryFrame frame = queryNormalizer.normalize(query, QueryOperator.RETRIEVE, expectedType);
-        QueryResult result = queryExecutor.execute(frame, graph, ontology, compatibility);
+        QueryResult result = queryExecutor.execute(frame, graph, focusedGraph, ontology, compatibility);
         for (QueryBinding binding : result.bindings()) {
             SymbolId answer = binding.answer();
 
