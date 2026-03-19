@@ -38,6 +38,7 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
                         AssertionMode.DERIVED,
                         List.of(),
                         null,
+                        null,
                         ContradictionStatus.UNKNOWN
                 )
         );

@@ -28,6 +28,20 @@ class MultiSentenceCompositionTest {
     }
 
     @Test
+    void explainShowsSegmentOriginsForComposedReasoning() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        String answer = agent.handle("All hats in the house are green. The hat is in the house. What is green?");
+
+        assertEquals("entity:hat", answer);
+        String explain = new CommandProcessor(agent).handle(":explain --depth 3 --verbose").output();
+        assertTrue(explain.contains("[segment:s3/3"), explain);
+        assertTrue(explain.contains("[segment:s2/3"), explain);
+        assertTrue(explain.contains("entity:hat in entity:house"), explain);
+    }
+
+    @Test
     void composesSequentialAssertionsBeforeFinalQuestion() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         SahrAgent agent = SahrTestAgentFactory.newAgent(graph);

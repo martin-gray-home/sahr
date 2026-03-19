@@ -10,6 +10,7 @@ import com.sahr.core.CandidateType;
 import com.sahr.core.ContradictionStatus;
 import com.sahr.core.EntityNode;
 import com.sahr.core.HeadContext;
+import com.sahr.core.InputSegmentOrigin;
 import com.sahr.core.IntentDecision;
 import com.sahr.core.IntentType;
 import com.sahr.core.KnowledgeBase;
@@ -63,6 +64,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
@@ -105,7 +107,9 @@ public final class SahrAgent {
     private final SymbolicWorkingSetBuilder workingSetBuilder;
     private final SymbolicWorkingSetUsageAnnotator workingSetUsageAnnotator;
     private final InputSegmenter inputSegmenter;
+    private final Map<String, InputSegmentOrigin> ruleSegmentOrigins;
     private final java.util.concurrent.atomic.AtomicLong assertionSequence = new java.util.concurrent.atomic.AtomicLong();
+    private InputSegmentOrigin activeSegmentOrigin;
     private String lastInput;
 
     public SahrAgent(
@@ -185,6 +189,7 @@ public final class SahrAgent {
         this.workingSetBuilder = new SymbolicWorkingSetBuilder();
         this.workingSetUsageAnnotator = new SymbolicWorkingSetUsageAnnotator();
         this.inputSegmenter = new InputSegmenter();
+        this.ruleSegmentOrigins = new ConcurrentHashMap<>();
         this.explanationChains = new ExplanationChainBuilder(
                 this.graph,
                 this.ontology,
@@ -324,8 +329,15 @@ public final class SahrAgent {
         List<String> segments = inputSegmenter.segment(normalizedInput);
         if (segments.size() > 1) {
             String result = "No candidates produced.";
-            for (String segment : segments) {
-                result = handle(segment);
+            InputSegmentOrigin previousSegmentOrigin = activeSegmentOrigin;
+            try {
+                for (int i = 0; i < segments.size(); i++) {
+                    String segment = segments.get(i);
+                    activeSegmentOrigin = new InputSegmentOrigin(i, segments.size(), segment);
+                    result = handle(segment);
+                }
+            } finally {
+                activeSegmentOrigin = previousSegmentOrigin;
             }
             return result;
         }
@@ -836,6 +848,81 @@ public final class SahrAgent {
         return reasoner.heads().stream()
                 .map(head -> head.explain(context))
                 .toList();
+    }
+
+    String describeSegmentOrigin(RelationAssertion assertion) {
+        if (assertion == null) {
+            return "";
+        }
+        return findAssertionRecord(assertion)
+                .map(AssertionRecord::provenance)
+                .map(AssertionProvenance::segmentOrigin)
+                .map(this::formatSegmentOrigin)
+                .orElse("");
+    }
+
+    String describeSegmentOrigin(RuleFrame rule) {
+        if (rule == null) {
+            return "";
+        }
+        return formatSegmentOrigin(ruleSegmentOrigins.get(rule.toString()));
+    }
+
+    List<String> annotateEvidenceWithSegments(List<String> evidence) {
+        if (evidence == null || evidence.isEmpty()) {
+            return List.of();
+        }
+        List<String> annotated = new ArrayList<>();
+        for (String item : evidence) {
+            annotated.add(annotateEvidenceWithSegment(item));
+        }
+        return annotated;
+    }
+
+    private String annotateEvidenceWithSegment(String item) {
+        if (item == null || item.isBlank()) {
+            return item;
+        }
+        String segmentOrigin = "";
+        if (item.startsWith("rule(")) {
+            segmentOrigin = formatSegmentOrigin(ruleSegmentOrigins.get(item));
+        } else {
+            String[] parts = item.trim().split("\\s+");
+            if (parts.length >= 3) {
+                segmentOrigin = describeSegmentOrigin(new RelationAssertion(
+                        new SymbolId(parts[0]),
+                        parts[1],
+                        new SymbolId(parts[2]),
+                        1.0
+                ));
+            }
+        }
+        if (segmentOrigin.isBlank()) {
+            return item;
+        }
+        return item + " " + segmentOrigin;
+    }
+
+    private Optional<AssertionRecord> findAssertionRecord(RelationAssertion assertion) {
+        if (assertion == null) {
+            return Optional.empty();
+        }
+        return graph.getAssertionRecords().stream()
+                .filter(record -> record.subject().equals(assertion.subject())
+                        && record.predicate().equals(assertion.predicate())
+                        && record.object().equals(assertion.object()))
+                .max(java.util.Comparator.comparingLong(record -> record.provenance().cycleIndex()));
+    }
+
+    private String formatSegmentOrigin(InputSegmentOrigin origin) {
+        if (origin == null) {
+            return "";
+        }
+        String text = origin.text() == null ? "" : origin.text().replaceAll("\\s+", " ").trim();
+        if (text.isEmpty()) {
+            return "[segment:" + origin.label() + "]";
+        }
+        return "[segment:" + origin.label() + " text=\"" + text.replace("\"", "'") + "\"]";
     }
 
     public void resetWorkingMemory() {
@@ -1819,6 +1906,7 @@ public final class SahrAgent {
                 mode,
                 supportingIds,
                 normalizedFromId,
+                activeSegmentOrigin,
                 ContradictionStatus.UNKNOWN
         );
         return provenance;
@@ -1872,6 +1960,7 @@ public final class SahrAgent {
             ReasoningCandidate winner = followUp.get(0);
             trace.addEntry(new ReasoningTraceEntry(
                     query,
+                    activeSegmentOrigin,
                     workingSetUsageAnnotator.annotate(followUpWorkingSet, winner),
                     followUp,
                     winner
@@ -1920,6 +2009,7 @@ public final class SahrAgent {
         SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
         trace.addEntry(new ReasoningTraceEntry(
                 query,
+                activeSegmentOrigin,
                 workingSetUsageAnnotator.annotate(workingSet, winner),
                 candidates,
                 winner
@@ -2076,6 +2166,7 @@ public final class SahrAgent {
             SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
             trace.addEntry(new ReasoningTraceEntry(
                     current,
+                    activeSegmentOrigin,
                     workingSetUsageAnnotator.annotate(workingSet, winner),
                     candidates,
                     winner
@@ -2516,6 +2607,7 @@ public final class SahrAgent {
                 ReasoningCandidate directWinner = buildDirectAnswerCandidate(selectedMatches, directValues);
                 trace.addEntry(new ReasoningTraceEntry(
                         traceGoal,
+                        activeSegmentOrigin,
                         workingSetUsageAnnotator.annotate(workingSetBuilder.buildWorkingSet(context, graph), directWinner),
                         List.of(directWinner),
                         directWinner
@@ -2570,6 +2662,7 @@ public final class SahrAgent {
         SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
         trace.addEntry(new ReasoningTraceEntry(
                 traceGoal,
+                activeSegmentOrigin,
                 workingSetUsageAnnotator.annotate(workingSet, winner),
                 answers,
                 winner
@@ -3204,6 +3297,9 @@ public final class SahrAgent {
             }
         }
         graph.addRuleFrame(rule);
+        if (activeSegmentOrigin != null) {
+            ruleSegmentOrigins.put(rule.toString(), activeSegmentOrigin);
+        }
         return true;
     }
 

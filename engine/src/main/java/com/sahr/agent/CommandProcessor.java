@@ -67,7 +67,11 @@ public final class CommandProcessor {
 
     private String formatExplain(ReasoningTraceEntry entry, ExplainOptions options) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Last query: ").append(formatQuery(entry.query())).append('\n');
+        sb.append("Last query: ").append(formatQuery(entry.query()));
+        if (entry.segmentOrigin() != null) {
+            sb.append(" ").append(formatSegmentOrigin(entry.segmentOrigin()));
+        }
+        sb.append('\n');
         sb.append("Winner: ").append(formatCandidate(entry.winner(), false)).append('\n');
         if (entry.workingSet() != null) {
             sb.append("Working set: ")
@@ -204,7 +208,7 @@ public final class CommandProcessor {
         if (evidence == null || evidence.isEmpty()) {
             return "none";
         }
-        return String.join(" | ", evidence);
+        return String.join(" | ", agent.annotateEvidenceWithSegments(evidence));
     }
 
     private String formatBreakdown(Map<String, Double> breakdown) {
@@ -249,7 +253,7 @@ public final class CommandProcessor {
         List<String> parts = new ArrayList<>();
         for (SymbolicWorkingSet.IncludedAssertion assertion : assertions) {
             parts.add(formatWorkingSetItem(
-                    assertion.assertion().toString(),
+                    appendOrigin(assertion.assertion().toString(), agent.describeSegmentOrigin(assertion.assertion())),
                     assertion.reasons(),
                     assertion.usedByWinner(),
                     assertion.winnerReasons()
@@ -265,7 +269,7 @@ public final class CommandProcessor {
         List<String> parts = new ArrayList<>();
         for (SymbolicWorkingSet.IncludedRule rule : rules) {
             parts.add(formatWorkingSetItem(
-                    rule.rule().toString(),
+                    appendOrigin(rule.rule().toString(), agent.describeSegmentOrigin(rule.rule())),
                     rule.reasons(),
                     rule.usedByWinner(),
                     rule.winnerReasons()
@@ -288,6 +292,20 @@ public final class CommandProcessor {
                     .append("]");
         }
         return builder.toString();
+    }
+
+    private String appendOrigin(String label, String origin) {
+        if (origin == null || origin.isBlank()) {
+            return label;
+        }
+        return label + " " + origin;
+    }
+
+    private String formatSegmentOrigin(com.sahr.core.InputSegmentOrigin origin) {
+        if (origin == null) {
+            return "";
+        }
+        return "[segment:" + origin.label() + " text=\"" + origin.text().replace("\"", "'") + "\"]";
     }
 
     private CommandResult loadDataset(List<String> args) {

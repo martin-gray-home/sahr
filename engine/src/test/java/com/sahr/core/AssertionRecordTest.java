@@ -19,6 +19,7 @@ class AssertionRecordTest {
                 AssertionMode.ASSERTED,
                 List.of("support-1"),
                 "source-1",
+                new InputSegmentOrigin(0, 2, "The hat is green."),
                 ContradictionStatus.UNKNOWN
         );
         AssertionRecord record = new AssertionRecord(
@@ -37,5 +38,6 @@ class AssertionRecordTest {
         assertEquals("concept:green", record.object().value());
         assertNotNull(record.toRelationAssertion());
         assertEquals("rdf:type", record.toRelationAssertion().predicate());
+        assertEquals("s1/2", record.provenance().segmentOrigin().label());
     }
 }

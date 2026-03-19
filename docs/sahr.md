@@ -244,6 +244,12 @@ Current compositional slice:
 • this is intentionally narrow: sentence-level sequencing first, not full discourse resolution or arbitrary clause planning  
 • the reuse path stays canonical — segmented inputs still flow through normal statement ingestion, rule insertion, propagation, and final query execution rather than a bespoke multi-sentence executor
 
+Current visibility step:
+
+• assertions now retain segment-origin metadata through provenance  
+• reasoning trace records which segment produced the final traced query step  
+• `:explain --verbose` surfaces segment origin on evidence and working-set items so compositional reasoning can be reviewed segment-by-segment rather than inferred indirectly
+
 ## Phase 3. Add Symbolic Attention Over Working Memory
 
 Goal:

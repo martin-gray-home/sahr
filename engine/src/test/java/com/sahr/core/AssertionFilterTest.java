@@ -20,6 +20,7 @@ class AssertionFilterTest {
                 AssertionMode.ASSERTED,
                 List.of(),
                 null,
+                null,
                 ContradictionStatus.UNKNOWN
         );
         graph.addAssertionRecord(new AssertionRecord(

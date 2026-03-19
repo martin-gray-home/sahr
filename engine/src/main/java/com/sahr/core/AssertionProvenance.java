@@ -13,6 +13,7 @@ public final class AssertionProvenance {
     private final AssertionMode mode;
     private final List<String> supportingAssertionIds;
     private final String normalizedFromId;
+    private final InputSegmentOrigin segmentOrigin;
     private final ContradictionStatus contradictionStatus;
 
     public AssertionProvenance(AssertionSource source,
@@ -22,6 +23,7 @@ public final class AssertionProvenance {
                                AssertionMode mode,
                                List<String> supportingAssertionIds,
                                String normalizedFromId,
+                               InputSegmentOrigin segmentOrigin,
                                ContradictionStatus contradictionStatus) {
         this.source = Objects.requireNonNull(source, "source");
         this.producedBy = producedBy == null ? "" : producedBy;
@@ -31,6 +33,7 @@ public final class AssertionProvenance {
         this.supportingAssertionIds = Collections.unmodifiableList(
                 supportingAssertionIds == null ? List.of() : supportingAssertionIds);
         this.normalizedFromId = normalizedFromId;
+        this.segmentOrigin = segmentOrigin;
         this.contradictionStatus = Objects.requireNonNull(contradictionStatus, "contradictionStatus");
     }
 
@@ -62,6 +65,10 @@ public final class AssertionProvenance {
         return normalizedFromId;
     }
 
+    public InputSegmentOrigin segmentOrigin() {
+        return segmentOrigin;
+    }
+
     public ContradictionStatus contradictionStatus() {
         return contradictionStatus;
     }
@@ -75,6 +82,7 @@ public final class AssertionProvenance {
                 mode,
                 supportingAssertionIds,
                 normalizedFromId,
+                segmentOrigin,
                 contradictionStatus
         );
     }
@@ -88,6 +96,21 @@ public final class AssertionProvenance {
                 mode,
                 supportingAssertionIds,
                 normalizedFromId,
+                segmentOrigin,
+                contradictionStatus
+        );
+    }
+
+    public AssertionProvenance withSegmentOrigin(InputSegmentOrigin segmentOrigin) {
+        return new AssertionProvenance(
+                source,
+                producedBy,
+                cycleIndex,
+                timestamp,
+                mode,
+                supportingAssertionIds,
+                normalizedFromId,
+                segmentOrigin,
                 contradictionStatus
         );
     }
@@ -101,6 +124,7 @@ public final class AssertionProvenance {
                 mode,
                 supportingAssertionIds,
                 normalizedFromId,
+                segmentOrigin,
                 contradictionStatus
         );
     }
