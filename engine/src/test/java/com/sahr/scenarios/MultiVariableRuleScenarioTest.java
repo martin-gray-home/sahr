@@ -240,4 +240,40 @@ class MultiVariableRuleScenarioTest {
                         && "entity:key".equals(record.subject().value())
                         && "entity:room".equals(record.object().value())));
     }
+
+    @Test
+    void returnsSeveralDerivedAnswersWhenMultipleBindingsFitOneQueryTarget() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                java.util.List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "partOf", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Assertion recorded.", agent.handle("The handle is part of the door"));
+        assertEquals("Assertion recorded.", agent.handle("The door is in the house"));
+        assertEquals("Assertion recorded.", agent.handle("The door is in the room"));
+
+        String answer = agent.handle("What is the handle in?");
+
+        assertTrue(isEntitySet(answer, "entity:house", "entity:room"), "Unexpected answer: " + answer);
+    }
+
+    private boolean isEntitySet(String actual, String... expected) {
+        java.util.Set<String> actualSet = new java.util.LinkedHashSet<>();
+        if (actual != null && !actual.isBlank()) {
+            for (String part : actual.split(",")) {
+                String trimmed = part.trim();
+                if (!trimmed.isEmpty()) {
+                    actualSet.add(trimmed);
+                }
+            }
+        }
+        return actualSet.equals(new java.util.LinkedHashSet<>(java.util.List.of(expected)));
+    }
 }
