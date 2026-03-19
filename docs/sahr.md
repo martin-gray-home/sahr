@@ -19,6 +19,23 @@ be used to guide attention, ranking, hypothesis competition, and
 iterative refinement — not to replace symbolic semantics with opaque
 latent state.
 
+Another useful way to view the target architecture is:
+
+• language is first broken into small symbolic units  
+• those units should become **canonical symbolic atoms** as early as possible, not remain raw NLP fragments  
+• canonical atoms are assembled into candidate symbolic structures such as assertions, rule frames, query frames, and local concept graphs  
+• ontology-driven and meta-reasoning heads operate over those candidate structures to align, expand, bind, retrieve, derive, and rank  
+• the strongest supported structures become the next-step symbolic context for further reasoning  
+• the cycle repeats until the system produces a stable structured result or graph update
+
+So the intended shape is not:
+
+• raw text -> opaque embeddings -> answer
+
+It is closer to:
+
+• text -> canonical symbolic atoms -> candidate symbolic structures/graphs -> multi-head competition and refinement -> ranked symbolic winner(s) -> next-step symbolic context -> final structured result
+
 In practical terms, that means:
 
 • canonical symbolic boundaries (`QueryFrame`, `RuleFrame`, `QueryResult`) stay primary  
@@ -118,6 +135,20 @@ Attention score
 
 Heads generate **ranked candidate outputs**.
 
+Those outputs do not have to be only direct answers. Depending on the
+head family, they may be:
+
+• aligned symbolic atoms  
+• candidate assertions  
+• candidate rule applications  
+• candidate query plans  
+• candidate subgoals  
+• partial symbolic graph extensions
+
+The long-term aim is for heads to help assemble and refine larger
+symbolic structures from smaller canonical atoms, while still keeping
+truth and execution grounded in explicit symbolic semantics.
+
 ---
 
 ## 5. Parallel Multi-Head Reasoning
@@ -159,12 +190,13 @@ Complex reasoning may require multiple passes.
 The intended long-term shape is:
 
 1. normalize raw language into canonical symbolic structures
-2. resolve entities, predicates, labels, and types
-3. build an attention-weighted symbolic working set
-4. execute generic operators over that symbolic working set
-5. refine or expand hypotheses if the first pass is insufficient
-6. produce structured results and structured explanations
-7. realise those results into user-facing language
+2. resolve entities, predicates, labels, and types into canonical symbolic atoms
+3. assemble those atoms into candidate symbolic structures and local concept graphs
+4. build an attention-weighted symbolic working set over those structures
+5. execute generic operators over that symbolic working set
+6. refine, expand, or recombine candidate structures if the first pass is insufficient
+7. produce structured results and structured explanations
+8. realise those results into user-facing language
 
 ---
 
