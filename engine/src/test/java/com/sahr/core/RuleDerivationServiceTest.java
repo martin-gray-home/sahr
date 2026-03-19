@@ -110,4 +110,82 @@ class RuleDerivationServiceTest {
         assertTrue(derivations.get(0).rule().contains("forall x, y"));
         assertTrue(derivations.get(0).supportingAssertionIds().size() >= 2);
     }
+
+    @Test
+    void doesNotDeriveWhenConjunctiveAntecedentIsIncomplete() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        RuleDerivationService service = new RuleDerivationService();
+
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:hat"),
+                "ownedBy",
+                new SymbolId("entity:man"),
+                0.9
+        ));
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "ownedBy", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.constant("entity:house"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.constant("entity:house")),
+                0.85
+        ));
+
+        List<RuleDerivation> derivations = service.derive(graph);
+
+        assertTrue(derivations.isEmpty());
+    }
+
+    @Test
+    void derivesOneAssertionPerValidBindingEnvironment() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        RuleDerivationService service = new RuleDerivationService();
+
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:woman"),
+                "carry",
+                new SymbolId("entity:bag"),
+                0.9
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:woman"),
+                "in",
+                new SymbolId("entity:garden"),
+                0.95
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:man"),
+                "carry",
+                new SymbolId("entity:key"),
+                0.88
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:man"),
+                "in",
+                new SymbolId("entity:room"),
+                0.92
+        ));
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "carry", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+
+        List<RuleDerivation> derivations = service.derive(graph);
+
+        assertEquals(2, derivations.size());
+        assertTrue(derivations.stream().anyMatch(derivation ->
+                "entity:bag".equals(derivation.assertion().subject().value())
+                        && "entity:garden".equals(derivation.assertion().object().value())
+                        && "binding x=entity:woman, y=entity:bag, z=entity:garden".equals(derivation.binding())));
+        assertTrue(derivations.stream().anyMatch(derivation ->
+                "entity:key".equals(derivation.assertion().subject().value())
+                        && "entity:room".equals(derivation.assertion().object().value())
+                        && "binding x=entity:man, y=entity:key, z=entity:room".equals(derivation.binding())));
+    }
 }

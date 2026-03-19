@@ -181,4 +181,63 @@ class MultiVariableRuleScenarioTest {
         assertTrue(explain.contains("entity:handle in entity:house"), explain);
         assertTrue(explain.contains("supports=assertion-"), explain);
     }
+
+    @Test
+    void doesNotInferWhenOnlyOneAntecedentIsPresent() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                java.util.List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "carry", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Assertion recorded.", agent.handle("The woman is carrying a bag"));
+
+        assertEquals("No candidates produced.", agent.handle("What is the bag in?"));
+    }
+
+    @Test
+    void maintainsSeparateBindingsForMultipleConcurrentMatches() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                java.util.List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "carry", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                java.util.List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "hold", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Assertion recorded.", agent.handle("The woman is carrying a bag"));
+        assertEquals("Assertion recorded.", agent.handle("The woman is in the garden"));
+        assertEquals("Assertion recorded.", agent.handle("The man is holding a key"));
+        assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
+
+        assertEquals("entity:garden", agent.handle("What is the bag in?"));
+        assertEquals("entity:room", agent.handle("What is the key in?"));
+        assertTrue(graph.getAssertionRecords().stream().anyMatch(record ->
+                record.layer() == AssertionLayer.INFERRED
+                        && "entity:bag".equals(record.subject().value())
+                        && "entity:garden".equals(record.object().value())));
+        assertTrue(graph.getAssertionRecords().stream().anyMatch(record ->
+                record.layer() == AssertionLayer.INFERRED
+                        && "entity:key".equals(record.subject().value())
+                        && "entity:room".equals(record.object().value())));
+    }
 }
