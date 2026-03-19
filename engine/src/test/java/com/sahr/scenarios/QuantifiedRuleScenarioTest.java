@@ -63,4 +63,17 @@ class QuantifiedRuleScenarioTest {
         String yesNo = agent.handle("Is the hat green");
         assertTrue(yesNo.startsWith("Yes"), "Expected yes/no confirmation, got: " + yesNo);
     }
+
+    @Test
+    void infersLocationFromLanguageIngestedGenericCarryRule() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Rule recorded.",
+                agent.handle("If someone carries something and is in a place, then that thing is in that place"));
+        assertEquals("Assertion recorded.", agent.handle("The woman is in the garden"));
+        assertEquals("Assertion recorded.", agent.handle("The woman is carrying a bag"));
+
+        assertEquals("entity:garden", agent.handle("What is the bag in?"));
+    }
 }

@@ -264,6 +264,43 @@ class MultiVariableRuleScenarioTest {
         assertTrue(isEntitySet(answer, "entity:house", "entity:room"), "Unexpected answer: " + answer);
     }
 
+    @Test
+    void staysStableWhenDifferentRulesConvergeOnSameDerivedAssertion() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                java.util.List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "partOf", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                java.util.List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "attachedTo", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z")),
+                0.83
+        ));
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Assertion recorded.", agent.handle("The handle is part of the door"));
+        assertEquals("Assertion recorded.", agent.handle("The handle is attached to the door"));
+        assertEquals("Assertion recorded.", agent.handle("The door is in the house"));
+
+        assertEquals("entity:house", agent.handle("What is the handle in?"));
+        long matches = graph.getAssertionRecords().stream()
+                .filter(record -> record.layer() == AssertionLayer.INFERRED)
+                .filter(record -> "entity:handle".equals(record.subject().value()))
+                .filter(record -> "in".equals(record.predicate()))
+                .filter(record -> "entity:house".equals(record.object().value()))
+                .count();
+        assertEquals(1, matches);
+    }
+
     private boolean isEntitySet(String actual, String... expected) {
         java.util.Set<String> actualSet = new java.util.LinkedHashSet<>();
         if (actual != null && !actual.isBlank()) {

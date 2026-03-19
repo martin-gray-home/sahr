@@ -27,4 +27,15 @@ class QuantifiedRuleInsertionTest {
         assertEquals(1, graph.getAllRuleFrames().size());
         assertTrue(graph.getAllAssertions().isEmpty(), "Expected no assertions created from rule insertion.");
     }
+
+    @Test
+    void recordsGenericCarryLocationTransferRuleWithoutAssertions() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Rule recorded.",
+                agent.handle("If someone carries something and is in a place, then that thing is in that place"));
+        assertEquals(1, graph.getAllRuleFrames().size());
+        assertTrue(graph.getAllAssertions().isEmpty(), "Expected no assertions created from rule insertion.");
+    }
 }

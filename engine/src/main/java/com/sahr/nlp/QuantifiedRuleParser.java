@@ -18,6 +18,9 @@ public final class QuantifiedRuleParser {
     private static final Pattern CONDITIONAL_IN_ATTRIBUTE_PATTERN = Pattern.compile(
             "^if\\s+(?:a|an|the)\\s+([a-z0-9_]+)\\s+is\\s+in\\s+(?:the\\s+)?([a-z0-9_]+),?\\s+then\\s+(?:it|the\\s+([a-z0-9_]+))\\s+is\\s+([a-z0-9_]+)$",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONDITIONAL_CARRY_LOCATION_TRANSFER_PATTERN = Pattern.compile(
+            "^if\\s+someone\\s+carries\\s+something\\s+and\\s+is\\s+in\\s+(?:a|the)\\s+place,?\\s+then\\s+(?:that|the)\\s+thing\\s+is\\s+in\\s+(?:that|the)\\s+place$",
+            Pattern.CASE_INSENSITIVE);
     private static final Morphology MORPHOLOGY = new Morphology();
 
     private static final String PREDICATE_TYPE = "rdf:type";
@@ -37,7 +40,11 @@ public final class QuantifiedRuleParser {
         if (quantified.isPresent()) {
             return quantified;
         }
-        return parseConditionalInAttributeRule(normalized);
+        Optional<RuleFrame> conditionalAttribute = parseConditionalInAttributeRule(normalized);
+        if (conditionalAttribute.isPresent()) {
+            return conditionalAttribute;
+        }
+        return parseConditionalCarryLocationTransferRule(normalized);
     }
 
     private Optional<RuleFrame> parseAllInAreRule(String normalized) {
@@ -78,6 +85,20 @@ public final class QuantifiedRuleParser {
         RuleAtom inAtom = new RuleAtom(var, PREDICATE_IN, RuleTerm.constant("entity:" + container));
         RuleAtom consequent = new RuleAtom(var, PREDICATE_ATTRIBUTE, RuleTerm.constant("concept:" + attribute));
         return Optional.of(new RuleFrame(variable, List.of(typeAtom, inAtom), consequent, 0.8));
+    }
+
+    private Optional<RuleFrame> parseConditionalCarryLocationTransferRule(String normalized) {
+        Matcher matcher = CONDITIONAL_CARRY_LOCATION_TRANSFER_PATTERN.matcher(normalized);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        RuleTerm person = RuleTerm.variable("x");
+        RuleTerm thing = RuleTerm.variable("y");
+        RuleTerm place = RuleTerm.variable("z");
+        RuleAtom carryAtom = new RuleAtom(person, "carry", thing);
+        RuleAtom inAtom = new RuleAtom(person, PREDICATE_IN, place);
+        RuleAtom consequent = new RuleAtom(thing, PREDICATE_IN, place);
+        return Optional.of(new RuleFrame("x", List.of(carryAtom, inAtom), consequent, 0.8));
     }
 
     private String singularize(String token) {

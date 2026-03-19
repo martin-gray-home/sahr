@@ -234,4 +234,56 @@ class RuleDerivationServiceTest {
                         && "entity:room".equals(derivation.assertion().object().value())
                         && "binding x=entity:handle, y=entity:door, z=entity:room".equals(derivation.binding())));
     }
+
+    @Test
+    void preservesSeparateDerivationsWhenDifferentRulesConvergeOnSameAssertion() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        RuleDerivationService service = new RuleDerivationService();
+
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:handle"),
+                "partOf",
+                new SymbolId("entity:door"),
+                0.9
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:door"),
+                "in",
+                new SymbolId("entity:house"),
+                0.95
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:handle"),
+                "attachedTo",
+                new SymbolId("entity:door"),
+                0.88
+        ));
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "partOf", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "attachedTo", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z")),
+                0.83
+        ));
+
+        List<RuleDerivation> derivations = service.derive(graph);
+
+        assertEquals(2, derivations.size());
+        assertTrue(derivations.stream().allMatch(derivation ->
+                "entity:handle".equals(derivation.assertion().subject().value())
+                        && "entity:house".equals(derivation.assertion().object().value())));
+        assertTrue(derivations.stream().anyMatch(derivation -> derivation.rule().contains("partOf")));
+        assertTrue(derivations.stream().anyMatch(derivation -> derivation.rule().contains("attachedTo")));
+    }
 }
