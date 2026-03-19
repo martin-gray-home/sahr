@@ -21,6 +21,9 @@ public final class QuantifiedRuleParser {
     private static final Pattern CONDITIONAL_CARRY_LOCATION_TRANSFER_PATTERN = Pattern.compile(
             "^if\\s+someone\\s+carries\\s+something\\s+and\\s+is\\s+in\\s+(?:a|the)\\s+place,?\\s+then\\s+(?:that|the)\\s+thing\\s+is\\s+in\\s+(?:that|the)\\s+place$",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONDITIONAL_PARTOF_LOCATION_TRANSFER_PATTERN = Pattern.compile(
+            "^if\\s+something\\s+is\\s+part\\s+of\\s+something\\s+and\\s+that\\s+thing\\s+is\\s+in\\s+(?:a|the)\\s+place,?\\s+then\\s+(?:the\\s+first\\s+thing|that\\s+part)\\s+is\\s+in\\s+(?:that|the)\\s+place$",
+            Pattern.CASE_INSENSITIVE);
     private static final Morphology MORPHOLOGY = new Morphology();
 
     private static final String PREDICATE_TYPE = "rdf:type";
@@ -44,7 +47,11 @@ public final class QuantifiedRuleParser {
         if (conditionalAttribute.isPresent()) {
             return conditionalAttribute;
         }
-        return parseConditionalCarryLocationTransferRule(normalized);
+        Optional<RuleFrame> carryTransfer = parseConditionalCarryLocationTransferRule(normalized);
+        if (carryTransfer.isPresent()) {
+            return carryTransfer;
+        }
+        return parseConditionalPartOfLocationTransferRule(normalized);
     }
 
     private Optional<RuleFrame> parseAllInAreRule(String normalized) {
@@ -99,6 +106,20 @@ public final class QuantifiedRuleParser {
         RuleAtom inAtom = new RuleAtom(person, PREDICATE_IN, place);
         RuleAtom consequent = new RuleAtom(thing, PREDICATE_IN, place);
         return Optional.of(new RuleFrame("x", List.of(carryAtom, inAtom), consequent, 0.8));
+    }
+
+    private Optional<RuleFrame> parseConditionalPartOfLocationTransferRule(String normalized) {
+        Matcher matcher = CONDITIONAL_PARTOF_LOCATION_TRANSFER_PATTERN.matcher(normalized);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        RuleTerm part = RuleTerm.variable("x");
+        RuleTerm whole = RuleTerm.variable("y");
+        RuleTerm place = RuleTerm.variable("z");
+        RuleAtom partOfAtom = new RuleAtom(part, "partOf", whole);
+        RuleAtom inAtom = new RuleAtom(whole, PREDICATE_IN, place);
+        RuleAtom consequent = new RuleAtom(part, PREDICATE_IN, place);
+        return Optional.of(new RuleFrame("x", List.of(partOfAtom, inAtom), consequent, 0.8));
     }
 
     private String singularize(String token) {

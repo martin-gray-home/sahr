@@ -76,4 +76,17 @@ class QuantifiedRuleScenarioTest {
 
         assertEquals("entity:garden", agent.handle("What is the bag in?"));
     }
+
+    @Test
+    void infersLocationFromLanguageIngestedGenericPartOfRule() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Rule recorded.",
+                agent.handle("If something is part of something and that thing is in a place, then the first thing is in that place"));
+        assertEquals("Assertion recorded.", agent.handle("The handle is part of the door"));
+        assertEquals("Assertion recorded.", agent.handle("The door is in the house"));
+
+        assertEquals("entity:house", agent.handle("What is the handle in?"));
+    }
 }

@@ -23,6 +23,10 @@ public final class RuleFrame {
         return variable;
     }
 
+    public List<String> variables() {
+        return RuleFrames.variables(this);
+    }
+
     public List<RuleAtom> antecedents() {
         return antecedents;
     }
@@ -38,7 +42,7 @@ public final class RuleFrame {
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder("rule(");
-        List<String> variables = RuleFrames.variables(this);
+        List<String> variables = variables();
         if (!variables.isEmpty()) {
             builder.append("forall ").append(String.join(", ", variables)).append(": ");
         }
