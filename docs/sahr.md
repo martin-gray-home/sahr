@@ -237,6 +237,12 @@ Current execution step:
 • let `QueryExecutor` and rule derivation consume that focused view explicitly  
 • preserve truth semantics by merging focused results with full-graph results rather than treating focus as hard pruning
 
+Current reviewability step:
+
+• represent that focused view as an explicit symbolic working set, not just an internal filtered graph  
+• record why entities, assertions, and rules were included (for example `query.subject`, `query.predicate`, `working_memory.active_entity`, `working_memory.recent_assertion`)  
+• expose the working set through reasoning trace and debug/explain output so attention policy can be reviewed and refined directly
+
 Keep hard boundaries:
 
 • scores guide search and ranking  

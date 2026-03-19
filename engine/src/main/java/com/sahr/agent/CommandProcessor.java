@@ -4,6 +4,8 @@ import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.ReasoningTraceEntry;
 import com.sahr.core.RelationAssertion;
+import com.sahr.core.SymbolicWorkingSet;
+import com.sahr.core.RuleFrame;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -67,6 +69,14 @@ public final class CommandProcessor {
         StringBuilder sb = new StringBuilder();
         sb.append("Last query: ").append(formatQuery(entry.query())).append('\n');
         sb.append("Winner: ").append(formatCandidate(entry.winner(), false)).append('\n');
+        if (entry.workingSet() != null) {
+            sb.append("Working set: ")
+                    .append("entities=").append(entry.workingSet().entities().size())
+                    .append(" assertions=").append(entry.workingSet().assertions().size())
+                    .append(" rules=").append(entry.workingSet().rules().size())
+                    .append(" reduced=").append(entry.workingSet().reduced())
+                    .append('\n');
+        }
 
         int depth = Math.max(0, options.depth);
         List<ReasoningCandidate> candidates = entry.candidates();
@@ -87,6 +97,13 @@ public final class CommandProcessor {
             sb.append("active_entities: ").append(formatEntities(snapshot.activeEntities())).append('\n');
             sb.append("recent_assertions: ").append(formatAssertions(snapshot.recentAssertions())).append('\n');
             sb.append("goal_stack: ").append(formatGoals(snapshot.goalStack())).append('\n');
+        }
+
+        if (options.verbose && entry.workingSet() != null) {
+            sb.append("Working set details").append('\n');
+            sb.append("entities: ").append(formatWorkingSetEntities(entry.workingSet().entities())).append('\n');
+            sb.append("assertions: ").append(formatWorkingSetAssertions(entry.workingSet().assertions())).append('\n');
+            sb.append("rules: ").append(formatWorkingSetRules(entry.workingSet().rules())).append('\n');
         }
 
         if (options.heads) {
@@ -207,6 +224,40 @@ public final class CommandProcessor {
                     .append(String.format(Locale.ROOT, "%.3f", entry.getValue()));
         }
         return sb.toString();
+    }
+
+    private String formatWorkingSetEntities(List<SymbolicWorkingSet.IncludedEntity> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return "none";
+        }
+        List<String> parts = new ArrayList<>();
+        for (SymbolicWorkingSet.IncludedEntity entity : entities) {
+            parts.add(entity.entity().value() + " (" + String.join("|", entity.reasons()) + ")");
+        }
+        return String.join(", ", parts);
+    }
+
+    private String formatWorkingSetAssertions(List<SymbolicWorkingSet.IncludedAssertion> assertions) {
+        if (assertions == null || assertions.isEmpty()) {
+            return "none";
+        }
+        List<String> parts = new ArrayList<>();
+        for (SymbolicWorkingSet.IncludedAssertion assertion : assertions) {
+            parts.add(assertion.assertion() + " (" + String.join("|", assertion.reasons()) + ")");
+        }
+        return String.join(" || ", parts);
+    }
+
+    private String formatWorkingSetRules(List<SymbolicWorkingSet.IncludedRule> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return "none";
+        }
+        List<String> parts = new ArrayList<>();
+        for (SymbolicWorkingSet.IncludedRule rule : rules) {
+            RuleFrame frame = rule.rule();
+            parts.add(frame + " (" + String.join("|", rule.reasons()) + ")");
+        }
+        return String.join(" || ", parts);
     }
 
     private CommandResult loadDataset(List<String> args) {

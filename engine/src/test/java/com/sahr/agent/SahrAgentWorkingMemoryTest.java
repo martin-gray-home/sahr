@@ -16,6 +16,7 @@ import com.sahr.support.HeadOntologyTestSupport;
 import com.sahr.support.OwlOntologyTestSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SahrAgentWorkingMemoryTest {
     @Test
@@ -44,5 +45,40 @@ class SahrAgentWorkingMemoryTest {
         assertEquals("Assertion recorded.", agent.handle("The man is wearing a hat"));
         String whoIsWearing = agent.handle("Who is wearing the hat");
         assertEquals(true, Set.of("entity:man", "entity:woman", "entity:man, entity:woman").contains(whoIsWearing));
+    }
+
+    @Test
+    void explainShowsWorkingSetWithInclusionReasons() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        InMemoryOntologyService baseOntology = HeadOntologyTestSupport.createOntology();
+        baseOntology.addSubclass("concept:man", "concept:person");
+        baseOntology.addSubclass("concept:hat", "concept:thing");
+        OntologyService ontology = HeadOntologyTestSupport.wrapWithPolicy(baseOntology);
+
+        SymbolId man = new SymbolId("entity:man");
+        SymbolId hat = new SymbolId("entity:hat");
+        graph.addEntity(new EntityNode(man, "man", Set.of("concept:man")));
+        graph.addEntity(new EntityNode(hat, "hat", Set.of("concept:hat")));
+
+        SahrReasoner reasoner = new SahrReasoner(List.of(
+                new OntologyDefinedHead(OwlOntologyTestSupport.buildHeadDefinitions())
+        ));
+
+        SahrAgent agent = new SahrAgent(graph, ontology, reasoner, new SimpleQueryParser());
+        assertEquals("Assertion recorded.", agent.handle("The man is wearing the hat"));
+        agent.handle("Who is wearing the hat");
+
+        var entry = agent.lastTraceEntry().orElseThrow();
+        assertTrue(entry.workingSet() != null);
+        assertTrue(entry.workingSet().entities().stream().anyMatch(included ->
+                included.entity().value().equals("entity:hat")
+                        && included.reasons().stream().anyMatch(reason -> reason.contains("query.object"))));
+        assertTrue(entry.workingSet().assertions().stream().anyMatch(included ->
+                included.reasons().stream().anyMatch(reason -> reason.contains("working_memory.recent_assertion"))));
+
+        CommandProcessor processor = new CommandProcessor(agent);
+        String explain = processor.handle(":explain --depth 3 --verbose").output();
+        assertTrue(explain.contains("Working set details"));
+        assertTrue(explain.contains("working_memory.recent_assertion"));
     }
 }

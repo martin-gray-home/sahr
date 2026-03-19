@@ -83,6 +83,12 @@ public final class ChatRepl {
             if (candidates.isEmpty()) {
                 return;
             }
+            if (entry.workingSet() != null) {
+                out.println("-- working set entities=" + entry.workingSet().entities().size()
+                        + " assertions=" + entry.workingSet().assertions().size()
+                        + " rules=" + entry.workingSet().rules().size()
+                        + " reduced=" + entry.workingSet().reduced() + " --");
+            }
             out.println("-- attention top " + Math.min(attentionTopN, candidates.size()) + " --");
             for (int i = 0; i < Math.min(attentionTopN, candidates.size()); i++) {
                 var candidate = candidates.get(i);

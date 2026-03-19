@@ -36,13 +36,17 @@ class SymbolicWorkingSetExecutionTest {
                 memory
         );
 
-        KnowledgeBase focused = new SymbolicWorkingSetBuilder().build(context, graph);
+        SymbolicWorkingSet workingSet = new SymbolicWorkingSetBuilder().buildWorkingSet(context, graph);
+        KnowledgeBase focused = workingSet.view();
 
         assertTrue(focused instanceof FocusedKnowledgeBase);
-        assertTrue(((FocusedKnowledgeBase) focused).isReduced());
+        assertTrue(workingSet.reduced());
         assertEquals(2, focused.getAllAssertions().size());
         assertTrue(focused.getAllAssertions().stream().anyMatch(assertion -> assertion.predicate().equals("wear")));
         assertTrue(focused.getAllAssertions().stream().noneMatch(assertion -> assertion.predicate().equals("carry")));
+        assertTrue(workingSet.entities().stream().anyMatch(entity ->
+                entity.entity().value().equals("entity:man")
+                        && entity.reasons().stream().anyMatch(reason -> reason.contains("query.subject"))));
     }
 
     @Test

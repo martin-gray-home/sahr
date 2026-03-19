@@ -1850,12 +1850,13 @@ public final class SahrAgent {
     private String resolveQuestionAfterAssertion(QueryGoal query, int maxIterations) {
         for (int i = 0; i < maxIterations; i++) {
             HeadContext followUpContext = new HeadContext(query, graph, ontology, null, null, workingMemory, null, semanticNormalizer);
+            SymbolicWorkingSet followUpWorkingSet = workingSetBuilder.buildWorkingSet(followUpContext, graph);
             List<ReasoningCandidate> followUp = withReadPhase(() -> reasoner.reason(followUpContext));
             if (followUp.isEmpty()) {
                 return noCandidatesAnswer(query);
             }
             ReasoningCandidate winner = followUp.get(0);
-            trace.addEntry(new ReasoningTraceEntry(query, followUp, winner));
+            trace.addEntry(new ReasoningTraceEntry(query, followUpWorkingSet, followUp, winner));
             if (CandidateType.ANSWER.equals(winner.type())) {
                 logger.fine(() -> "Follow-up winner type=" + winner.type()
                         + " producedBy=" + winner.producedBy()
@@ -1897,7 +1898,8 @@ public final class SahrAgent {
         }
         ReasoningCandidate winner = selectStatementCandidate(context, query, candidates)
                 .orElse(candidates.get(0));
-        trace.addEntry(new ReasoningTraceEntry(query, candidates, winner));
+        SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
+        trace.addEntry(new ReasoningTraceEntry(query, workingSet, candidates, winner));
         logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                 + " score=" + winner.score());
         logWhereDecision(query, winner);
@@ -2047,7 +2049,8 @@ public final class SahrAgent {
             selectStart = subgoalTiming ? System.nanoTime() : 0L;
             ReasoningCandidate winner = selectPreferredCandidate(candidates);
             selectEnd = subgoalTiming ? System.nanoTime() : 0L;
-            trace.addEntry(new ReasoningTraceEntry(current, candidates, winner));
+            SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
+            trace.addEntry(new ReasoningTraceEntry(current, workingSet, candidates, winner));
             logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                     + " score=" + winner.score());
             logWhereDecision(current, winner);
