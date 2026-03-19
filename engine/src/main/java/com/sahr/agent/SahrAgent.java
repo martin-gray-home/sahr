@@ -37,6 +37,7 @@ import com.sahr.core.ReasoningPhaseCoordinator;
 import com.sahr.nlp.NoopTermMapper;
 import com.sahr.nlp.InputFeatureExtractor;
 import com.sahr.nlp.InputFeatures;
+import com.sahr.nlp.InputSegmenter;
 import com.sahr.nlp.LanguageCandidateProducer;
 import com.sahr.nlp.LanguageQueryCandidate;
 import com.sahr.nlp.LanguageRuleCandidateProducer;
@@ -103,6 +104,7 @@ public final class SahrAgent {
     private final RuleDerivationService ruleDerivationService;
     private final SymbolicWorkingSetBuilder workingSetBuilder;
     private final SymbolicWorkingSetUsageAnnotator workingSetUsageAnnotator;
+    private final InputSegmenter inputSegmenter;
     private final java.util.concurrent.atomic.AtomicLong assertionSequence = new java.util.concurrent.atomic.AtomicLong();
     private String lastInput;
 
@@ -182,6 +184,7 @@ public final class SahrAgent {
         this.ruleDerivationService = new RuleDerivationService();
         this.workingSetBuilder = new SymbolicWorkingSetBuilder();
         this.workingSetUsageAnnotator = new SymbolicWorkingSetUsageAnnotator();
+        this.inputSegmenter = new InputSegmenter();
         this.explanationChains = new ExplanationChainBuilder(
                 this.graph,
                 this.ontology,
@@ -318,6 +321,14 @@ public final class SahrAgent {
         boolean timing = Boolean.parseBoolean(System.getProperty(TIMING_PROPERTY, "false"));
         long totalStart = timing ? System.nanoTime() : 0L;
         String normalizedInput = stripLeadingQuestionNumber(input);
+        List<String> segments = inputSegmenter.segment(normalizedInput);
+        if (segments.size() > 1) {
+            String result = "No candidates produced.";
+            for (String segment : segments) {
+                result = handle(segment);
+            }
+            return result;
+        }
         this.lastInput = normalizedInput;
         if (input != null && !input.equals(normalizedInput) && logger.isLoggable(java.util.logging.Level.FINE)) {
             logger.fine(() -> "Normalized input='" + input + "' -> '" + normalizedInput + "'");

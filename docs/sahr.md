@@ -206,6 +206,12 @@ Success signal:
 
 • multiple language forms map to the same rule semantics and execute unchanged
 
+Current compositional slice:
+
+• multi-sentence inputs can now be segmented and processed in order so earlier statement/rule segments become symbolic context for later questions in the same user turn  
+• this is intentionally narrow: sentence-level sequencing first, not full discourse resolution or arbitrary clause planning  
+• the reuse path stays canonical — segmented inputs still flow through normal statement ingestion, rule insertion, propagation, and final query execution rather than a bespoke multi-sentence executor
+
 ## Phase 3. Add Symbolic Attention Over Working Memory
 
 Goal:
