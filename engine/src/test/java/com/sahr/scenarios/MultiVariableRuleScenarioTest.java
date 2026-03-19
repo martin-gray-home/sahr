@@ -104,6 +104,26 @@ class MultiVariableRuleScenarioTest {
     }
 
     @Test
+    void firesThreeVariableCarryRuleIndependentlyOfAssertionOrder() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                java.util.List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "carry", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Assertion recorded.", agent.handle("The woman is carrying a bag"));
+        assertEquals("Assertion recorded.", agent.handle("The woman is in the garden"));
+
+        assertEquals("entity:garden", agent.handle("What is the bag in?"));
+    }
+
+    @Test
     void composesLinkedThreeVariablePartOfContainmentRule() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         graph.addRuleFrame(new RuleFrame(
@@ -133,5 +153,32 @@ class MultiVariableRuleScenarioTest {
         assertEquals("binding x=entity:handle, y=entity:door, z=entity:house",
                 derived.provenance().derivationBinding());
         assertTrue(derived.provenance().supportingAssertionIds().size() >= 2);
+    }
+
+    @Test
+    void explainShowsGenericLinkedBindingPathForPartOfContainmentRule() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                java.util.List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "partOf", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.variable("z"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.variable("z")),
+                0.85
+        ));
+        SahrAgent agent = SahrTestAgentFactory.newAgent(graph);
+
+        assertEquals("Assertion recorded.", agent.handle("The handle is part of the door"));
+        assertEquals("Assertion recorded.", agent.handle("The door is in the house"));
+        assertEquals("entity:house", agent.handle("What is the handle in?"));
+
+        String explain = new CommandProcessor(agent).handle(":explain --depth 3 --verbose").output();
+
+        assertTrue(explain.contains("binding x=entity:handle, y=entity:door, z=entity:house"), explain);
+        assertTrue(explain.contains("entity:handle partOf entity:door"), explain);
+        assertTrue(explain.contains("entity:door in entity:house"), explain);
+        assertTrue(explain.contains("entity:handle in entity:house"), explain);
+        assertTrue(explain.contains("supports=assertion-"), explain);
     }
 }

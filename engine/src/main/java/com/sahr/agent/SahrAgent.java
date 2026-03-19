@@ -1001,7 +1001,27 @@ public final class SahrAgent {
                 || !provenance.derivationBinding().isBlank()
                 || !provenance.supportingAssertionIds().isEmpty();
         if (!hasDerivationMetadata) {
-            return Optional.empty();
+            String normalizedFromId = provenance.normalizedFromId();
+            if (normalizedFromId != null && !normalizedFromId.isBlank()) {
+                Optional<DerivationTrace> normalized = graph.getAssertionRecords().stream()
+                        .filter(candidate -> normalizedFromId.equals(candidate.id()))
+                        .findFirst()
+                        .flatMap(this::toDerivationTrace);
+                if (normalized.isPresent()) {
+                    return normalized;
+                }
+            }
+            String localPredicate = localName(record.predicate());
+            return graph.getAssertionRecords().stream()
+                    .filter(candidate -> candidate.subject().equals(record.subject()))
+                    .filter(candidate -> candidate.object().equals(record.object()))
+                    .filter(candidate -> localName(candidate.predicate()).equals(localPredicate))
+                    .filter(candidate -> candidate.provenance() != null)
+                    .filter(candidate -> !candidate.provenance().derivationRule().isBlank()
+                            || !candidate.provenance().derivationBinding().isBlank()
+                            || !candidate.provenance().supportingAssertionIds().isEmpty())
+                    .findFirst()
+                    .flatMap(this::toDerivationTrace);
         }
         return Optional.of(new DerivationTrace(
                 record.id(),
