@@ -203,6 +203,12 @@ graph behind it: supporting assertion ids, segment provenance, and explicit rule
 derivation objects that connect `supports -> rule/binding -> derived assertion ->
 winner`.
 
+The next level of generic symbolic reasoning is not more wording coverage but
+more abstract binding power: rules should support conjunctive multi-variable
+matching such as `forall x, y: P(x, y) and Q(y) -> R(x)` so the engine can bind
+across linked statements rather than only repeating one variable through every
+antecedent.
+
 ---
 
 # Safe Roadmap

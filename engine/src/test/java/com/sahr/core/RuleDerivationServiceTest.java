@@ -72,4 +72,42 @@ class RuleDerivationServiceTest {
         assertTrue(derivations.get(0).evidence().stream().anyMatch(line -> line.contains("binding x=entity:hat")));
         assertTrue(derivations.get(0).supportingAssertionIds().stream().anyMatch(id -> !id.isBlank()));
     }
+
+    @Test
+    void derivesFromTwoVariableConjunctiveRuleBinding() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        RuleDerivationService service = new RuleDerivationService();
+
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:hat"),
+                "ownedBy",
+                new SymbolId("entity:man"),
+                0.9
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:man"),
+                "in",
+                new SymbolId("entity:house"),
+                0.95
+        ));
+        graph.addRuleFrame(new RuleFrame(
+                "x",
+                List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "ownedBy", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.constant("entity:house"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.constant("entity:house")),
+                0.85
+        ));
+
+        List<RuleDerivation> derivations = service.derive(graph);
+
+        assertEquals(1, derivations.size());
+        assertEquals("entity:hat", derivations.get(0).assertion().subject().value());
+        assertEquals("in", derivations.get(0).assertion().predicate());
+        assertEquals("entity:house", derivations.get(0).assertion().object().value());
+        assertEquals("binding x=entity:hat, y=entity:man", derivations.get(0).binding());
+        assertTrue(derivations.get(0).rule().contains("forall x, y"));
+        assertTrue(derivations.get(0).supportingAssertionIds().size() >= 2);
+    }
 }

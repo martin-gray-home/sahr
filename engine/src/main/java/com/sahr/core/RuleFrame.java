@@ -38,8 +38,9 @@ public final class RuleFrame {
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder("rule(");
-        if (RuleFrames.usesVariable(this)) {
-            builder.append("forall ").append(variable).append(": ");
+        List<String> variables = RuleFrames.variables(this);
+        if (!variables.isEmpty()) {
+            builder.append("forall ").append(String.join(", ", variables)).append(": ");
         }
         for (int i = 0; i < antecedents.size(); i++) {
             if (i > 0) {

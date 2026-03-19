@@ -2,6 +2,8 @@ package com.sahr.core;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 public final class RuleFrames {
     private static final String LEGACY_VARIABLE = "_";
@@ -55,19 +57,37 @@ public final class RuleFrames {
     }
 
     public static boolean usesVariable(RuleFrame rule) {
+        return !variables(rule).isEmpty();
+    }
+
+    public static List<String> variables(RuleFrame rule) {
         if (rule == null) {
-            return false;
+            return List.of();
         }
+        Set<String> names = new LinkedHashSet<>();
         for (RuleAtom antecedent : rule.antecedents()) {
-            if (usesVariable(antecedent)) {
-                return true;
-            }
+            collectVariables(antecedent, names);
         }
-        return usesVariable(rule.consequent());
+        collectVariables(rule.consequent(), names);
+        return List.copyOf(names);
     }
 
     private static boolean usesVariable(RuleAtom atom) {
         return atom != null && (atom.subject().isVariable() || atom.object().isVariable());
+    }
+
+    private static void collectVariables(RuleAtom atom, Set<String> names) {
+        if (atom == null || names == null) {
+            return;
+        }
+        collectVariable(atom.subject(), names);
+        collectVariable(atom.object(), names);
+    }
+
+    private static void collectVariable(RuleTerm term, Set<String> names) {
+        if (term != null && term.isVariable() && term.value() != null && !term.value().isBlank()) {
+            names.add(term.value());
+        }
     }
 
     private static boolean isGroundAtom(RuleAtom atom) {

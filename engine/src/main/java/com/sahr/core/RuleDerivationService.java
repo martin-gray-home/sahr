@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Set;
 
 public final class RuleDerivationService {
-    private static final SymbolId GROUND_RULE_BINDING = new SymbolId("__ground_rule__");
+    private static final BindingEnvironment GROUND_RULE_BINDING = new BindingEnvironment();
 
     public List<RuleDerivation> derive(KnowledgeBase graph) {
         if (graph == null) {
@@ -46,15 +46,15 @@ public final class RuleDerivationService {
         }
         List<RuleDerivation> derivations = new ArrayList<>();
         for (RuleFrame rule : graph.getAllRuleFrames()) {
-            List<SymbolId> bindings = findBindings(rule, graph);
-            for (SymbolId binding : bindings) {
+            List<BindingEnvironment> bindings = findBindings(rule, graph);
+            for (BindingEnvironment binding : bindings) {
                 RelationAssertion consequent = instantiateConsequent(rule.consequent(), binding, rule.confidence());
                 if (consequent == null || alreadyPresent(consequent, graph)) {
                     continue;
                 }
                 double evidenceConfidence = averageAntecedentConfidence(rule, binding, graph);
                 List<String> evidence = new ArrayList<>();
-                String bindingText = "binding " + rule.variable() + "=" + binding;
+                String bindingText = formatBindingText(rule, binding);
                 evidence.add(bindingText);
                 evidence.addAll(matchedAntecedentEvidence(rule, binding, graph));
                 String ruleText = rule.toString();
@@ -87,7 +87,7 @@ public final class RuleDerivationService {
                         && existing.object().equals(assertion.object()));
     }
 
-    private List<SymbolId> findBindings(RuleFrame rule, KnowledgeBase graph) {
+    private List<BindingEnvironment> findBindings(RuleFrame rule, KnowledgeBase graph) {
         List<RuleAtom> antecedents = rule.antecedents();
         if (antecedents.isEmpty()) {
             return List.of();
@@ -97,45 +97,16 @@ public final class RuleDerivationService {
                     ? List.of(GROUND_RULE_BINDING)
                     : List.of();
         }
-        Set<SymbolId> bindings = new LinkedHashSet<>();
-        RuleAtom seed = antecedents.get(0);
-        if ("rdf:type".equals(seed.predicate())) {
-            for (EntityNode entity : graph.getAllEntities()) {
-                if (!matchesType(seed, entity)) {
-                    continue;
-                }
-                SymbolId binding = entity.id();
-                if (allAntecedentsMatch(antecedents, graph, binding)) {
-                    bindings.add(binding);
-                }
-            }
-            return List.copyOf(bindings);
-        }
-        for (RelationAssertion assertion : matchingAssertions(seed.predicate(), graph)) {
-            SymbolId binding = matchBinding(seed, assertion, null);
-            if (binding == null) {
-                continue;
-            }
-            if (allAntecedentsMatch(antecedents, graph, binding)) {
-                bindings.add(binding);
-            }
-        }
+        LinkedHashSet<BindingEnvironment> bindings = new LinkedHashSet<>();
+        collectBindings(antecedents, 0, graph, GROUND_RULE_BINDING, bindings);
         return List.copyOf(bindings);
     }
 
     private boolean allAntecedentsMatch(List<RuleAtom> antecedents,
                                         KnowledgeBase graph,
-                                        SymbolId binding) {
+                                        BindingEnvironment binding) {
         for (RuleAtom atom : antecedents) {
-            boolean matched;
-            if ("rdf:type".equals(atom.predicate())) {
-                matched = graph.findEntity(binding)
-                        .map(entity -> matchesType(atom, entity))
-                        .orElse(false);
-            } else {
-                matched = matchingAssertions(atom.predicate(), graph).stream()
-                        .anyMatch(assertion -> matchBinding(atom, assertion, binding) != null);
-            }
+            boolean matched = !matchingBindings(atom, graph, binding).isEmpty();
             if (!matched) {
                 return false;
             }
@@ -143,25 +114,91 @@ public final class RuleDerivationService {
         return true;
     }
 
-    private SymbolId matchBinding(RuleAtom atom,
-                                  RelationAssertion assertion,
-                                  SymbolId binding) {
+    private void collectBindings(List<RuleAtom> antecedents,
+                                 int index,
+                                 KnowledgeBase graph,
+                                 BindingEnvironment binding,
+                                 Set<BindingEnvironment> results) {
+        if (index >= antecedents.size()) {
+            results.add(binding);
+            return;
+        }
+        RuleAtom atom = antecedents.get(index);
+        for (BindingEnvironment candidate : matchingBindings(atom, graph, binding)) {
+            collectBindings(antecedents, index + 1, graph, candidate, results);
+        }
+    }
+
+    private List<BindingEnvironment> matchingBindings(RuleAtom atom,
+                                                      KnowledgeBase graph,
+                                                      BindingEnvironment binding) {
+        if (atom == null || graph == null) {
+            return List.of();
+        }
+        if ("rdf:type".equals(atom.predicate())) {
+            return matchingTypeBindings(atom, graph, binding);
+        }
+        List<BindingEnvironment> matches = new ArrayList<>();
+        for (RelationAssertion assertion : matchingAssertions(atom.predicate(), graph)) {
+            BindingEnvironment matched = matchBinding(atom, assertion, binding);
+            if (matched != null) {
+                matches.add(matched);
+            }
+        }
+        return matches;
+    }
+
+    private List<BindingEnvironment> matchingTypeBindings(RuleAtom atom,
+                                                          KnowledgeBase graph,
+                                                          BindingEnvironment binding) {
+        List<BindingEnvironment> matches = new ArrayList<>();
+        SymbolId boundSubject = resolveTerm(atom.subject(), binding);
+        if (boundSubject != null) {
+            graph.findEntity(boundSubject)
+                    .filter(entity -> matchesType(atom, entity, binding))
+                    .ifPresent(entity -> {
+                        BindingEnvironment matched = matchTerm(atom.subject(), entity.id(), binding);
+                        if (matched != null) {
+                            matches.add(matched);
+                        }
+                    });
+            return matches;
+        }
+        for (EntityNode entity : graph.getAllEntities()) {
+            if (!matchesType(atom, entity, binding)) {
+                continue;
+            }
+            BindingEnvironment matched = matchTerm(atom.subject(), entity.id(), binding);
+            if (matched != null) {
+                matches.add(matched);
+            }
+        }
+        return matches;
+    }
+
+    private BindingEnvironment matchBinding(RuleAtom atom,
+                                            RelationAssertion assertion,
+                                            BindingEnvironment binding) {
         if (!predicateEquals(atom.predicate(), assertion.predicate())) {
             return null;
         }
-        SymbolId nextBinding = matchTerm(atom.subject(), assertion.subject(), binding);
+        BindingEnvironment nextBinding = matchTerm(atom.subject(), assertion.subject(), binding);
         if (nextBinding == null) {
             return null;
         }
         return matchTerm(atom.object(), assertion.object(), nextBinding);
     }
 
-    private SymbolId matchTerm(RuleTerm term, SymbolId value, SymbolId binding) {
+    private BindingEnvironment matchTerm(RuleTerm term, SymbolId value, BindingEnvironment binding) {
+        if (term == null) {
+            return binding;
+        }
         if (term.isVariable()) {
-            if (binding == null) {
-                return value;
+            SymbolId current = binding.lookup(term.value());
+            if (current == null) {
+                return binding.with(term.value(), value);
             }
-            return binding.equals(value) ? binding : null;
+            return current.equals(value) ? binding : null;
         }
         if (value == null) {
             return null;
@@ -169,7 +206,7 @@ public final class RuleDerivationService {
         return term.value().equals(value.value()) ? binding : null;
     }
 
-    private RelationAssertion instantiateConsequent(RuleAtom consequent, SymbolId binding, double confidence) {
+    private RelationAssertion instantiateConsequent(RuleAtom consequent, BindingEnvironment binding, double confidence) {
         SymbolId subject = resolveTerm(consequent.subject(), binding);
         SymbolId object = resolveTerm(consequent.object(), binding);
         if (subject == null || object == null) {
@@ -178,9 +215,9 @@ public final class RuleDerivationService {
         return new RelationAssertion(subject, consequent.predicate(), object, confidence);
     }
 
-    private SymbolId resolveTerm(RuleTerm term, SymbolId binding) {
+    private SymbolId resolveTerm(RuleTerm term, BindingEnvironment binding) {
         if (term.isVariable()) {
-            return binding;
+            return binding.lookup(term.value());
         }
         if (term.value() == null || term.value().isBlank()) {
             return null;
@@ -189,13 +226,14 @@ public final class RuleDerivationService {
     }
 
     private double averageAntecedentConfidence(RuleFrame rule,
-                                               SymbolId binding,
+                                               BindingEnvironment binding,
                                                KnowledgeBase graph) {
         double total = 0.0;
         int count = 0;
         for (RuleAtom atom : rule.antecedents()) {
             if ("rdf:type".equals(atom.predicate())) {
-                if (graph.findEntity(binding).map(entity -> matchesType(atom, entity)).orElse(false)) {
+                SymbolId subject = resolveTerm(atom.subject(), binding);
+                if (subject != null && graph.findEntity(subject).map(entity -> matchesType(atom, entity, binding)).orElse(false)) {
                     total += 0.9;
                     count++;
                 }
@@ -216,13 +254,17 @@ public final class RuleDerivationService {
     }
 
     private List<String> matchedAntecedentEvidence(RuleFrame rule,
-                                                   SymbolId binding,
+                                                   BindingEnvironment binding,
                                                    KnowledgeBase graph) {
         List<String> evidence = new ArrayList<>();
         for (RuleAtom atom : rule.antecedents()) {
             if ("rdf:type".equals(atom.predicate())) {
-                graph.findEntity(binding).ifPresent(entity -> {
-                    if (matchesType(atom, entity)) {
+                SymbolId subject = resolveTerm(atom.subject(), binding);
+                if (subject == null) {
+                    continue;
+                }
+                graph.findEntity(subject).ifPresent(entity -> {
+                    if (matchesType(atom, entity, binding)) {
                         evidence.add(entity.id() + " rdf:type " + atom.object().value());
                     }
                 });
@@ -239,7 +281,7 @@ public final class RuleDerivationService {
     }
 
     private List<String> matchedAntecedentAssertionIds(RuleFrame rule,
-                                                       SymbolId binding,
+                                                       BindingEnvironment binding,
                                                        KnowledgeBase graph) {
         List<String> ids = new ArrayList<>();
         for (RuleAtom atom : rule.antecedents()) {
@@ -252,7 +294,7 @@ public final class RuleDerivationService {
     }
 
     private AssertionRecord matchedAntecedentRecord(RuleAtom atom,
-                                                    SymbolId binding,
+                                                    BindingEnvironment binding,
                                                     KnowledgeBase graph) {
         if (atom == null || graph == null) {
             return null;
@@ -269,12 +311,12 @@ public final class RuleDerivationService {
                 .orElse(null);
     }
 
-    private SymbolId resolveTermForFilter(RuleTerm term, SymbolId binding) {
+    private SymbolId resolveTermForFilter(RuleTerm term, BindingEnvironment binding) {
         if (term == null) {
             return null;
         }
         if (term.isVariable()) {
-            return GROUND_RULE_BINDING.equals(binding) ? null : binding;
+            return binding.lookup(term.value());
         }
         if (term.value() == null || term.value().isBlank()) {
             return null;
@@ -282,17 +324,35 @@ public final class RuleDerivationService {
         return new SymbolId(term.value());
     }
 
-    private boolean matchesType(RuleAtom atom, EntityNode entity) {
+    private boolean matchesType(RuleAtom atom, EntityNode entity, BindingEnvironment binding) {
         if (entity == null || !"rdf:type".equals(atom.predicate())) {
             return false;
         }
-        String expected = normalizeTypeValue(atom.object());
+        String expected = normalizeTypeValue(atom.object(), binding);
         if (expected == null || expected.isBlank()) {
             return false;
         }
         return entity.conceptTypes().stream()
                 .map(this::normalizeTypeToken)
                 .anyMatch(type -> type.equalsIgnoreCase(expected));
+    }
+
+    private String formatBindingText(RuleFrame rule, BindingEnvironment binding) {
+        List<String> variables = RuleFrames.variables(rule);
+        if (variables.isEmpty() || binding.isEmpty()) {
+            return "binding ground";
+        }
+        List<String> parts = new ArrayList<>();
+        for (String variable : variables) {
+            SymbolId value = binding.lookup(variable);
+            if (value != null) {
+                parts.add(variable + "=" + value.value());
+            }
+        }
+        if (parts.isEmpty()) {
+            return "binding ground";
+        }
+        return "binding " + String.join(", ", parts);
     }
 
     private List<RelationAssertion> matchingAssertions(String predicate, KnowledgeBase graph) {
@@ -328,9 +388,13 @@ public final class RuleDerivationService {
         return normalizedLeft != null && normalizedLeft.equals(normalizedRight);
     }
 
-    private String normalizeTypeValue(RuleTerm term) {
-        if (term == null || term.isVariable()) {
+    private String normalizeTypeValue(RuleTerm term, BindingEnvironment binding) {
+        if (term == null) {
             return null;
+        }
+        if (term.isVariable()) {
+            SymbolId value = binding.lookup(term.value());
+            return value == null ? null : normalizeTypeToken(value.value());
         }
         return normalizeTypeToken(term.value());
     }
@@ -365,5 +429,50 @@ public final class RuleDerivationService {
             return predicate.substring(sepIdx + 1);
         }
         return predicate;
+    }
+
+    private static final class BindingEnvironment {
+        private final java.util.Map<String, SymbolId> bindings;
+
+        private BindingEnvironment() {
+            this.bindings = java.util.Map.of();
+        }
+
+        private BindingEnvironment(java.util.Map<String, SymbolId> bindings) {
+            this.bindings = java.util.Map.copyOf(bindings);
+        }
+
+        private SymbolId lookup(String variable) {
+            if (variable == null || variable.isBlank()) {
+                return null;
+            }
+            return bindings.get(variable);
+        }
+
+        private BindingEnvironment with(String variable, SymbolId value) {
+            java.util.Map<String, SymbolId> next = new java.util.LinkedHashMap<>(bindings);
+            next.put(variable, value);
+            return new BindingEnvironment(next);
+        }
+
+        private boolean isEmpty() {
+            return bindings.isEmpty();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof BindingEnvironment that)) {
+                return false;
+            }
+            return bindings.equals(that.bindings);
+        }
+
+        @Override
+        public int hashCode() {
+            return bindings.hashCode();
+        }
     }
 }

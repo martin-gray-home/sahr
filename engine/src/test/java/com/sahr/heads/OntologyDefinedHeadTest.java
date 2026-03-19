@@ -194,6 +194,49 @@ class OntologyDefinedHeadTest {
                         && ((RelationAssertion) candidate.payload()).object().value().equals("concept:green")));
     }
 
+    @Test
+    void appliesTwoVariableQuantifiedRuleFramesOverAssertions() throws Exception {
+        OWLOntology ontology = loadTestOntology();
+        List<OntologyHeadDefinition> definitions = OntologyHeadCompiler.compile(ontology);
+        OntologyDefinedHead head = new OntologyDefinedHead(definitions);
+
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addEntity(new EntityNode(new SymbolId("entity:hat"), "hat", Set.of("hat")));
+        graph.addEntity(new EntityNode(new SymbolId("entity:man"), "man", Set.of("man")));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:hat"),
+                "ownedBy",
+                new SymbolId("entity:man"),
+                0.9
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:man"),
+                "in",
+                new SymbolId("entity:house"),
+                0.95
+        ));
+
+        RuleFrame rule = new RuleFrame(
+                "x",
+                List.of(
+                        new RuleAtom(RuleTerm.variable("x"), "ownedBy", RuleTerm.variable("y")),
+                        new RuleAtom(RuleTerm.variable("y"), "in", RuleTerm.constant("entity:house"))
+                ),
+                new RuleAtom(RuleTerm.variable("x"), "in", RuleTerm.constant("entity:house")),
+                0.85
+        );
+        graph.addRuleFrame(rule);
+
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, new InMemoryOntologyService());
+        List<ReasoningCandidate> candidates = head.evaluate(context);
+
+        assertTrue(candidates.stream().anyMatch(candidate ->
+                candidate.payload() instanceof RelationAssertion
+                        && ((RelationAssertion) candidate.payload()).predicate().equals("in")
+                        && ((RelationAssertion) candidate.payload()).subject().value().equals("entity:hat")
+                        && ((RelationAssertion) candidate.payload()).object().value().equals("entity:house")));
+    }
+
     private OWLOntology loadTestOntology() throws Exception {
         try (InputStream stream = OntologyDefinedHeadTest.class.getClassLoader()
                 .getResourceAsStream("ontology/reasoning-heads-test.ttl")) {
