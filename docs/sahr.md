@@ -217,6 +217,13 @@ What to add:
 • scoring over entities, assertions, rules, and hypotheses relative to the current query  
 • a top-k or weighted symbolic working set before execution  
 • working-memory refinement across reasoning passes
+• explicit review of both why an item entered focus and whether it actually contributed to the winning path
+
+Current review/refinement rule:
+
+• the working set must distinguish `included in focus` from `used by winner`  
+• winner-usage annotation happens after selection and is grounded in symbolic evidence, not guessed from rank alone  
+• `:explain` and trace output should surface both inclusion reasons and winner-use reasons so attention policy can be tuned against real winning paths
 
 Current first implementation:
 

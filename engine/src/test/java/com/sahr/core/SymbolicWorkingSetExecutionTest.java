@@ -95,6 +95,51 @@ class SymbolicWorkingSetExecutionTest {
     }
 
     @Test
+    void usageAnnotatorMarksWinnerContributorsInsideWorkingSet() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        SymbolId man = new SymbolId("entity:man");
+        SymbolId hat = new SymbolId("entity:hat");
+        SymbolId room = new SymbolId("entity:room");
+
+        graph.addAssertion(new RelationAssertion(man, "wear", hat, 0.9));
+        graph.addAssertion(new RelationAssertion(hat, "in", room, 0.9));
+
+        WorkingMemory memory = new WorkingMemory();
+        memory.addActiveEntity(man);
+        memory.recordAssertion(new RelationAssertion(man, "wear", hat, 0.9));
+        HeadContext context = new HeadContext(
+                QueryGoal.relation("entity:man", "wear", null, null),
+                graph,
+                HeadOntologyTestSupport.createPolicyOntology(),
+                memory
+        );
+
+        SymbolicWorkingSet workingSet = new SymbolicWorkingSetBuilder().buildWorkingSet(context, graph);
+        ReasoningCandidate winner = new ReasoningCandidate(
+                CandidateType.ANSWER,
+                hat,
+                0.9,
+                "test-head",
+                List.of("entity:man wear entity:hat"),
+                java.util.Map.of("graph_confidence", 0.9),
+                0
+        );
+
+        SymbolicWorkingSet annotated = new SymbolicWorkingSetUsageAnnotator().annotate(workingSet, winner);
+
+        assertTrue(annotated.assertions().stream().anyMatch(included ->
+                included.assertion().predicate().equals("wear")
+                        && included.usedByWinner()
+                        && included.winnerReasons().stream().anyMatch(reason -> reason.contains("winner.evidence"))));
+        assertTrue(annotated.entities().stream().anyMatch(included ->
+                included.entity().value().equals("entity:hat")
+                        && included.usedByWinner()));
+        assertTrue(annotated.assertions().stream().anyMatch(included ->
+                included.assertion().predicate().equals("in")
+                        && !included.usedByWinner()));
+    }
+
+    @Test
     void ruleDerivationMergesFocusedAndFullRuleMatchesWithoutDroppingTruth() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         RuleDerivationService service = new RuleDerivationService();

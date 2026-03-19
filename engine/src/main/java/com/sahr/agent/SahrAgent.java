@@ -29,6 +29,7 @@ import com.sahr.core.SahrReasoner;
 import com.sahr.core.SymbolId;
 import com.sahr.core.SymbolicWorkingSet;
 import com.sahr.core.SymbolicWorkingSetBuilder;
+import com.sahr.core.SymbolicWorkingSetUsageAnnotator;
 import com.sahr.core.GuardedKnowledgeBase;
 import com.sahr.core.WorkingMemory;
 import com.sahr.core.ReasoningPhase;
@@ -101,6 +102,7 @@ public final class SahrAgent {
     private final LanguageCandidateProducer languageCandidateProducer;
     private final RuleDerivationService ruleDerivationService;
     private final SymbolicWorkingSetBuilder workingSetBuilder;
+    private final SymbolicWorkingSetUsageAnnotator workingSetUsageAnnotator;
     private final java.util.concurrent.atomic.AtomicLong assertionSequence = new java.util.concurrent.atomic.AtomicLong();
     private String lastInput;
 
@@ -179,6 +181,7 @@ public final class SahrAgent {
         this.answerRealizer = new AnswerRealizer(this::localName);
         this.ruleDerivationService = new RuleDerivationService();
         this.workingSetBuilder = new SymbolicWorkingSetBuilder();
+        this.workingSetUsageAnnotator = new SymbolicWorkingSetUsageAnnotator();
         this.explanationChains = new ExplanationChainBuilder(
                 this.graph,
                 this.ontology,
@@ -1856,7 +1859,12 @@ public final class SahrAgent {
                 return noCandidatesAnswer(query);
             }
             ReasoningCandidate winner = followUp.get(0);
-            trace.addEntry(new ReasoningTraceEntry(query, followUpWorkingSet, followUp, winner));
+            trace.addEntry(new ReasoningTraceEntry(
+                    query,
+                    workingSetUsageAnnotator.annotate(followUpWorkingSet, winner),
+                    followUp,
+                    winner
+            ));
             if (CandidateType.ANSWER.equals(winner.type())) {
                 logger.fine(() -> "Follow-up winner type=" + winner.type()
                         + " producedBy=" + winner.producedBy()
@@ -1899,7 +1907,12 @@ public final class SahrAgent {
         ReasoningCandidate winner = selectStatementCandidate(context, query, candidates)
                 .orElse(candidates.get(0));
         SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
-        trace.addEntry(new ReasoningTraceEntry(query, workingSet, candidates, winner));
+        trace.addEntry(new ReasoningTraceEntry(
+                query,
+                workingSetUsageAnnotator.annotate(workingSet, winner),
+                candidates,
+                winner
+        ));
         logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                 + " score=" + winner.score());
         logWhereDecision(query, winner);
@@ -1908,7 +1921,7 @@ public final class SahrAgent {
             return handleWithSubgoals(subgoal, null, true, null, features);
         }
         if (CandidateType.QUERY_PLAN.equals(winner.type()) && winner.payload() instanceof com.sahr.core.QueryPlan) {
-            return executeQueryPlan((com.sahr.core.QueryPlan) winner.payload());
+            return executeQueryPlan((com.sahr.core.QueryPlan) winner.payload(), query);
         }
         if (CandidateType.ANSWER.equals(winner.type())) {
             String multiAnswer = buildMultiAnswer(query, candidates);
@@ -2050,7 +2063,12 @@ public final class SahrAgent {
             ReasoningCandidate winner = selectPreferredCandidate(candidates);
             selectEnd = subgoalTiming ? System.nanoTime() : 0L;
             SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
-            trace.addEntry(new ReasoningTraceEntry(current, workingSet, candidates, winner));
+            trace.addEntry(new ReasoningTraceEntry(
+                    current,
+                    workingSetUsageAnnotator.annotate(workingSet, winner),
+                    candidates,
+                    winner
+            ));
             logger.fine(() -> "Winner type=" + winner.type() + " producedBy=" + winner.producedBy()
                     + " score=" + winner.score());
             logWhereDecision(current, winner);
@@ -2090,7 +2108,7 @@ public final class SahrAgent {
 
             if (CandidateType.QUERY_PLAN.equals(winner.type()) && winner.payload() instanceof com.sahr.core.QueryPlan) {
                 planStart = subgoalTiming ? System.nanoTime() : 0L;
-                String planAnswer = executeQueryPlan((com.sahr.core.QueryPlan) winner.payload());
+                String planAnswer = executeQueryPlan((com.sahr.core.QueryPlan) winner.payload(), current);
                 planEnd = subgoalTiming ? System.nanoTime() : 0L;
                 if (current.goalId().equals(root.goalId())) {
                     workingMemory.popGoal();
@@ -2334,11 +2352,12 @@ public final class SahrAgent {
         return winner;
     }
 
-    private String executeQueryPlan(com.sahr.core.QueryPlan plan) {
+    private String executeQueryPlan(com.sahr.core.QueryPlan plan, QueryGoal traceQuery) {
         if (plan == null) {
             return "No candidates produced.";
         }
         QueryGoal goal = plan.goal();
+        QueryGoal traceGoal = traceQuery == null ? goal : traceQuery;
         if (goal == null || goal.type() == QueryGoal.Type.UNKNOWN) {
             return "No candidates produced.";
         }
@@ -2362,7 +2381,7 @@ public final class SahrAgent {
                     yield relationship;
                 }
                 long relationStart = planTiming ? System.nanoTime() : 0L;
-                String relationAnswer = executeRelationMatch(goal);
+                String relationAnswer = executeRelationMatch(goal, traceGoal);
                 if (planTiming) {
                     logPlanTiming("relation_match", plan.kind(), goal,
                             System.nanoTime() - relationStart);
@@ -2384,7 +2403,7 @@ public final class SahrAgent {
             }
             case EVIDENCE_MATCH -> {
                 long evidenceStart = planTiming ? System.nanoTime() : 0L;
-                String evidenceAnswer = executeRelationMatch(goal);
+                String evidenceAnswer = executeRelationMatch(goal, traceGoal);
                 if (planTiming) {
                     logPlanTiming("evidence_match", plan.kind(), goal,
                             System.nanoTime() - evidenceStart);
@@ -2394,7 +2413,8 @@ public final class SahrAgent {
         };
     }
 
-    private String executeRelationMatch(QueryGoal goal) {
+    private String executeRelationMatch(QueryGoal goal, QueryGoal traceQuery) {
+        QueryGoal traceGoal = traceQuery == null ? goal : traceQuery;
         boolean planTiming = Boolean.parseBoolean(System.getProperty(SUBGOAL_TIMING_PROPERTY, "false"));
         long evidenceStart = planTiming ? System.nanoTime() : 0L;
         String evidenceSignal = answerComposer.evidenceSignalAnswerIfApplicable(goal);
@@ -2454,34 +2474,43 @@ public final class SahrAgent {
         }
         if (answers.isEmpty()) {
             long directStart = planTiming ? System.nanoTime() : 0L;
-            java.util.List<String> directMatches = directRelationMatches(goal);
+            java.util.List<DirectRelationMatch> directMatches = directRelationMatches(goal);
             if (planTiming) {
                 logPlanTiming("direct_relation", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
                         System.nanoTime() - directStart);
             }
             if (!directMatches.isEmpty()) {
                 long rankStart = planTiming ? System.nanoTime() : 0L;
-                directMatches = answerRanker.filterEchoValues(directMatches, goal);
+                java.util.List<String> directValues = directRelationMatchValues(directMatches);
+                directValues = answerRanker.filterEchoValues(directValues, goal);
                 boolean applyActiveRanking = false;
-                if (directMatches.stream().allMatch(this::isEntityValue)) {
-                    java.util.List<String> preferredValues = preferPersonLikeValues(directMatches, goal);
+                if (directValues.stream().allMatch(this::isEntityValue)) {
+                    java.util.List<String> preferredValues = preferPersonLikeValues(directValues, goal);
                     if (!preferredValues.isEmpty()) {
                         applyActiveRanking = true;
-                        if (preferredValues.size() < directMatches.size()) {
-                            directMatches = preferredValues;
+                        if (preferredValues.size() < directValues.size()) {
+                            directValues = preferredValues;
                         }
                     }
                 }
-                directMatches = answerRanker.rankAnswerValues(directMatches);
+                directValues = answerRanker.rankAnswerValues(directValues);
                 if (applyActiveRanking) {
-                    directMatches = rankByActiveEntities(directMatches);
+                    directValues = rankByActiveEntities(directValues);
                 }
                 if (planTiming) {
                     logPlanTiming("rank_direct", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
                             System.nanoTime() - rankStart);
                 }
-                if (directMatches.size() == 1) {
-                    String value = directMatches.get(0);
+                java.util.List<DirectRelationMatch> selectedMatches = selectDirectRelationMatches(directMatches, directValues);
+                ReasoningCandidate directWinner = buildDirectAnswerCandidate(selectedMatches, directValues);
+                trace.addEntry(new ReasoningTraceEntry(
+                        traceGoal,
+                        workingSetUsageAnnotator.annotate(workingSetBuilder.buildWorkingSet(context, graph), directWinner),
+                        List.of(directWinner),
+                        directWinner
+                ));
+                if (directValues.size() == 1) {
+                    String value = directValues.get(0);
                     if (isEntityValue(value)) {
                         if (QueryGoal.Type.RELATION.equals(goal.type())) {
                             return value;
@@ -2490,10 +2519,10 @@ public final class SahrAgent {
                     }
                     return value;
                 }
-                if (directMatches.stream().allMatch(this::isEntityValue)) {
-                    return answerComposer.renderEntityList(directMatches, goal);
+                if (directValues.stream().allMatch(this::isEntityValue)) {
+                    return answerComposer.renderEntityList(directValues, goal);
                 }
-                return String.join(", ", directMatches);
+                return String.join(", ", directValues);
             }
             long ruleStart = planTiming ? System.nanoTime() : 0L;
             String ruleMatch = directRuleMatch(goal);
@@ -2527,6 +2556,13 @@ public final class SahrAgent {
             logPlanTiming("select_best", com.sahr.core.QueryPlan.Kind.RELATION_MATCH, goal,
                     System.nanoTime() - selectStart);
         }
+        SymbolicWorkingSet workingSet = workingSetBuilder.buildWorkingSet(context, graph);
+        trace.addEntry(new ReasoningTraceEntry(
+                traceGoal,
+                workingSetUsageAnnotator.annotate(workingSet, winner),
+                answers,
+                winner
+        ));
         recordAnswerIfPossible(goal, winner.payload());
         if (winner.payload() == null) {
             return "No payload.";
@@ -2541,7 +2577,7 @@ public final class SahrAgent {
         return payload;
     }
 
-    private java.util.List<String> directRelationMatches(QueryGoal goal) {
+    private java.util.List<DirectRelationMatch> directRelationMatches(QueryGoal goal) {
         String predicate = localName(goal.predicate());
         if (predicate.isBlank()) {
             return java.util.List.of();
@@ -2558,25 +2594,98 @@ public final class SahrAgent {
         }
         SymbolId subject = goal.subject() == null ? null : new SymbolId(goal.subject());
         SymbolId object = goal.object() == null ? null : new SymbolId(goal.object());
-        java.util.List<String> matches = new java.util.ArrayList<>();
+        java.util.List<DirectRelationMatch> matches = new java.util.ArrayList<>();
         for (RelationAssertion assertion : graph.getAllAssertions()) {
             String assertionPredicate = localName(assertion.predicate());
             if (!predicateMatches.contains(assertionPredicate)) {
                 continue;
             }
             if (subject != null && assertion.subject().equals(subject)) {
-                matches.add(assertion.object().value());
+                matches.add(new DirectRelationMatch(assertion.object().value(), assertion));
                 continue;
             }
             if (object != null && assertion.object().equals(object)) {
-                matches.add(assertion.subject().value());
+                matches.add(new DirectRelationMatch(assertion.subject().value(), assertion));
                 continue;
             }
             if (subject == null && object == null) {
-                matches.add(assertion.subject().value());
+                matches.add(new DirectRelationMatch(assertion.subject().value(), assertion));
             }
         }
         return matches;
+    }
+
+    private java.util.List<String> directRelationMatchValues(java.util.List<DirectRelationMatch> matches) {
+        java.util.List<String> values = new java.util.ArrayList<>();
+        for (DirectRelationMatch match : matches) {
+            if (match == null || match.value() == null || match.value().isBlank()) {
+                continue;
+            }
+            values.add(match.value());
+        }
+        return values;
+    }
+
+    private java.util.List<DirectRelationMatch> selectDirectRelationMatches(java.util.List<DirectRelationMatch> matches,
+                                                                            java.util.List<String> rankedValues) {
+        java.util.List<DirectRelationMatch> selected = new java.util.ArrayList<>();
+        java.util.Set<String> seenValues = new java.util.LinkedHashSet<>();
+        for (String value : rankedValues) {
+            if (value == null || !seenValues.add(value)) {
+                continue;
+            }
+            DirectRelationMatch best = null;
+            for (DirectRelationMatch match : matches) {
+                if (match == null || !value.equals(match.value())) {
+                    continue;
+                }
+                if (best == null || match.assertion().confidence() > best.assertion().confidence()) {
+                    best = match;
+                }
+            }
+            if (best != null) {
+                selected.add(best);
+            }
+        }
+        return selected;
+    }
+
+    private ReasoningCandidate buildDirectAnswerCandidate(java.util.List<DirectRelationMatch> matches,
+                                                          java.util.List<String> values) {
+        java.util.List<String> evidence = new java.util.ArrayList<>();
+        double confidence = 0.6;
+        if (matches != null) {
+            for (DirectRelationMatch match : matches) {
+                if (match == null || match.assertion() == null) {
+                    continue;
+                }
+                evidence.add(match.assertion().toString());
+                confidence = Math.max(confidence, match.assertion().confidence());
+            }
+        }
+        Object payload;
+        if (values != null && values.size() == 1 && isEntityValue(values.get(0))) {
+            payload = new SymbolId(values.get(0));
+        } else if (values != null && values.size() == 1) {
+            payload = values.get(0);
+        } else {
+            payload = values == null ? "" : String.join(", ", values);
+        }
+        return new ReasoningCandidate(
+                CandidateType.ANSWER,
+                payload,
+                confidence,
+                "direct-relation-match",
+                evidence,
+                java.util.Map.of(
+                        "direct_relation", 1.0,
+                        "graph_confidence", confidence
+                ),
+                0
+        );
+    }
+
+    private record DirectRelationMatch(String value, RelationAssertion assertion) {
     }
 
     private String directRuleMatch(QueryGoal goal) {
@@ -2822,7 +2931,7 @@ public final class SahrAgent {
         if ("before".equals(predicate) || "after".equals(predicate) || "during".equals(predicate)) {
             return directTemporalMatch(predicate, goal);
         }
-        java.util.List<String> baseMatches = directRelationMatches(goal);
+        java.util.List<String> baseMatches = directRelationMatchValues(directRelationMatches(goal));
         if (!baseMatches.isEmpty()) {
             baseMatches = answerRanker.filterEchoValues(baseMatches, goal);
             baseMatches = answerRanker.rankAnswerValues(baseMatches);

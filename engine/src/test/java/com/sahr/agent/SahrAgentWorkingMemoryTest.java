@@ -75,10 +75,17 @@ class SahrAgentWorkingMemoryTest {
                         && included.reasons().stream().anyMatch(reason -> reason.contains("query.object"))));
         assertTrue(entry.workingSet().assertions().stream().anyMatch(included ->
                 included.reasons().stream().anyMatch(reason -> reason.contains("working_memory.recent_assertion"))));
+        assertTrue(entry.workingSet().assertions().stream().anyMatch(included ->
+                        included.usedByWinner()
+                                && included.winnerReasons().stream().anyMatch(reason -> reason.contains("winner"))),
+                () -> "Winner=" + entry.winner().payload()
+                        + " evidence=" + entry.winner().evidence()
+                        + " assertions=" + entry.workingSet().assertions());
 
         CommandProcessor processor = new CommandProcessor(agent);
         String explain = processor.handle(":explain --depth 3 --verbose").output();
         assertTrue(explain.contains("Working set details"));
         assertTrue(explain.contains("working_memory.recent_assertion"));
+        assertTrue(explain.contains("[used:"));
     }
 }

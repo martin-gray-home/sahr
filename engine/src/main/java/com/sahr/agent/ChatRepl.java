@@ -84,9 +84,15 @@ public final class ChatRepl {
                 return;
             }
             if (entry.workingSet() != null) {
+                long usedEntities = entry.workingSet().entities().stream().filter(com.sahr.core.SymbolicWorkingSet.IncludedEntity::usedByWinner).count();
+                long usedAssertions = entry.workingSet().assertions().stream().filter(com.sahr.core.SymbolicWorkingSet.IncludedAssertion::usedByWinner).count();
+                long usedRules = entry.workingSet().rules().stream().filter(com.sahr.core.SymbolicWorkingSet.IncludedRule::usedByWinner).count();
                 out.println("-- working set entities=" + entry.workingSet().entities().size()
+                        + " used_entities=" + usedEntities
                         + " assertions=" + entry.workingSet().assertions().size()
+                        + " used_assertions=" + usedAssertions
                         + " rules=" + entry.workingSet().rules().size()
+                        + " used_rules=" + usedRules
                         + " reduced=" + entry.workingSet().reduced() + " --");
             }
             out.println("-- attention top " + Math.min(attentionTopN, candidates.size()) + " --");

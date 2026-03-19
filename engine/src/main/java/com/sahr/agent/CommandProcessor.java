@@ -232,7 +232,12 @@ public final class CommandProcessor {
         }
         List<String> parts = new ArrayList<>();
         for (SymbolicWorkingSet.IncludedEntity entity : entities) {
-            parts.add(entity.entity().value() + " (" + String.join("|", entity.reasons()) + ")");
+            parts.add(formatWorkingSetItem(
+                    entity.entity().value(),
+                    entity.reasons(),
+                    entity.usedByWinner(),
+                    entity.winnerReasons()
+            ));
         }
         return String.join(", ", parts);
     }
@@ -243,7 +248,12 @@ public final class CommandProcessor {
         }
         List<String> parts = new ArrayList<>();
         for (SymbolicWorkingSet.IncludedAssertion assertion : assertions) {
-            parts.add(assertion.assertion() + " (" + String.join("|", assertion.reasons()) + ")");
+            parts.add(formatWorkingSetItem(
+                    assertion.assertion().toString(),
+                    assertion.reasons(),
+                    assertion.usedByWinner(),
+                    assertion.winnerReasons()
+            ));
         }
         return String.join(" || ", parts);
     }
@@ -254,10 +264,30 @@ public final class CommandProcessor {
         }
         List<String> parts = new ArrayList<>();
         for (SymbolicWorkingSet.IncludedRule rule : rules) {
-            RuleFrame frame = rule.rule();
-            parts.add(frame + " (" + String.join("|", rule.reasons()) + ")");
+            parts.add(formatWorkingSetItem(
+                    rule.rule().toString(),
+                    rule.reasons(),
+                    rule.usedByWinner(),
+                    rule.winnerReasons()
+            ));
         }
         return String.join(" || ", parts);
+    }
+
+    private String formatWorkingSetItem(String label,
+                                        List<String> reasons,
+                                        boolean usedByWinner,
+                                        List<String> winnerReasons) {
+        StringBuilder builder = new StringBuilder(label)
+                .append(" [included:")
+                .append(String.join("|", reasons))
+                .append("]");
+        if (usedByWinner) {
+            builder.append(" [used:")
+                    .append(String.join("|", winnerReasons))
+                    .append("]");
+        }
+        return builder.toString();
     }
 
     private CommandResult loadDataset(List<String> args) {
