@@ -15,6 +15,6 @@ class SurfaceContactScenarioTest {
 
         assertEquals("Assertion recorded.", agent.handle("The hat is on the man"));
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
-        assertEquals("entity:hat on entity:man", agent.handle("Where is the hat"));
+        assertEquals("entity:hat in entity:room", agent.handle("Where is the hat"));
     }
 }

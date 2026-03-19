@@ -166,6 +166,18 @@ class StatementParserTest {
     }
 
     @Test
+    void capturesSurfaceContactFromSatOnStatement() {
+        Statement statement = parser.parse("The cat sat on the mat").orElseThrow();
+        List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());
+        all.add(statement);
+
+        assertTrue(all.stream().anyMatch(item ->
+                "on".equals(item.predicate())
+                        && "entity:cat".equals(item.subject().value())
+                        && "entity:mat".equals(item.object().value())));
+    }
+
+    @Test
     void capturesClausalComplementStatements() {
         Statement statement = parser.parse("The man wants to carry the box").orElseThrow();
         List<Statement> all = new java.util.ArrayList<>(statement.additionalStatements());

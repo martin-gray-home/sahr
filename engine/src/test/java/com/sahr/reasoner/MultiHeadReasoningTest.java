@@ -17,7 +17,7 @@ class MultiHeadReasoningTest {
 
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         assertEquals("Assertion recorded.", agent.handle("The man is wearing a hat"));
-        assertEquals("entity:hat on entity:man", agent.handle("Where is the hat"));
+        assertEquals("entity:hat in entity:room", agent.handle("Where is the hat"));
     }
 
     @Test

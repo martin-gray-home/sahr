@@ -237,6 +237,35 @@ class OntologyDefinedHeadTest {
                         && ((RelationAssertion) candidate.payload()).object().value().equals("entity:house")));
     }
 
+    @Test
+    void infersContainmentFromSurfaceContactBridge() throws Exception {
+        List<OntologyHeadDefinition> definitions = OwlOntologyTestSupport.buildHeadDefinitions();
+        OntologyDefinedHead head = new OntologyDefinedHead(definitions);
+
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:cat"),
+                "https://sahr.ai/ontology/relations#on",
+                new SymbolId("entity:mat"),
+                0.9
+        ));
+        graph.addAssertion(new RelationAssertion(
+                new SymbolId("entity:mat"),
+                "https://sahr.ai/ontology/relations#in",
+                new SymbolId("entity:house"),
+                0.95
+        ));
+
+        HeadContext context = new HeadContext(QueryGoal.unknown(), graph, new InMemoryOntologyService());
+        List<ReasoningCandidate> candidates = head.evaluate(context);
+
+        assertTrue(candidates.stream().anyMatch(candidate ->
+                candidate.payload() instanceof RelationAssertion
+                        && ((RelationAssertion) candidate.payload()).predicate().equals("https://sahr.ai/ontology/relations#in")
+                        && ((RelationAssertion) candidate.payload()).subject().value().equals("entity:cat")
+                        && ((RelationAssertion) candidate.payload()).object().value().equals("entity:house")));
+    }
+
     private OWLOntology loadTestOntology() throws Exception {
         try (InputStream stream = OntologyDefinedHeadTest.class.getClassLoader()
                 .getResourceAsStream("ontology/reasoning-heads-test.ttl")) {

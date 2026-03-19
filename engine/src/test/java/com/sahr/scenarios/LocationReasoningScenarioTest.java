@@ -19,7 +19,7 @@ class LocationReasoningScenarioTest {
         assertEquals("Assertion recorded.", agent.handle("A woman is with the man"));
 
         assertTrue(matchesLocation("entity:man", "entity:room", agent.handle("Where is the man")));
-        assertEquals("entity:hat on entity:man", agent.handle("Where is the hat"));
+        assertEquals("entity:hat in entity:room", agent.handle("Where is the hat"));
         assertEquals("No candidates produced.", agent.handle("Where is the woman"));
     }
 

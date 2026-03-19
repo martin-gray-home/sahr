@@ -26,7 +26,7 @@ class ReasoningScenarioSuiteTest {
         assertEquals("Assertion recorded.", agent.handle("The head is part of the man"));
         assertEquals("Assertion recorded.", agent.handle("The man is in the room"));
         String hatLocation = agent.handle("Where is the hat");
-        assertTrue(Set.of("entity:hat on entity:head").contains(hatLocation),
+        assertTrue(Set.of("entity:hat in entity:room").contains(hatLocation),
                 () -> "Unexpected hat location: " + hatLocation);
     }
 

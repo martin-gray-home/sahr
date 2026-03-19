@@ -368,6 +368,31 @@ headr:TransitiveLocatedInHead a headr:ReasoningHead ;
     headr:hasAction headr:actionLocatedInTransitive ;
     headr:hasScorePolicy headr:scoreContainment .
 
+headr:tpSurfaceLeft a headr:TriplePattern ;
+    headr:subject headr:varA ;
+    headr:predicate headr:constOn ;
+    headr:object headr:varB .
+
+headr:tpSurfaceContainerRight a headr:TriplePattern ;
+    headr:subject headr:varB ;
+    headr:predicate headr:constIn ;
+    headr:object headr:varC .
+
+headr:patternSurfaceContactContainment a headr:Pattern ;
+    headr:hasTriple headr:tpSurfaceLeft, headr:tpSurfaceContainerRight .
+
+headr:actionSurfaceContactContainment a headr:AddAssertion ;
+    headr:subject headr:varA ;
+    headr:predicate headr:constIn ;
+    headr:object headr:varC .
+
+headr:SurfaceContactContainmentHead a headr:ReasoningHead ;
+    headr:name "surface-contact-containment" ;
+    headr:ruleCategory headr:BridgeRule ;
+    headr:hasPattern headr:patternSurfaceContactContainment ;
+    headr:hasAction headr:actionSurfaceContactContainment ;
+    headr:hasScorePolicy headr:scoreSurface .
+
 headr:tpColocationLeft a headr:TriplePattern ;
     headr:subject headr:varA ;
     headr:predicate headr:constWith ;

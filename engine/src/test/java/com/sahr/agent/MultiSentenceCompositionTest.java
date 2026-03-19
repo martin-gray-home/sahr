@@ -64,7 +64,7 @@ class MultiSentenceCompositionTest {
 
         String answer = agent.handle("The man is in the room. The man is wearing a hat. Where is the hat?");
 
-        assertEquals("entity:hat on entity:man", answer);
+        assertEquals("entity:hat in entity:room", answer);
         assertTrue(graph.findEntity(new SymbolId("entity:man")).isPresent());
         assertTrue(graph.findEntity(new SymbolId("entity:hat")).isPresent());
     }

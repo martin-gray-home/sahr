@@ -209,6 +209,12 @@ matching such as `forall x, y: P(x, y) and Q(y) -> R(x)` so the engine can bind
 across linked statements rather than only repeating one variable through every
 antecedent.
 
+That same principle also applies across relation families: when the abstraction
+is semantically sound, the engine should prefer a shared bridge such as
+`on(x, y) and in(y, z) -> in(x, z)` over query-specific hacks. The language path
+(`"the cat sat on the mat"`) is only the proving entry point; the durable
+capability is the generic symbolic composition rule.
+
 ---
 
 # Safe Roadmap
