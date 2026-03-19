@@ -39,6 +39,8 @@ public final class InMemoryKnowledgeBase implements KnowledgeBase {
                         List.of(),
                         null,
                         null,
+                        "",
+                        "",
                         ContradictionStatus.UNKNOWN
                 )
         );

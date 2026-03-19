@@ -14,6 +14,8 @@ public final class AssertionProvenance {
     private final List<String> supportingAssertionIds;
     private final String normalizedFromId;
     private final InputSegmentOrigin segmentOrigin;
+    private final String derivationRule;
+    private final String derivationBinding;
     private final ContradictionStatus contradictionStatus;
 
     public AssertionProvenance(AssertionSource source,
@@ -24,6 +26,8 @@ public final class AssertionProvenance {
                                List<String> supportingAssertionIds,
                                String normalizedFromId,
                                InputSegmentOrigin segmentOrigin,
+                               String derivationRule,
+                               String derivationBinding,
                                ContradictionStatus contradictionStatus) {
         this.source = Objects.requireNonNull(source, "source");
         this.producedBy = producedBy == null ? "" : producedBy;
@@ -34,6 +38,8 @@ public final class AssertionProvenance {
                 supportingAssertionIds == null ? List.of() : supportingAssertionIds);
         this.normalizedFromId = normalizedFromId;
         this.segmentOrigin = segmentOrigin;
+        this.derivationRule = derivationRule == null ? "" : derivationRule;
+        this.derivationBinding = derivationBinding == null ? "" : derivationBinding;
         this.contradictionStatus = Objects.requireNonNull(contradictionStatus, "contradictionStatus");
     }
 
@@ -69,6 +75,14 @@ public final class AssertionProvenance {
         return segmentOrigin;
     }
 
+    public String derivationRule() {
+        return derivationRule;
+    }
+
+    public String derivationBinding() {
+        return derivationBinding;
+    }
+
     public ContradictionStatus contradictionStatus() {
         return contradictionStatus;
     }
@@ -83,6 +97,8 @@ public final class AssertionProvenance {
                 supportingAssertionIds,
                 normalizedFromId,
                 segmentOrigin,
+                derivationRule,
+                derivationBinding,
                 contradictionStatus
         );
     }
@@ -97,6 +113,8 @@ public final class AssertionProvenance {
                 supportingAssertionIds,
                 normalizedFromId,
                 segmentOrigin,
+                derivationRule,
+                derivationBinding,
                 contradictionStatus
         );
     }
@@ -111,6 +129,24 @@ public final class AssertionProvenance {
                 supportingAssertionIds,
                 normalizedFromId,
                 segmentOrigin,
+                derivationRule,
+                derivationBinding,
+                contradictionStatus
+        );
+    }
+
+    public AssertionProvenance withDerivationMetadata(String derivationRule, String derivationBinding) {
+        return new AssertionProvenance(
+                source,
+                producedBy,
+                cycleIndex,
+                timestamp,
+                mode,
+                supportingAssertionIds,
+                normalizedFromId,
+                segmentOrigin,
+                derivationRule,
+                derivationBinding,
                 contradictionStatus
         );
     }
@@ -125,6 +161,8 @@ public final class AssertionProvenance {
                 supportingAssertionIds,
                 normalizedFromId,
                 segmentOrigin,
+                derivationRule,
+                derivationBinding,
                 contradictionStatus
         );
     }

@@ -42,7 +42,7 @@ In practical terms, that means:
 • ontology-defined semantics stay authoritative  
 • heads act as generic operators, not case-specific patch points  
 • soft scoring guides search and prioritisation, but does not define truth  
-• explanation remains traceable from symbolic evidence  
+• explanation remains traceable from symbolic evidence and explicit derivation links  
 • new capability should arrive by extending shared symbolic operators before adding heuristics
 
 ---
@@ -197,6 +197,11 @@ The intended long-term shape is:
 6. refine, expand, or recombine candidate structures if the first pass is insufficient
 7. produce structured results and structured explanations
 8. realise those results into user-facing language
+
+Explanation should expose not just the winning answer but the symbolic support
+graph behind it: supporting assertion ids, segment provenance, and explicit rule
+derivation objects that connect `supports -> rule/binding -> derived assertion ->
+winner`.
 
 ---
 

@@ -32,6 +32,8 @@ class MultiSentenceCompositionTest {
                 .findFirst()
                 .orElse(null);
         assertTrue(derived != null && !derived.provenance().supportingAssertionIds().isEmpty());
+        assertTrue(derived != null && !derived.provenance().derivationRule().isBlank());
+        assertTrue(derived != null && !derived.provenance().derivationBinding().isBlank());
         assertTrue(agent.lastTraceEntry().isPresent());
         assertNotEquals(QueryGoal.Type.UNKNOWN, agent.lastTraceEntry().orElseThrow().query().type());
     }
@@ -47,7 +49,11 @@ class MultiSentenceCompositionTest {
         String explain = new CommandProcessor(agent).handle(":explain --depth 3 --verbose").output();
         assertTrue(explain.contains("[segment:s3/3"), explain);
         assertTrue(explain.contains("[segment:s2/3"), explain);
+        assertTrue(explain.contains("Derivations"), explain);
+        assertTrue(explain.contains("rule="), explain);
+        assertTrue(explain.contains("binding x=entity:hat"), explain);
         assertTrue(explain.contains("[supports:"), explain);
+        assertTrue(explain.contains("supports=assertion-"), explain);
         assertTrue(explain.contains("entity:hat in entity:house"), explain);
     }
 

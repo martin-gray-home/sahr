@@ -1,5 +1,6 @@
 package com.sahr.agent;
 
+import com.sahr.core.DerivationTrace;
 import com.sahr.core.QueryGoal;
 import com.sahr.core.ReasoningCandidate;
 import com.sahr.core.ReasoningTraceEntry;
@@ -80,6 +81,12 @@ public final class CommandProcessor {
                     .append(" rules=").append(entry.workingSet().rules().size())
                     .append(" reduced=").append(entry.workingSet().reduced())
                     .append('\n');
+        }
+        if (options.verbose && !entry.derivations().isEmpty()) {
+            sb.append("Derivations").append('\n');
+            for (DerivationTrace derivation : entry.derivations()) {
+                sb.append("- ").append(formatDerivation(derivation)).append('\n');
+            }
         }
 
         int depth = Math.max(0, options.depth);
@@ -209,6 +216,24 @@ public final class CommandProcessor {
             return "none";
         }
         return String.join(" | ", agent.annotateEvidenceWithSegments(evidence));
+    }
+
+    private String formatDerivation(DerivationTrace derivation) {
+        if (derivation == null) {
+            return "none";
+        }
+        List<String> parts = new ArrayList<>();
+        parts.add(derivation.derivedAssertionId() + ": " + derivation.derivedAssertion());
+        if (!derivation.rule().isBlank()) {
+            parts.add("rule=" + derivation.rule());
+        }
+        if (!derivation.binding().isBlank()) {
+            parts.add(derivation.binding());
+        }
+        if (!derivation.supportingAssertionIds().isEmpty()) {
+            parts.add("supports=" + String.join(",", derivation.supportingAssertionIds()));
+        }
+        return String.join(" | ", parts);
     }
 
     private String formatBreakdown(Map<String, Double> breakdown) {

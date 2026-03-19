@@ -8,6 +8,7 @@ import com.sahr.core.AssertionRecord;
 import com.sahr.core.AssertionSource;
 import com.sahr.core.CandidateType;
 import com.sahr.core.ContradictionStatus;
+import com.sahr.core.DerivationTrace;
 import com.sahr.core.EntityNode;
 import com.sahr.core.HeadContext;
 import com.sahr.core.InputSegmentOrigin;
@@ -59,6 +60,7 @@ import com.sahr.presentation.AnswerRealizer;
 import edu.stanford.nlp.process.Morphology;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -926,6 +928,88 @@ public final class SahrAgent {
                         && record.predicate().equals(assertion.predicate())
                         && record.object().equals(assertion.object()))
                 .max(java.util.Comparator.comparingLong(record -> record.provenance().cycleIndex()));
+    }
+
+    private List<DerivationTrace> collectDerivationTraces(ReasoningCandidate winner,
+                                                          List<ReasoningCandidate> candidates) {
+        LinkedHashMap<String, DerivationTrace> traces = new LinkedHashMap<>();
+        collectDerivationTracesFromCandidate(traces, winner);
+        if (traces.isEmpty() && candidates != null) {
+            for (ReasoningCandidate candidate : candidates) {
+                collectDerivationTracesFromCandidate(traces, candidate);
+            }
+        }
+        return List.copyOf(traces.values());
+    }
+
+    private void collectDerivationTracesFromCandidate(LinkedHashMap<String, DerivationTrace> traces,
+                                                      ReasoningCandidate candidate) {
+        if (traces == null || candidate == null) {
+            return;
+        }
+        collectDerivationTracesFromPayload(traces, candidate.payload());
+        for (String evidence : candidate.evidence()) {
+            parseEvidenceAssertion(evidence)
+                    .flatMap(this::findAssertionRecord)
+                    .flatMap(this::toDerivationTrace)
+                    .ifPresent(trace -> traces.putIfAbsent(trace.derivedAssertionId(), trace));
+        }
+    }
+
+    private void collectDerivationTracesFromPayload(LinkedHashMap<String, DerivationTrace> traces,
+                                                    Object payload) {
+        if (traces == null || payload == null) {
+            return;
+        }
+        if (payload instanceof RelationAssertion assertion) {
+            findAssertionRecord(assertion)
+                    .flatMap(this::toDerivationTrace)
+                    .ifPresent(trace -> traces.putIfAbsent(trace.derivedAssertionId(), trace));
+            return;
+        }
+        if (payload instanceof QueryResult queryResult) {
+            for (RelationAssertion fact : queryResult.facts()) {
+                findAssertionRecord(fact)
+                        .flatMap(this::toDerivationTrace)
+                        .ifPresent(trace -> traces.putIfAbsent(trace.derivedAssertionId(), trace));
+            }
+        }
+    }
+
+    private Optional<RelationAssertion> parseEvidenceAssertion(String evidence) {
+        if (evidence == null || evidence.isBlank() || evidence.startsWith("rule(")) {
+            return Optional.empty();
+        }
+        String[] parts = evidence.trim().split("\\s+");
+        if (parts.length < 3) {
+            return Optional.empty();
+        }
+        return Optional.of(new RelationAssertion(
+                new SymbolId(parts[0]),
+                parts[1],
+                new SymbolId(parts[2]),
+                1.0
+        ));
+    }
+
+    private Optional<DerivationTrace> toDerivationTrace(AssertionRecord record) {
+        if (record == null || record.provenance() == null) {
+            return Optional.empty();
+        }
+        AssertionProvenance provenance = record.provenance();
+        boolean hasDerivationMetadata = !provenance.derivationRule().isBlank()
+                || !provenance.derivationBinding().isBlank()
+                || !provenance.supportingAssertionIds().isEmpty();
+        if (!hasDerivationMetadata) {
+            return Optional.empty();
+        }
+        return Optional.of(new DerivationTrace(
+                record.id(),
+                record.subject().value() + " " + record.predicate() + " " + record.object().value(),
+                provenance.derivationRule(),
+                provenance.derivationBinding(),
+                provenance.supportingAssertionIds()
+        ));
     }
 
     private String formatSegmentOrigin(InputSegmentOrigin origin) {
@@ -1931,6 +2015,16 @@ public final class SahrAgent {
                                                 AssertionMode mode,
                                                 String normalizedFromId,
                                                 List<String> supportingIds) {
+        return buildProvenance(source, producedBy, mode, normalizedFromId, supportingIds, "", "");
+    }
+
+    private AssertionProvenance buildProvenance(AssertionSource source,
+                                                String producedBy,
+                                                AssertionMode mode,
+                                                String normalizedFromId,
+                                                List<String> supportingIds,
+                                                String derivationRule,
+                                                String derivationBinding) {
         long cycleIndex = trace.entries().size();
         AssertionProvenance provenance = new AssertionProvenance(
                 source,
@@ -1941,6 +2035,8 @@ public final class SahrAgent {
                 supportingIds,
                 normalizedFromId,
                 activeSegmentOrigin,
+                derivationRule,
+                derivationBinding,
                 ContradictionStatus.UNKNOWN
         );
         return provenance;
@@ -1996,6 +2092,7 @@ public final class SahrAgent {
                     query,
                     activeSegmentOrigin,
                     workingSetUsageAnnotator.annotate(followUpWorkingSet, winner),
+                    collectDerivationTraces(winner, followUp),
                     followUp,
                     winner
             ));
@@ -2045,6 +2142,7 @@ public final class SahrAgent {
                 query,
                 activeSegmentOrigin,
                 workingSetUsageAnnotator.annotate(workingSet, winner),
+                collectDerivationTraces(winner, candidates),
                 candidates,
                 winner
         ));
@@ -2202,6 +2300,7 @@ public final class SahrAgent {
                     current,
                     activeSegmentOrigin,
                     workingSetUsageAnnotator.annotate(workingSet, winner),
+                    collectDerivationTraces(winner, candidates),
                     candidates,
                     winner
             ));
@@ -2643,6 +2742,7 @@ public final class SahrAgent {
                         traceGoal,
                         activeSegmentOrigin,
                         workingSetUsageAnnotator.annotate(workingSetBuilder.buildWorkingSet(context, graph), directWinner),
+                        collectDerivationTraces(directWinner, List.of(directWinner)),
                         List.of(directWinner),
                         directWinner
                 ));
@@ -2698,6 +2798,7 @@ public final class SahrAgent {
                 traceGoal,
                 activeSegmentOrigin,
                 workingSetUsageAnnotator.annotate(workingSet, winner),
+                collectDerivationTraces(winner, answers),
                 answers,
                 winner
         ));
@@ -3567,7 +3668,14 @@ public final class SahrAgent {
                         assertion.object(),
                         assertion.confidence(),
                         AssertionLayer.INFERRED,
-                        buildProvenance(AssertionSource.HEAD, "rule-forward-chain", AssertionMode.DERIVED, null, derivation.supportingAssertionIds())
+                        buildProvenance(
+                                AssertionSource.HEAD,
+                                "rule-forward-chain",
+                                AssertionMode.DERIVED,
+                                null,
+                                derivation.supportingAssertionIds(),
+                                derivation.rule(),
+                                derivation.binding())
                 );
                 if (addAssertionRecordIfNew(record)) {
                     addedThisRound++;

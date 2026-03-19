@@ -67,6 +67,8 @@ class RuleDerivationServiceTest {
         assertEquals("hasAttribute", derivations.get(0).assertion().predicate());
         assertEquals("entity:hat", derivations.get(0).assertion().subject().value());
         assertEquals("concept:green", derivations.get(0).assertion().object().value());
+        assertTrue(derivations.get(0).rule().contains("hasAttribute"));
+        assertEquals("binding x=entity:hat", derivations.get(0).binding());
         assertTrue(derivations.get(0).evidence().stream().anyMatch(line -> line.contains("binding x=entity:hat")));
         assertTrue(derivations.get(0).supportingAssertionIds().stream().anyMatch(id -> !id.isBlank()));
     }

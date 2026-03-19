@@ -54,15 +54,19 @@ public final class RuleDerivationService {
                 }
                 double evidenceConfidence = averageAntecedentConfidence(rule, binding, graph);
                 List<String> evidence = new ArrayList<>();
-                evidence.add("binding " + rule.variable() + "=" + binding);
+                String bindingText = "binding " + rule.variable() + "=" + binding;
+                evidence.add(bindingText);
                 evidence.addAll(matchedAntecedentEvidence(rule, binding, graph));
-                evidence.add(rule.toString());
+                String ruleText = rule.toString();
+                evidence.add(ruleText);
                 List<String> supportingAssertionIds = matchedAntecedentAssertionIds(rule, binding, graph);
                 derivations.add(new RuleDerivation(
                         new RelationAssertion(consequent.subject(), consequent.predicate(), consequent.object(),
                                 Math.min(1.0, (rule.confidence() + evidenceConfidence) / 2.0)),
                         evidence,
                         supportingAssertionIds,
+                        ruleText,
+                        bindingText,
                         rule.confidence(),
                         evidenceConfidence,
                         2

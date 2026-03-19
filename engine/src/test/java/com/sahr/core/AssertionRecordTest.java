@@ -20,6 +20,8 @@ class AssertionRecordTest {
                 List.of("support-1"),
                 "source-1",
                 new InputSegmentOrigin(0, 2, "The hat is green."),
+                "",
+                "",
                 ContradictionStatus.UNKNOWN
         );
         AssertionRecord record = new AssertionRecord(
