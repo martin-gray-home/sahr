@@ -15,6 +15,76 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class SymbolicAttentionScorerTest {
     @Test
+    void boostsCandidatesAlignedWithWorkingMemoryWhenHeadDidNotAlreadyScoreMemory() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
+        SymbolicAttentionScorer scorer = new SymbolicAttentionScorer();
+        WorkingMemory workingMemory = new WorkingMemory();
+
+        SymbolId man = new SymbolId("entity:man");
+        SymbolId hat = new SymbolId("entity:hat");
+        SymbolId coat = new SymbolId("entity:coat");
+
+        workingMemory.addActiveEntity(man);
+        workingMemory.recordAssertion(new RelationAssertion(man, "wear", hat, 0.9));
+
+        QueryGoal query = QueryGoal.relation("entity:man", "wear", null, null);
+        HeadContext context = new HeadContext(query, graph, ontology, workingMemory);
+
+        ReasoningCandidate hatCandidate = new ReasoningCandidate(
+                CandidateType.ANSWER,
+                hat,
+                0.9,
+                "test-head",
+                List.of("entity:man wear entity:hat"),
+                java.util.Map.of("graph_confidence", 0.9),
+                0
+        );
+        ReasoningCandidate coatCandidate = new ReasoningCandidate(
+                CandidateType.ANSWER,
+                coat,
+                0.9,
+                "test-head",
+                List.of("entity:woman wear entity:coat"),
+                java.util.Map.of("graph_confidence", 0.9),
+                0
+        );
+
+        SymbolicAttentionScorer.QueryMatchResult focused = scorer.score(context, hatCandidate);
+        SymbolicAttentionScorer.QueryMatchResult unfocused = scorer.score(context, coatCandidate);
+
+        assertTrue(focused.queryMatchScore() > unfocused.queryMatchScore());
+        assertTrue(focused.breakdown(0.9, 0.9).get("attention_working_memory_focus")
+                > unfocused.breakdown(0.9, 0.9).get("attention_working_memory_focus"));
+    }
+
+    @Test
+    void doesNotDoubleCountWhenHeadAlreadyProvidesWorkingMemoryFocus() {
+        InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
+        OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();
+        SymbolicAttentionScorer scorer = new SymbolicAttentionScorer();
+        WorkingMemory workingMemory = new WorkingMemory();
+
+        workingMemory.addActiveEntity(new SymbolId("entity:man"));
+        QueryGoal query = QueryGoal.relation("entity:man", "wear", null, null);
+        HeadContext context = new HeadContext(query, graph, ontology, workingMemory);
+
+        ReasoningCandidate candidate = new ReasoningCandidate(
+                CandidateType.ANSWER,
+                new SymbolId("entity:hat"),
+                0.9,
+                "test-head",
+                List.of("entity:man wear entity:hat"),
+                java.util.Map.of("working_memory_focus", 1.0, "graph_confidence", 0.9),
+                0
+        );
+
+        SymbolicAttentionScorer.QueryMatchResult match = scorer.score(context, candidate);
+
+        assertEquals(1.0, match.breakdown(0.9, 0.9).get("attention_working_memory_focus"));
+    }
+
+    @Test
     void prefersExpectedTypeMatchForRelationAnswers() {
         InMemoryKnowledgeBase graph = new InMemoryKnowledgeBase();
         OntologyService ontology = HeadOntologyTestSupport.createPolicyOntology();

@@ -15,6 +15,7 @@ public final class SymbolicAttentionScorer {
     private static final double DEFAULT_RELATION_MATCH = 0.7;
     private static final double DEFAULT_TYPE_MATCH = 0.8;
     private static final List<String> LOCATION_PREDICATES = List.of("at", "in", "locatedIn");
+    private final WorkingMemoryAttentionScorer workingMemoryAttentionScorer = new WorkingMemoryAttentionScorer();
 
     public QueryMatchResult score(HeadContext context, ReasoningCandidate candidate) {
         QueryGoal query = context.query();
@@ -50,8 +51,9 @@ public final class SymbolicAttentionScorer {
         double entityMatch = matchEntityType(graph, ontology, triple.get().subject, query.entityType());
         double relationMatch = matchLocationRelation(context, ontology, triple.get().predicate, canonicalExpectedRange);
         double typeMatch = matchRange(context, ontology, triple.get().predicate, canonicalExpectedRange);
+        WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus = memoryFocus(context, candidate);
 
-        return QueryMatchResult.of(entityMatch, relationMatch, typeMatch);
+        return QueryMatchResult.of(entityMatch, relationMatch, typeMatch, memoryFocus);
     }
 
     private QueryMatchResult scoreRelation(HeadContext context, ReasoningCandidate candidate, QueryGoal query) {
@@ -61,8 +63,16 @@ public final class SymbolicAttentionScorer {
         double entityMatch = matchRelationEntity(candidate, query);
         RelationMatch relationMatch = matchRelationPredicate(context, candidate, query);
         double typeMatch = matchExpectedType(graph, ontology, candidate, query.expectedType());
+        WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus = memoryFocus(context, candidate);
 
-        return QueryMatchResult.of(entityMatch, relationMatch.score(), typeMatch, relationMatch.policy());
+        return QueryMatchResult.of(entityMatch, relationMatch.score(), typeMatch, memoryFocus, relationMatch.policy());
+    }
+
+    private WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus(HeadContext context, ReasoningCandidate candidate) {
+        if (candidate.scoreBreakdown().containsKey("working_memory_focus")) {
+            return WorkingMemoryAttentionScorer.MemoryFocusResult.neutral();
+        }
+        return workingMemoryAttentionScorer.score(context, candidate);
     }
 
     private double matchEntityType(KnowledgeBase graph, OntologyService ontology, String subject, String requestedType) {
@@ -347,31 +357,73 @@ public final class SymbolicAttentionScorer {
         private final double entityMatch;
         private final double relationMatch;
         private final double typeMatch;
+        private final double workingMemoryFocus;
+        private final double activeEntityFocus;
+        private final double recentAssertionFocus;
         private final double queryMatchScore;
         private final PolicySignal policySignal;
 
-        private QueryMatchResult(double entityMatch, double relationMatch, double typeMatch, PolicySignal policySignal) {
+        private QueryMatchResult(double entityMatch,
+                                 double relationMatch,
+                                 double typeMatch,
+                                 WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus,
+                                 PolicySignal policySignal) {
             this.entityMatch = clamp(entityMatch);
             this.relationMatch = clamp(relationMatch);
             this.typeMatch = clamp(typeMatch);
-            this.queryMatchScore = clamp(this.entityMatch * this.relationMatch * this.typeMatch);
+            WorkingMemoryAttentionScorer.MemoryFocusResult safeFocus = memoryFocus == null
+                    ? WorkingMemoryAttentionScorer.MemoryFocusResult.neutral()
+                    : memoryFocus;
+            this.workingMemoryFocus = clamp(safeFocus.focus());
+            this.activeEntityFocus = clamp(safeFocus.activeEntityFocus());
+            this.recentAssertionFocus = clamp(safeFocus.recentAssertionFocus());
+            this.queryMatchScore = clamp(this.entityMatch * this.relationMatch * this.typeMatch * this.workingMemoryFocus);
             this.policySignal = policySignal;
         }
 
         public static QueryMatchResult of(double entityMatch, double relationMatch, double typeMatch) {
-            return new QueryMatchResult(entityMatch, relationMatch, typeMatch, null);
+            return new QueryMatchResult(
+                    entityMatch,
+                    relationMatch,
+                    typeMatch,
+                    WorkingMemoryAttentionScorer.MemoryFocusResult.neutral(),
+                    null
+            );
         }
 
-        public static QueryMatchResult of(double entityMatch, double relationMatch, double typeMatch, PolicySignal policySignal) {
-            return new QueryMatchResult(entityMatch, relationMatch, typeMatch, policySignal);
+        public static QueryMatchResult of(double entityMatch,
+                                          double relationMatch,
+                                          double typeMatch,
+                                          WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus) {
+            return new QueryMatchResult(entityMatch, relationMatch, typeMatch, memoryFocus, null);
+        }
+
+        public static QueryMatchResult of(double entityMatch,
+                                          double relationMatch,
+                                          double typeMatch,
+                                          WorkingMemoryAttentionScorer.MemoryFocusResult memoryFocus,
+                                          PolicySignal policySignal) {
+            return new QueryMatchResult(entityMatch, relationMatch, typeMatch, memoryFocus, policySignal);
         }
 
         public static QueryMatchResult neutral(double score) {
-            return new QueryMatchResult(score, 1.0, 1.0, null);
+            return new QueryMatchResult(
+                    score,
+                    1.0,
+                    1.0,
+                    WorkingMemoryAttentionScorer.MemoryFocusResult.neutral(),
+                    null
+            );
         }
 
         public static QueryMatchResult full() {
-            return new QueryMatchResult(1.0, 1.0, 1.0, null);
+            return new QueryMatchResult(
+                    1.0,
+                    1.0,
+                    1.0,
+                    WorkingMemoryAttentionScorer.MemoryFocusResult.neutral(),
+                    null
+            );
         }
 
         public double queryMatchScore() {
@@ -383,6 +435,9 @@ public final class SymbolicAttentionScorer {
             breakdown.put("attention_entity_match", entityMatch);
             breakdown.put("attention_relation_match", relationMatch);
             breakdown.put("attention_type_match", typeMatch);
+            breakdown.put("attention_working_memory_focus", workingMemoryFocus);
+            breakdown.put("attention_active_entity_focus", activeEntityFocus);
+            breakdown.put("attention_recent_assertion_focus", recentAssertionFocus);
             breakdown.put("attention_query_match", queryMatchScore);
             breakdown.put("attention_head_score", headScore);
             breakdown.put("attention_final_score", finalScore);

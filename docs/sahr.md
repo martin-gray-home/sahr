@@ -10,6 +10,24 @@ The goal is to combine:
 
 to produce a deterministic and explainable reasoning engine.
 
+Refined north star:
+
+SAHR should behave like a **symbolic reasoning engine with transformer-like control**.
+The symbolic layer should remain the source of truth for meaning, memory,
+rules, execution, and explanation. Transformer-inspired mechanisms should
+be used to guide attention, ranking, hypothesis competition, and
+iterative refinement — not to replace symbolic semantics with opaque
+latent state.
+
+In practical terms, that means:
+
+• canonical symbolic boundaries (`QueryFrame`, `RuleFrame`, `QueryResult`) stay primary  
+• ontology-defined semantics stay authoritative  
+• heads act as generic operators, not case-specific patch points  
+• soft scoring guides search and prioritisation, but does not define truth  
+• explanation remains traceable from symbolic evidence  
+• new capability should arrive by extending shared symbolic operators before adding heuristics
+
 ---
 
 # Core Principles
@@ -137,6 +155,133 @@ Candidates may represent:
 ## 7. Iterative Reasoning Cycles
 
 Complex reasoning may require multiple passes.
+
+The intended long-term shape is:
+
+1. normalize raw language into canonical symbolic structures
+2. resolve entities, predicates, labels, and types
+3. build an attention-weighted symbolic working set
+4. execute generic operators over that symbolic working set
+5. refine or expand hypotheses if the first pass is insufficient
+6. produce structured results and structured explanations
+7. realise those results into user-facing language
+
+---
+
+# Safe Roadmap
+
+The safest route toward the north star is to improve **control and
+coverage around the symbolic core**, not to weaken the core.
+
+## Phase 1. Finish Canonical Boundaries
+
+Goal:
+
+• make `QueryFrame`, `RuleFrame`, and `QueryResult` the real semantic seams everywhere
+
+What this means:
+
+• no new raw-text semantic branching outside normalization  
+• no new execution semantics in heads  
+• no new English shaping in execution/explanation layers  
+• continue collapsing compatibility paths onto canonical structures
+
+Success signal:
+
+• new features can be added without creating new parallel semantic paths
+
+## Phase 2. Broaden Canonical Rule Coverage
+
+Goal:
+
+• support more rule language by mapping new surface forms into the same `RuleFrame`
+
+Safe next moves:
+
+• add adjacent conditional variants that normalize to existing rule shapes  
+• add carefully chosen second relation/property propagation families  
+• prefer shared rule execution changes over parser-local hacks
+
+Success signal:
+
+• multiple language forms map to the same rule semantics and execute unchanged
+
+## Phase 3. Add Symbolic Attention Over Working Memory
+
+Goal:
+
+• borrow the strongest transformer pattern safely: soft relevance over symbolic memory
+
+What to add:
+
+• scoring over entities, assertions, rules, and hypotheses relative to the current query  
+• a top-k or weighted symbolic working set before execution  
+• working-memory refinement across reasoning passes
+
+Current first implementation:
+
+• add a shared working-memory relevance scorer in the symbolic attention path  
+• use active entities and recent assertions as soft ranking signals  
+• keep the signal advisory only: it can reorder equivalent candidates, but it does not change truth, entailment, or rule firing  
+• avoid double-counting by staying neutral for heads that already inject a local working-memory bias until that bias is later consolidated
+
+Keep hard boundaries:
+
+• scores guide search and ranking  
+• symbolic operators still decide bindings, entailments, and explanations
+
+Success signal:
+
+• better ambiguity handling and scaling without losing traceability
+
+## Phase 4. Multi-Hypothesis Iterative Refinement
+
+Goal:
+
+• let multiple plausible symbolic interpretations survive longer
+
+What to add:
+
+• parallel candidate query plans / bindings / subgoals  
+• shared arbitration after each refinement step  
+• explicit stopping rules for convergence or fallback
+
+Success signal:
+
+• fewer brittle one-shot failures on ambiguous or underspecified questions
+
+## Phase 5. Shared Realization Layer
+
+Goal:
+
+• keep semantic output pure and centralize wording policy
+
+What to add:
+
+• one shared realization layer for chat, REPL, tests, and future APIs/UIs  
+• canonical policy for predicate wording, entity wording, and ordering
+
+Success signal:
+
+• changes to wording no longer risk semantic regressions
+
+## Near-Term Safe Sequence
+
+Recommended implementation order:
+
+1. continue broadening canonical rule/query normalization without adding new execution paths  
+2. add symbolic attention over assertions/rules/entities as a retrieval and ranking layer  
+3. add iterative multi-hypothesis refinement only after symbolic attention is stable  
+4. tighten answer realization as a shared downstream layer
+
+## Anti-Goals
+
+To stay aligned with the north star, avoid:
+
+• replacing symbolic meaning with embeddings as the execution substrate  
+• using soft scoring as the source of truth for entailment  
+• allowing convenience heuristics to bypass canonical symbolic forms  
+• growing new hidden subsystems that mix retrieval, ranking, traversal, and NLG in one class
 
 Each reasoning cycle performs:
 
